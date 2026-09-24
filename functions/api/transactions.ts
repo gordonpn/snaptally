@@ -13,29 +13,29 @@ export interface TransactionPayload {
 
 export function isValidPayload(body: unknown): body is TransactionPayload {
   if (typeof body !== "object" || body === null) {
-    console.warn("Validation failed: body must be a non-null object", { body });
+    console.warn("Validation failed: body must be a non-null object");
     return false;
   }
 
   const { amount, card, category, merchant } = body as Record<string, unknown>;
 
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
-    console.warn("Validation failed: amount must be a positive finite number", { amount });
+    console.warn("Validation failed: amount must be a positive finite number");
     return false;
   }
 
   if (typeof card !== "string" || card.trim().length === 0) {
-    console.warn("Validation failed: card must be a non-empty string", { card });
+    console.warn("Validation failed: card must be a non-empty string");
     return false;
   }
 
   if (typeof category !== "string" || category.trim().length === 0) {
-    console.warn("Validation failed: category must be a non-empty string", { category });
+    console.warn("Validation failed: category must be a non-empty string");
     return false;
   }
 
   if (typeof merchant !== "string" || merchant.trim().length === 0) {
-    console.warn("Validation failed: merchant must be a non-empty string", { merchant });
+    console.warn("Validation failed: merchant must be a non-empty string");
     return false;
   }
 
