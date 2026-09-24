@@ -170,6 +170,6 @@ describe("handlePost", () => {
     assert.strictEqual(response.status, 500);
 
     const data = (await response.json()) as { error: string };
-    assert.strictEqual(data.error, "D1 execution failed");
+    assert.strictEqual(data.error, "Database insertion failed");
   });
 });
