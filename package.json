@@ -7,6 +7,8 @@
     "dev": "wrangler pages dev ./public",
     "lint": "biome check .",
     "format": "biome format --write .",
+    "test": "node --import ./tests/register-loader.js --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
     "db:migrate:local": "wrangler d1 migrations apply budget-db --local"
   },
   "devDependencies": {
