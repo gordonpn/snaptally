@@ -20,6 +20,6 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: DeepSeek Code Review
-        uses: hustcer/deepseek-review@v1
+        uses: hustcer/deepseek-review@eccde2e9781008d795e366b951e313e37af88dd5 # v1.21
         with:
           chat-token: ${{ secrets.DEEPSEEK_API_KEY }}
