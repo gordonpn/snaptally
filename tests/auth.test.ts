@@ -19,7 +19,20 @@ describe("timingSafeEqual", () => {
   it("returns false when one or both strings are empty", async () => {
     assert.strictEqual(await timingSafeEqual("", "secret-token"), false);
     assert.strictEqual(await timingSafeEqual("secret-token", ""), false);
-    assert.strictEqual(await timingSafeEqual("", ""), true);
+    assert.strictEqual(await timingSafeEqual("", ""), false);
+  });
+
+  it("uses XOR fallback when timingSafeEqual primitive is unavailable", async () => {
+    const subtle = crypto.subtle as { timingSafeEqual?: unknown };
+    const original = subtle.timingSafeEqual;
+    try {
+      subtle.timingSafeEqual = undefined;
+      assert.strictEqual(await timingSafeEqual("fallback-token", "fallback-token"), true);
+      assert.strictEqual(await timingSafeEqual("fallback-token", "wrong-token"), false);
+      assert.strictEqual(await timingSafeEqual("", ""), false);
+    } finally {
+      subtle.timingSafeEqual = original;
+    }
   });
 });
 

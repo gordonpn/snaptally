@@ -1,4 +1,8 @@
 export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
+  if (a.length === 0 || b.length === 0) {
+    return false;
+  }
+
   const encoder = new TextEncoder();
   const aHash = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(a)));
   const bHash = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(b)));
@@ -9,6 +13,10 @@ export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
 
   if (typeof subtle.timingSafeEqual === "function") {
     return subtle.timingSafeEqual(aHash, bHash);
+  }
+
+  if (aHash.length !== bHash.length) {
+    return false;
   }
 
   let mismatch = 0;
@@ -34,7 +42,7 @@ export async function validateBearerToken(
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const token = match[1].trim();
+  const token = match[1]?.trim() ?? "";
   if (token.length === 0) {
     console.warn("Authentication failed: empty Bearer token");
     return Response.json({ error: "Unauthorized" }, { status: 401 });
