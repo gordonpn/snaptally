@@ -1,6 +1,7 @@
 import insertTransactionQuery from "../../queries/insert_transaction.sql";
 import selectDistinctMerchantsQuery from "../../queries/select_distinct_merchants.sql";
 import { validateBearerToken } from "./auth.ts";
+import { logger } from "./logger.ts";
 
 interface Env {
   DB: D1Database;
@@ -87,29 +88,29 @@ export async function resolveMerchant(
  */
 export function isValidPayload(body: unknown): body is TransactionPayload {
   if (typeof body !== "object" || body === null) {
-    console.warn("Validation failed: body must be a non-null object");
+    logger.warn("Validation failed: body must be a non-null object");
     return false;
   }
 
   const { amount, card, category, merchant } = body as Record<string, unknown>;
 
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
-    console.warn("Validation failed: amount must be a positive finite number");
+    logger.warn("Validation failed: amount must be a positive finite number");
     return false;
   }
 
   if (typeof card !== "string" || card.trim().length === 0) {
-    console.warn("Validation failed: card must be a non-empty string");
+    logger.warn("Validation failed: card must be a non-empty string");
     return false;
   }
 
   if (typeof category !== "string" || category.trim().length === 0) {
-    console.warn("Validation failed: category must be a non-empty string");
+    logger.warn("Validation failed: category must be a non-empty string");
     return false;
   }
 
   if (typeof merchant !== "string" || merchant.trim().length === 0) {
-    console.warn("Validation failed: merchant must be a non-empty string");
+    logger.warn("Validation failed: merchant must be a non-empty string");
     return false;
   }
 
@@ -157,7 +158,9 @@ export async function handlePost(
   try {
     canonicalMerchant = await resolveMerchant(db, selectMerchantsQuery, body.merchant);
   } catch (error) {
-    console.error("Merchant canonical resolution failed", error);
+    logger.error("Merchant canonical resolution failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return Response.json({ error: "Database error during merchant resolution" }, { status: 500 });
   }
 
@@ -169,7 +172,9 @@ export async function handlePost(
 
     return Response.json({ ok: true, id }, { status: 201 });
   } catch (error) {
-    console.error("Transaction insertion failed", error);
+    logger.error("Transaction insertion failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return Response.json({ error: "Database insertion failed" }, { status: 500 });
   }
 }
