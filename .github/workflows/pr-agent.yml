@@ -18,7 +18,13 @@ permissions:
 jobs:
   pr_agent:
     name: runner / pr-agent
-    if: ${{ github.event.sender.type != 'Bot' && github.actor != 'dependabot[bot]' && (github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && github.event.issue.pull_request)) }}
+    if: |
+      github.event.sender.type != 'Bot' &&
+      github.actor != 'dependabot[bot]' &&
+      (github.event_name == 'pull_request' ||
+        (github.event_name == 'issue_comment' &&
+         github.event.issue.pull_request &&
+         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

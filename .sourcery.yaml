@@ -4,10 +4,9 @@ ignore:
   - vendor
   - pnpm-lock.yaml
   - package-lock.json
-  - '*.min.js'
-  - '*.min.css'
+  - '**/*.min.js'
+  - '**/*.min.css'
   - '**/fixtures/**'
-  - 'tests/fixtures/**'
 
 rule_settings:
   enable:
