@@ -9,7 +9,7 @@ extra_instructions = "Direct, technical engineering tone. No fluff, no bot discl
 auto_review = true
 auto_describe = false
 auto_improve = false
-pr_actions = ["opened", "reopened", "ready_for_review", "synchronize"]
+pr_actions = ["ready_for_review"]
 
 [ignore]
 glob = [
