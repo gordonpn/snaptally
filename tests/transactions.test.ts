@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { handlePost, isValidPayload } from "../functions/api/transactions.ts";
+import { handlePost, isValidPayload, onRequestPost } from "../functions/api/transactions.ts";
 
 describe("isValidPayload", () => {
   it("accepts a valid transaction payload", () => {
@@ -171,5 +171,54 @@ describe("handlePost", () => {
 
     const data = (await response.json()) as { error: string };
     assert.strictEqual(data.error, "Database insertion failed");
+  });
+});
+
+describe("onRequestPost", () => {
+  it("delegates to handlePost and returns HTTP 201 on valid submission", async () => {
+    let executedQuery = "";
+    let boundParams: unknown[] = [];
+
+    const mockDb = {
+      prepare: (query: string) => {
+        executedQuery = query;
+        return {
+          bind: (...params: unknown[]) => {
+            boundParams = params;
+            return {
+              run: async () => ({ success: true }),
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount: 32.5,
+        card: "Chase Sapphire",
+        category: "Groceries",
+        merchant: "Whole Foods",
+      }),
+    });
+
+    const context = {
+      request,
+      env: { DB: mockDb },
+    } as unknown as Parameters<typeof onRequestPost>[0];
+
+    const response = await onRequestPost(context);
+    assert.strictEqual(response.status, 201);
+
+    const data = (await response.json()) as { ok: boolean; id: string };
+    assert.strictEqual(data.ok, true);
+    assert.strictEqual(typeof data.id, "string");
+    assert.ok(executedQuery.includes("INSERT INTO transactions"));
+    assert.strictEqual(boundParams[1], 32.5);
+    assert.strictEqual(boundParams[2], "Chase Sapphire");
+    assert.strictEqual(boundParams[3], "Groceries");
+    assert.strictEqual(boundParams[4], "Whole Foods");
   });
 });
