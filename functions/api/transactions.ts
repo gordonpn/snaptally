@@ -1,8 +1,10 @@
 import insertTransactionQuery from "../../queries/insert_transaction.sql";
 import selectDistinctMerchantsQuery from "../../queries/select_distinct_merchants.sql";
+import { validateBearerToken } from "./auth.ts";
 
 interface Env {
   DB: D1Database;
+  API_BEARER_TOKEN?: string;
 }
 
 export interface TransactionPayload {
@@ -121,8 +123,14 @@ export async function handlePost(
   request: Request,
   db: D1Database,
   insertQuery: string,
+  expectedToken?: string,
   selectMerchantsQuery: string = selectDistinctMerchantsQuery,
 ): Promise<Response> {
+  const authResponse = await validateBearerToken(request, expectedToken);
+  if (authResponse) {
+    return authResponse;
+  }
+
   let body: unknown;
 
   try {
@@ -170,5 +178,11 @@ export async function handlePost(
  * Cloudflare Pages Function entrypoint for POST /api/transactions.
  */
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  return handlePost(request, env.DB, insertTransactionQuery, selectDistinctMerchantsQuery);
+  return handlePost(
+    request,
+    env.DB,
+    insertTransactionQuery,
+    env.API_BEARER_TOKEN,
+    selectDistinctMerchantsQuery,
+  );
 };

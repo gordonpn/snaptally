@@ -3,7 +3,10 @@ node_modules/
 .env
 .env.*
 !.env.example
+.dev.vars
+.dev.vars.*
 *.db
 *.sqlite
 dist/
+coverage/
 .DS_Store
