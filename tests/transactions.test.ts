@@ -67,8 +67,68 @@ describe("isValidPayload", () => {
 describe("handlePost", () => {
   const dummyQuery =
     "INSERT INTO transactions (id, amount, card, category, merchant) VALUES (?, ?, ?, ?, ?);";
+  const validToken = "test-secret-token";
 
-  it("inserts valid transaction and returns HTTP 201", async () => {
+  it("rejects request without Authorization header with HTTP 401 (Scenario 1)", async () => {
+    let dbAccessed = false;
+    const mockDb = {
+      prepare() {
+        dbAccessed = true;
+        throw new Error("DB should not be called");
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount: 18.5,
+        card: "Amex Gold",
+        category: "Dining",
+        merchant: "George Howell",
+      }),
+    });
+
+    const response = await handlePost(request, mockDb, dummyQuery, validToken);
+    assert.strictEqual(response.status, 401);
+
+    const data = (await response.json()) as { error: string };
+    assert.strictEqual(data.error, "Unauthorized");
+    assert.strictEqual(dbAccessed, false);
+  });
+
+  it("rejects request with invalid Bearer token with HTTP 401 (Scenario 2)", async () => {
+    let dbAccessed = false;
+    const mockDb = {
+      prepare() {
+        dbAccessed = true;
+        throw new Error("DB should not be called");
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer invalid-token",
+      },
+      body: JSON.stringify({
+        amount: 18.5,
+        card: "Amex Gold",
+        category: "Dining",
+        merchant: "George Howell",
+      }),
+    });
+
+    const response = await handlePost(request, mockDb, dummyQuery, validToken);
+    assert.strictEqual(response.status, 401);
+
+    const data = (await response.json()) as { error: string };
+    assert.strictEqual(data.error, "Unauthorized");
+    assert.strictEqual(dbAccessed, false);
+  });
+
+  it("inserts valid transaction and returns HTTP 201 when authenticated (Scenario 3)", async () => {
     let boundArgs: unknown[] = [];
     let executed = false;
 
@@ -91,7 +151,10 @@ describe("handlePost", () => {
 
     const request = new Request("http://localhost/api/transactions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${validToken}`,
+      },
       body: JSON.stringify({
         amount: 18.5,
         card: "Amex Gold",
@@ -100,7 +163,7 @@ describe("handlePost", () => {
       }),
     });
 
-    const response = await handlePost(request, mockDb, dummyQuery);
+    const response = await handlePost(request, mockDb, dummyQuery, validToken);
     assert.strictEqual(response.status, 201);
 
     const data = (await response.json()) as { ok: boolean; id: string };
@@ -110,37 +173,43 @@ describe("handlePost", () => {
     assert.deepStrictEqual(boundArgs, [data.id, 18.5, "Amex Gold", "Dining", "George Howell"]);
   });
 
-  it("rejects malformed JSON with HTTP 400", async () => {
+  it("rejects malformed JSON with HTTP 400 when authenticated", async () => {
     const mockDb = {} as D1Database;
     const request = new Request("http://localhost/api/transactions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${validToken}`,
+      },
       body: "{ not valid json",
     });
 
-    const response = await handlePost(request, mockDb, dummyQuery);
+    const response = await handlePost(request, mockDb, dummyQuery, validToken);
     assert.strictEqual(response.status, 400);
 
     const data = (await response.json()) as { error: string };
     assert.strictEqual(data.error, "Malformed JSON payload");
   });
 
-  it("rejects invalid payload fields with HTTP 400", async () => {
+  it("rejects invalid payload fields with HTTP 400 when authenticated", async () => {
     const mockDb = {} as D1Database;
     const request = new Request("http://localhost/api/transactions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${validToken}`,
+      },
       body: JSON.stringify({ amount: -10, card: "", category: "Food", merchant: "Store" }),
     });
 
-    const response = await handlePost(request, mockDb, dummyQuery);
+    const response = await handlePost(request, mockDb, dummyQuery, validToken);
     assert.strictEqual(response.status, 400);
 
     const data = (await response.json()) as { error: string };
     assert.match(data.error, /Invalid payload/);
   });
 
-  it("returns HTTP 500 when database insertion fails", async () => {
+  it("returns HTTP 500 when database insertion fails when authenticated", async () => {
     const mockDb = {
       prepare() {
         return {
@@ -157,7 +226,10 @@ describe("handlePost", () => {
 
     const request = new Request("http://localhost/api/transactions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${validToken}`,
+      },
       body: JSON.stringify({
         amount: 25.0,
         card: "Visa",
@@ -166,7 +238,7 @@ describe("handlePost", () => {
       }),
     });
 
-    const response = await handlePost(request, mockDb, dummyQuery);
+    const response = await handlePost(request, mockDb, dummyQuery, validToken);
     assert.strictEqual(response.status, 500);
 
     const data = (await response.json()) as { error: string };
