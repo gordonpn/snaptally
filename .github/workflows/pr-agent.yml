@@ -27,7 +27,6 @@ jobs:
         env:
           CONFIG.MODEL: "deepseek/deepseek-chat"
           CONFIG.FALLBACK_MODELS: '["deepseek/deepseek-chat"]'
-          PR_AGENT_CONFIG_BRANCH: ${{ github.event.pull_request.head.ref || 'main' }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           DEEPSEEK.KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           OPENAI_KEY: ${{ secrets.DEEPSEEK_API_KEY }}

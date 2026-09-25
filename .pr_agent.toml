@@ -19,4 +19,6 @@ glob = [
     "*.lock",
     "**/*.min.js",
     "**/*.min.css",
+    "**/fixtures/**",
+    "tests/fixtures/**",
 ]
