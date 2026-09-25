@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { handlePost, isValidPayload } from "../functions/api/transactions.ts";
+import {
+  handlePost,
+  isValidPayload,
+  normalizeText,
+  resolveMerchant,
+  toAlphanumericKey,
+  toTitleCase,
+} from "../functions/api/transactions.ts";
 
 describe("isValidPayload", () => {
   it("accepts a valid transaction payload", () => {
@@ -64,6 +71,116 @@ describe("isValidPayload", () => {
   });
 });
 
+describe("normalizeText", () => {
+  it("trims leading and trailing whitespace", () => {
+    assert.strictEqual(normalizeText("  Trader Joe's  "), "Trader Joe's");
+  });
+
+  it("collapses multiple consecutive internal spaces", () => {
+    assert.strictEqual(normalizeText("Trader    Joe's"), "Trader Joe's");
+    assert.strictEqual(normalizeText("  Amex   Gold  "), "Amex Gold");
+  });
+
+  it("normalizes Unicode combining diacritical marks to NFC", () => {
+    const decomposed = "cafe\u0301";
+    const composed = "caf\u00e9";
+    assert.strictEqual(normalizeText(decomposed), composed);
+  });
+
+  it("normalizes smart/curly quotes to straight apostrophes", () => {
+    assert.strictEqual(normalizeText("Trader Joe’s"), "Trader Joe's");
+    assert.strictEqual(normalizeText("Trader Joe‘s"), "Trader Joe's");
+  });
+});
+
+describe("toTitleCase", () => {
+  it("capitalizes the first letter of each word", () => {
+    assert.strictEqual(toTitleCase("george howell"), "George Howell");
+    assert.strictEqual(toTitleCase("whole foods market"), "Whole Foods Market");
+  });
+
+  it("preserves apostrophes in title-cased words", () => {
+    assert.strictEqual(toTitleCase("trader joe's"), "Trader Joe's");
+    assert.strictEqual(toTitleCase("trader joe’s"), "Trader Joe's");
+  });
+
+  it("preserves already capitalized title case", () => {
+    assert.strictEqual(toTitleCase("George Howell"), "George Howell");
+  });
+
+  it("returns empty string for empty input", () => {
+    assert.strictEqual(toTitleCase("   "), "");
+  });
+});
+
+describe("toAlphanumericKey", () => {
+  it("strips whitespace, symbols, and punctuation into lowercase key", () => {
+    assert.strictEqual(toAlphanumericKey("Trader Joe's"), "traderjoes");
+    assert.strictEqual(toAlphanumericKey("trader joes"), "traderjoes");
+    assert.strictEqual(toAlphanumericKey("trader joe’s"), "traderjoes");
+    assert.strictEqual(toAlphanumericKey("  Trader-Joe's!  "), "traderjoes");
+  });
+});
+
+describe("resolveMerchant", () => {
+  const dummyQuery = "SELECT DISTINCT merchant FROM transactions;";
+
+  it("resolves to existing canonical merchant when alphanumeric key matches", async () => {
+    const mockDb = {
+      prepare(query: string) {
+        assert.strictEqual(query, dummyQuery);
+        return {
+          async all() {
+            return {
+              results: [{ merchant: "Trader Joe's" }, { merchant: "George Howell" }],
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const result1 = await resolveMerchant(mockDb, dummyQuery, "trader joes");
+    assert.strictEqual(result1, "Trader Joe's");
+
+    const result2 = await resolveMerchant(mockDb, dummyQuery, "trader joe’s");
+    assert.strictEqual(result2, "Trader Joe's");
+  });
+
+  it("formats as Title Case when no existing match is found in D1", async () => {
+    const mockDb = {
+      prepare(query: string) {
+        assert.strictEqual(query, dummyQuery);
+        return {
+          async all() {
+            return {
+              results: [{ merchant: "Trader Joe's" }],
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const result = await resolveMerchant(mockDb, dummyQuery, "george howell");
+    assert.strictEqual(result, "George Howell");
+  });
+
+  it("handles empty database results gracefully", async () => {
+    const mockDb = {
+      prepare(query: string) {
+        assert.strictEqual(query, dummyQuery);
+        return {
+          async all() {
+            return { results: [] };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const result = await resolveMerchant(mockDb, dummyQuery, "whole foods");
+    assert.strictEqual(result, "Whole Foods");
+  });
+});
+
 describe("handlePost", () => {
   const dummyQuery =
     "INSERT INTO transactions (id, amount, card, category, merchant) VALUES (?, ?, ?, ?, ?);";
@@ -74,6 +191,13 @@ describe("handlePost", () => {
 
     const mockDb = {
       prepare(query: string) {
+        if (query.startsWith("SELECT DISTINCT merchant")) {
+          return {
+            async all() {
+              return { results: [] };
+            },
+          };
+        }
         assert.strictEqual(query, dummyQuery);
         return {
           bind(...args: unknown[]) {
@@ -142,7 +266,14 @@ describe("handlePost", () => {
 
   it("returns HTTP 500 when database insertion fails", async () => {
     const mockDb = {
-      prepare() {
+      prepare(query: string) {
+        if (query.startsWith("SELECT DISTINCT merchant")) {
+          return {
+            async all() {
+              return { results: [] };
+            },
+          };
+        }
         return {
           bind() {
             return {
@@ -171,5 +302,97 @@ describe("handlePost", () => {
 
     const data = (await response.json()) as { error: string };
     assert.strictEqual(data.error, "Database insertion failed");
+  });
+
+  it("normalizes whitespace and resolves existing canonical merchant", async () => {
+    let boundArgs: unknown[] = [];
+    const selectQuery = "SELECT DISTINCT merchant FROM transactions;";
+
+    const mockDb = {
+      prepare(query: string) {
+        if (query === selectQuery) {
+          return {
+            async all() {
+              return {
+                results: [{ merchant: "Trader Joe's" }],
+              };
+            },
+          };
+        }
+        assert.strictEqual(query, dummyQuery);
+        return {
+          bind(...args: unknown[]) {
+            boundArgs = args;
+            return {
+              async run() {
+                return { success: true };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount: 42.5,
+        card: "  Amex   Gold  ",
+        category: "  Groceries  ",
+        merchant: "  trader   joes  ",
+      }),
+    });
+
+    const response = await handlePost(request, mockDb, dummyQuery, selectQuery);
+    assert.strictEqual(response.status, 201);
+    const data = (await response.json()) as { ok: boolean; id: string };
+    assert.strictEqual(data.ok, true);
+    assert.deepStrictEqual(boundArgs, [data.id, 42.5, "Amex Gold", "Groceries", "Trader Joe's"]);
+  });
+
+  it("normalizes new merchant to Title Case when no existing match in D1", async () => {
+    let boundArgs: unknown[] = [];
+    const selectQuery = "SELECT DISTINCT merchant FROM transactions;";
+
+    const mockDb = {
+      prepare(query: string) {
+        if (query === selectQuery) {
+          return {
+            async all() {
+              return { results: [] };
+            },
+          };
+        }
+        assert.strictEqual(query, dummyQuery);
+        return {
+          bind(...args: unknown[]) {
+            boundArgs = args;
+            return {
+              async run() {
+                return { success: true };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount: 3.99,
+        card: "Amex Gold",
+        category: "Coffee",
+        merchant: "george howell",
+      }),
+    });
+
+    const response = await handlePost(request, mockDb, dummyQuery, selectQuery);
+    assert.strictEqual(response.status, 201);
+    const data = (await response.json()) as { ok: boolean; id: string };
+    assert.strictEqual(data.ok, true);
+    assert.deepStrictEqual(boundArgs, [data.id, 3.99, "Amex Gold", "Coffee", "George Howell"]);
   });
 });
