@@ -50,24 +50,36 @@ snaptally/
 - npm or pnpm
 - Cloudflare Wrangler CLI
 
+### Environment Variables
+
+| Variable | Description |
+| :--- | :--- |
+| `API_BEARER_TOKEN` | Secret pre-shared bearer token used to authenticate incoming API requests. |
+
 ### Local Development
 
 1. Install dependencies:
    ```bash
-   npm install
+   pnpm install
    ```
 
-2. Apply local D1 database migrations:
+2. Configure environment variables:
    ```bash
-   npx wrangler d1 migrations apply budget-db --local
+   cp .env.example .env
    ```
+   Set `API_BEARER_TOKEN` in `.env` with your pre-shared secret.
 
-3. Start the local Pages development server:
+3. Apply local D1 database migrations:
    ```bash
-   npx wrangler pages dev ./public
+   pnpm wrangler d1 migrations apply budget-db --local
    ```
 
-4. Open `http://localhost:8788` in your browser.
+4. Start the local Pages development server:
+   ```bash
+   pnpm wrangler pages dev ./public
+   ```
+
+5. Open `http://localhost:8788` in your browser.
 
 ## Documentation
 
