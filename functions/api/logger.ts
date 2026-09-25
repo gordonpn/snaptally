@@ -8,10 +8,14 @@ const LOG_LEVEL_SEVERITY: Record<LogLevel, number> = {
 };
 
 const SENSITIVE_KEY_PATTERN =
-  /^(authorization|token|bearer|secret|password|credential|cookie|api[_-]?key)$/i;
+  /^(authorization|token|bearer|secret|password|credential|cookie|(?:x[_-]?)?api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key)$/i;
 const REDACTED = "[REDACTED]";
 
 export function sanitizeMetadata(value: unknown, seen = new WeakSet()): unknown {
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+
   if (value === null || typeof value !== "object") {
     return value;
   }
@@ -28,19 +32,23 @@ export function sanitizeMetadata(value: unknown, seen = new WeakSet()): unknown 
   }
   seen.add(value);
 
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeMetadata(item, seen));
-  }
-
-  const sanitized: Record<string, unknown> = {};
-  for (const [key, val] of Object.entries(value)) {
-    if (SENSITIVE_KEY_PATTERN.test(key)) {
-      sanitized[key] = REDACTED;
-    } else {
-      sanitized[key] = sanitizeMetadata(val, seen);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => sanitizeMetadata(item, seen));
     }
+
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value)) {
+      if (SENSITIVE_KEY_PATTERN.test(key)) {
+        sanitized[key] = REDACTED;
+      } else {
+        sanitized[key] = sanitizeMetadata(val, seen);
+      }
+    }
+    return sanitized;
+  } finally {
+    seen.delete(value);
   }
-  return sanitized;
 }
 
 export interface LogRecord {
@@ -80,16 +88,17 @@ export class Logger {
       return null;
     }
 
+    const sanitized =
+      metadata && typeof metadata === "object"
+        ? (sanitizeMetadata(metadata) as Record<string, unknown>)
+        : {};
+
     const entry: LogRecord = {
+      ...sanitized,
       timestamp: new Date().toISOString(),
       level,
       message,
     };
-
-    if (metadata && typeof metadata === "object") {
-      const sanitized = sanitizeMetadata(metadata) as Record<string, unknown>;
-      Object.assign(entry, sanitized);
-    }
 
     this.sink(entry, level);
     return entry;

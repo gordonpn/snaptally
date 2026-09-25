@@ -109,6 +109,78 @@ describe("structured logger", () => {
       assert.strictEqual(sanitized.name, "test");
       assert.strictEqual(sanitized.self, "[CIRCULAR]");
     });
+
+    it("handles shared object references across sibling keys without marking them as circular", () => {
+      const shared = { name: "shared-item" };
+      const data = {
+        primary: shared,
+        secondary: shared,
+      };
+
+      const sanitized = sanitizeMetadata(data) as typeof data;
+      assert.deepStrictEqual(sanitized.primary, { name: "shared-item" });
+      assert.deepStrictEqual(sanitized.secondary, { name: "shared-item" });
+    });
+
+    it("converts BigInt values to strings", () => {
+      const data = { count: 42n };
+      const sanitized = sanitizeMetadata(data) as { count: string };
+      assert.strictEqual(sanitized.count, "42");
+    });
+
+    it("redacts OAuth and key variants (access_token, refresh_token, client_secret, x-api-key, private_key)", () => {
+      const sensitiveData = {
+        access_token: "tok_access",
+        refresh_token: "tok_refresh",
+        client_secret: "sec_client",
+        "x-api-key": "header_key",
+        private_key: "priv_rsa",
+      };
+
+      const sanitized = sanitizeMetadata(sensitiveData) as Record<string, unknown>;
+      assert.strictEqual(sanitized.access_token, "[REDACTED]");
+      assert.strictEqual(sanitized.refresh_token, "[REDACTED]");
+      assert.strictEqual(sanitized.client_secret, "[REDACTED]");
+      assert.strictEqual(sanitized["x-api-key"], "[REDACTED]");
+      assert.strictEqual(sanitized.private_key, "[REDACTED]");
+    });
+  });
+
+  describe("reserved field preservation", () => {
+    it("prevents metadata from overwriting reserved fields (level, timestamp, message)", () => {
+      const records: LogRecord[] = [];
+      const testLogger = new Logger({
+        sink: (entry) => records.push(entry),
+      });
+
+      testLogger.warn("original message", {
+        level: "error",
+        message: "forged message",
+        timestamp: "invalid-timestamp",
+        custom: "preserved",
+      });
+
+      assert.strictEqual(records.length, 1);
+      assert.strictEqual(records[0].level, "warn");
+      assert.strictEqual(records[0].message, "original message");
+      assert.notStrictEqual(records[0].timestamp, "invalid-timestamp");
+      assert.strictEqual(records[0].custom, "preserved");
+    });
+
+    it("allows default sink to serialize BigInt metadata without throwing", () => {
+      const originalConsoleInfo = console.info;
+      let loggedOutput = "";
+      console.info = (message: string) => {
+        loggedOutput = message;
+      };
+      try {
+        const defaultLogger = new Logger();
+        defaultLogger.info("BigInt test", { id: 100n });
+        assert.ok(loggedOutput.includes('"id":"100"'));
+      } finally {
+        console.info = originalConsoleInfo;
+      }
+    });
   });
 
   describe("log level filtering", () => {
