@@ -6,4 +6,5 @@ node_modules/
 *.db
 *.sqlite
 dist/
+coverage/
 .DS_Store

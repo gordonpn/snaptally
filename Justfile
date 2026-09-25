@@ -23,6 +23,10 @@ typecheck:
 test:
     pnpm test
 
+# Run unit tests with coverage reporting
+test-coverage:
+    pnpm run test:coverage
+
 # Apply D1 migrations to local SQLite database
 db-migrate-local:
     echo y | pnpm wrangler d1 migrations apply budget-db --local
