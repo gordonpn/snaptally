@@ -35,6 +35,10 @@ db-migrate-local:
 db-list-local:
     pnpm wrangler d1 execute budget-db --local --command "SELECT * FROM transactions"
 
-# Start Cloudflare Pages local development server
-dev:
-    pnpm wrangler pages dev ./public
+# Build static assets with Astro
+build:
+    pnpm run build
+
+# Build static assets and start Cloudflare Pages local development server
+dev: build
+    pnpm wrangler pages dev ./dist
