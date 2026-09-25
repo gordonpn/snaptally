@@ -47,7 +47,7 @@ snaptally/
 ### Prerequisites
 
 - Node.js (v22.18.0 or higher)
-- npm or pnpm
+- pnpm
 - Cloudflare Wrangler CLI
 
 ### Environment Variables
@@ -55,6 +55,8 @@ snaptally/
 | Variable | Description |
 | :--- | :--- |
 | `API_BEARER_TOKEN` | Secret pre-shared bearer token used to authenticate incoming API requests. |
+
+For local development with Cloudflare Pages Functions, configure this variable in `.dev.vars` (or `.env` when using `--env-file`). In Cloudflare Pages production deployments, set this as an encrypted secret binding in the Cloudflare dashboard.
 
 ### Local Development
 
@@ -65,9 +67,9 @@ snaptally/
 
 2. Configure environment variables:
    ```bash
-   cp .env.example .env
+   cp .env.example .dev.vars
    ```
-   Set `API_BEARER_TOKEN` in `.env` with your pre-shared secret.
+   Set `API_BEARER_TOKEN` in `.dev.vars` with your pre-shared secret.
 
 3. Apply local D1 database migrations:
    ```bash
