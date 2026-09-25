@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SnapTally PoC Intake</title>
+</head>
+<body>
+  <main>
+    <h1>SnapTally PoC Intake</h1>
+    <form id="transaction-form">
+      <div>
+        <label for="amount">Amount</label>
+        <input type="number" id="amount" name="amount" step="0.01" min="0.01" required>
+      </div>
+      <div>
+        <label for="card">Card</label>
+        <input type="text" id="card" name="card" required>
+      </div>
+      <div>
+        <label for="category">Category</label>
+        <input type="text" id="category" name="category" required>
+      </div>
+      <div>
+        <label for="merchant">Merchant</label>
+        <input type="text" id="merchant" name="merchant" required>
+      </div>
+      <div>
+        <button type="submit" id="submit-button">Save Transaction</button>
+      </div>
+    </form>
+    <div id="status" role="status" aria-live="polite"></div>
+  </main>
+
+  <script>
+    const form = document.getElementById("transaction-form");
+    const statusDiv = document.getElementById("status");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      statusDiv.textContent = "Submitting transaction...";
+
+      const amountVal = parseFloat(document.getElementById("amount").value);
+      const cardVal = document.getElementById("card").value;
+      const categoryVal = document.getElementById("category").value;
+      const merchantVal = document.getElementById("merchant").value;
+
+      const payload = {
+        amount: amountVal,
+        card: cardVal,
+        category: categoryVal,
+        merchant: merchantVal
+      };
+
+      try {
+        const response = await fetch("/api/transactions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (response.status === 201 && data.ok) {
+          statusDiv.textContent = `Transaction saved successfully. ID: ${data.id}`;
+          form.reset();
+        } else {
+          statusDiv.textContent = `Error: ${data.error || "Failed to save transaction"}`;
+        }
+      } catch {
+        statusDiv.textContent = "Network error: Unable to reach endpoint";
+      }
+    });
+  </script>
+</body>
+</html>
