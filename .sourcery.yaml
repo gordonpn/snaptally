@@ -1,0 +1,30 @@
+ignore:
+  - .git
+  - node_modules
+  - vendor
+  - pnpm-lock.yaml
+  - package-lock.json
+  - '**/*.min.js'
+  - '**/*.min.css'
+  - '**/fixtures/**'
+
+rule_settings:
+  enable:
+    - default
+  rule_types:
+    - refactoring
+    - suggestion
+    - comment
+
+metrics:
+  quality_threshold: 25.0
+
+github:
+  ignore_labels:
+    - sourcery-ignore
+  sourcery_branch: sourcery/{base_branch}
+
+clone_detection:
+  min_lines: 3
+  min_duplicates: 2
+  identical_clones_only: false

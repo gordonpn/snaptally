@@ -1,0 +1,22 @@
+[config]
+model = "deepseek/deepseek-chat"
+git_provider = "github"
+
+[pr_reviewer]
+extra_instructions = "Direct, technical engineering tone. No fluff, no bot disclaimers, no emojis, no em dashes. Focus on correctness, performance, edge cases, and architectural simplicity."
+
+[github_action_config]
+auto_review = true
+auto_describe = false
+auto_improve = false
+pr_actions = ["ready_for_review"]
+
+[ignore]
+glob = [
+    "pnpm-lock.yaml",
+    "package-lock.json",
+    "*.lock",
+    "**/*.min.js",
+    "**/*.min.css",
+    "**/fixtures/**",
+]
