@@ -1,6 +1,5 @@
 [config]
 model = "deepseek/deepseek-chat"
-fallback_models = ["deepseek/deepseek-chat"]
 git_provider = "github"
 
 [pr_reviewer]

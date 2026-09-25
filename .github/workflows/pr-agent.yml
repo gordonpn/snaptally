@@ -2,7 +2,7 @@ name: PR-Agent
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, ready_for_review]
   issue_comment:
     types: [created, edited]
 
@@ -28,7 +28,6 @@ jobs:
           CONFIG.MODEL: "deepseek/deepseek-chat"
           CONFIG.FALLBACK_MODELS: '["deepseek/deepseek-chat"]'
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          DEEPSEEK.KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           OPENAI_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           OPENAI_BASE: "https://api.deepseek.com"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

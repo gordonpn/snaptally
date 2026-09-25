@@ -11,7 +11,7 @@ Sourcery operates as a GitHub App that analyzes pull requests against configured
 1. Visit the [Sourcery GitHub App page](https://github.com/apps/sourcery-ai) or [Sourcery on GitHub Marketplace](https://github.com/marketplace/sourcery).
 2. Select the free tier for open-source repositories.
 3. Choose **Install** (or **Configure** if previously installed on your account).
-4. Grant repository access to `gordonpn/snaptally`.
+4. Grant repository access to this repository (`gordonpn/snaptally`).
 
 ### 2. Configuration
 
@@ -27,4 +27,4 @@ Once authorized:
 
 - Sourcery analyzes code changes on newly opened or synchronized pull requests.
 - Line-level suggestions appear directly in the GitHub pull request review interface.
-- To skip Sourcery analysis on a specific PR, attach the label `sourcery-ignore` or include `[skip sourcery]` in the PR description.
+- To skip Sourcery analysis on a specific PR, attach the label `sourcery-ignore`.
