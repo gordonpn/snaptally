@@ -8,6 +8,7 @@ import {
   toAlphanumericKey,
   toTitleCase,
 } from "../functions/api/transactions.ts";
+import selectDistinctMerchantsQuery from "../queries/select_distinct_merchants.sql";
 
 describe("isValidPayload", () => {
   it("accepts a valid transaction payload", () => {
@@ -123,12 +124,10 @@ describe("toAlphanumericKey", () => {
 });
 
 describe("resolveMerchant", () => {
-  const dummyQuery = "SELECT DISTINCT merchant FROM transactions;";
-
   it("resolves to existing canonical merchant when alphanumeric key matches", async () => {
     const mockDb = {
       prepare(query: string) {
-        assert.strictEqual(query, dummyQuery);
+        assert.strictEqual(query, selectDistinctMerchantsQuery);
         return {
           async all() {
             return {
@@ -139,17 +138,36 @@ describe("resolveMerchant", () => {
       },
     } as unknown as D1Database;
 
-    const result1 = await resolveMerchant(mockDb, dummyQuery, "trader joes");
+    const result1 = await resolveMerchant(mockDb, selectDistinctMerchantsQuery, "trader joes");
     assert.strictEqual(result1, "Trader Joe's");
 
-    const result2 = await resolveMerchant(mockDb, dummyQuery, "trader joe’s");
+    const result2 = await resolveMerchant(mockDb, selectDistinctMerchantsQuery, "trader joe’s");
     assert.strictEqual(result2, "Trader Joe's");
+  });
+
+  it("prioritizes the most recent spelling when multiple variations exist in D1", async () => {
+    const mockDb = {
+      prepare(query: string) {
+        assert.strictEqual(query, selectDistinctMerchantsQuery);
+        return {
+          async all() {
+            // Ordered by MAX(created_at) DESC: the corrected "Trader Joe's" was recorded after "Trader Joes"
+            return {
+              results: [{ merchant: "Trader Joe's" }, { merchant: "Trader Joes" }],
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const result = await resolveMerchant(mockDb, selectDistinctMerchantsQuery, "trader joes");
+    assert.strictEqual(result, "Trader Joe's");
   });
 
   it("formats as Title Case when no existing match is found in D1", async () => {
     const mockDb = {
       prepare(query: string) {
-        assert.strictEqual(query, dummyQuery);
+        assert.strictEqual(query, selectDistinctMerchantsQuery);
         return {
           async all() {
             return {
@@ -160,14 +178,14 @@ describe("resolveMerchant", () => {
       },
     } as unknown as D1Database;
 
-    const result = await resolveMerchant(mockDb, dummyQuery, "george howell");
+    const result = await resolveMerchant(mockDb, selectDistinctMerchantsQuery, "george howell");
     assert.strictEqual(result, "George Howell");
   });
 
   it("handles empty database results gracefully", async () => {
     const mockDb = {
       prepare(query: string) {
-        assert.strictEqual(query, dummyQuery);
+        assert.strictEqual(query, selectDistinctMerchantsQuery);
         return {
           async all() {
             return { results: [] };
@@ -176,7 +194,7 @@ describe("resolveMerchant", () => {
       },
     } as unknown as D1Database;
 
-    const result = await resolveMerchant(mockDb, dummyQuery, "whole foods");
+    const result = await resolveMerchant(mockDb, selectDistinctMerchantsQuery, "whole foods");
     assert.strictEqual(result, "Whole Foods");
   });
 });
@@ -191,7 +209,7 @@ describe("handlePost", () => {
 
     const mockDb = {
       prepare(query: string) {
-        if (query.startsWith("SELECT DISTINCT merchant")) {
+        if (query === selectDistinctMerchantsQuery) {
           return {
             async all() {
               return { results: [] };
@@ -267,7 +285,7 @@ describe("handlePost", () => {
   it("returns HTTP 500 when database insertion fails", async () => {
     const mockDb = {
       prepare(query: string) {
-        if (query.startsWith("SELECT DISTINCT merchant")) {
+        if (query === selectDistinctMerchantsQuery) {
           return {
             async all() {
               return { results: [] };
@@ -306,11 +324,10 @@ describe("handlePost", () => {
 
   it("normalizes whitespace and resolves existing canonical merchant", async () => {
     let boundArgs: unknown[] = [];
-    const selectQuery = "SELECT DISTINCT merchant FROM transactions;";
 
     const mockDb = {
       prepare(query: string) {
-        if (query === selectQuery) {
+        if (query === selectDistinctMerchantsQuery) {
           return {
             async all() {
               return {
@@ -344,7 +361,7 @@ describe("handlePost", () => {
       }),
     });
 
-    const response = await handlePost(request, mockDb, dummyQuery, selectQuery);
+    const response = await handlePost(request, mockDb, dummyQuery, selectDistinctMerchantsQuery);
     assert.strictEqual(response.status, 201);
     const data = (await response.json()) as { ok: boolean; id: string };
     assert.strictEqual(data.ok, true);
@@ -353,11 +370,10 @@ describe("handlePost", () => {
 
   it("normalizes new merchant to Title Case when no existing match in D1", async () => {
     let boundArgs: unknown[] = [];
-    const selectQuery = "SELECT DISTINCT merchant FROM transactions;";
 
     const mockDb = {
       prepare(query: string) {
-        if (query === selectQuery) {
+        if (query === selectDistinctMerchantsQuery) {
           return {
             async all() {
               return { results: [] };
@@ -389,7 +405,7 @@ describe("handlePost", () => {
       }),
     });
 
-    const response = await handlePost(request, mockDb, dummyQuery, selectQuery);
+    const response = await handlePost(request, mockDb, dummyQuery, selectDistinctMerchantsQuery);
     assert.strictEqual(response.status, 201);
     const data = (await response.json()) as { ok: boolean; id: string };
     assert.strictEqual(data.ok, true);
