@@ -46,7 +46,7 @@ snaptally/
 
 ### Prerequisites
 
-- Node.js (v18 or higher)
+- Node.js (v22.18.0 or higher)
 - npm or pnpm
 - Cloudflare Wrangler CLI
 
