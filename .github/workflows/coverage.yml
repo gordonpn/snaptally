@@ -40,7 +40,7 @@ jobs:
         run: pnpm run test:coverage
 
       - name: Report code coverage
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: zgosalvez/github-actions-report-lcov@v4
         with:
           coverage-files: coverage/lcov.info
