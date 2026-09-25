@@ -121,6 +121,13 @@ describe("toAlphanumericKey", () => {
     assert.strictEqual(toAlphanumericKey("trader joe’s"), "traderjoes");
     assert.strictEqual(toAlphanumericKey("  Trader-Joe's!  "), "traderjoes");
   });
+
+  it("preserves Unicode letters and digits across scripts", () => {
+    assert.strictEqual(toAlphanumericKey("Café"), "café");
+    assert.strictEqual(toAlphanumericKey("Caf"), "caf");
+    assert.strictEqual(toAlphanumericKey("  Café-Au-Lait!  "), "caféaulait");
+    assert.strictEqual(toAlphanumericKey("東京 123!"), "東京123");
+  });
 });
 
 describe("resolveMerchant", () => {
@@ -196,6 +203,63 @@ describe("resolveMerchant", () => {
 
     const result = await resolveMerchant(mockDb, selectDistinctMerchantsQuery, "whole foods");
     assert.strictEqual(result, "Whole Foods");
+  });
+
+  it("preserves accented characters and keeps Café and Caf distinct", async () => {
+    const mockDb = {
+      prepare(query: string) {
+        assert.strictEqual(query, selectDistinctMerchantsQuery);
+        return {
+          async all() {
+            return {
+              results: [{ merchant: "Café" }, { merchant: "Caf" }],
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const result1 = await resolveMerchant(mockDb, selectDistinctMerchantsQuery, "café");
+    assert.strictEqual(result1, "Café");
+
+    const result2 = await resolveMerchant(mockDb, selectDistinctMerchantsQuery, "caf");
+    assert.strictEqual(result2, "Caf");
+  });
+
+  it("normalizes whitespace and quotes on existing canonical merchant before returning", async () => {
+    const mockDb = {
+      prepare(query: string) {
+        assert.strictEqual(query, selectDistinctMerchantsQuery);
+        return {
+          async all() {
+            return {
+              results: [{ merchant: "  Trader  Joe’s  " }],
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const result = await resolveMerchant(mockDb, selectDistinctMerchantsQuery, "trader joes");
+    assert.strictEqual(result, "Trader Joe's");
+  });
+
+  it("propagates database query errors", async () => {
+    const mockDb = {
+      prepare(query: string) {
+        assert.strictEqual(query, selectDistinctMerchantsQuery);
+        return {
+          async all() {
+            throw new Error("D1 select failed");
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    await assert.rejects(
+      async () => resolveMerchant(mockDb, selectDistinctMerchantsQuery, "trader joes"),
+      /D1 select failed/,
+    );
   });
 });
 
@@ -410,5 +474,45 @@ describe("handlePost", () => {
     const data = (await response.json()) as { ok: boolean; id: string };
     assert.strictEqual(data.ok, true);
     assert.deepStrictEqual(boundArgs, [data.id, 3.99, "Amex Gold", "Coffee", "George Howell"]);
+  });
+
+  it("returns HTTP 500 when merchant canonical resolution fails", async () => {
+    const mockDb = {
+      prepare(query: string) {
+        if (query === selectDistinctMerchantsQuery) {
+          return {
+            async all() {
+              throw new Error("D1 select failed");
+            },
+          };
+        }
+        return {
+          bind() {
+            return {
+              async run() {
+                return { success: true };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount: 25.0,
+        card: "Visa",
+        category: "Groceries",
+        merchant: "Trader Joe",
+      }),
+    });
+
+    const response = await handlePost(request, mockDb, dummyQuery);
+    assert.strictEqual(response.status, 500);
+
+    const data = (await response.json()) as { error: string };
+    assert.strictEqual(data.error, "Database error during merchant resolution");
   });
 });

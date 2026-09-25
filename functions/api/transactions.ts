@@ -42,18 +42,20 @@ export function toTitleCase(value: string): string {
 }
 
 /**
- * Strips whitespace, symbols, and punctuation into a lowercase alphanumeric key.
+ * Strips whitespace, symbols, and punctuation into a lowercase alphanumeric key,
+ * preserving Unicode letters and numbers across scripts.
  */
 export function toAlphanumericKey(value: string): string {
   return normalizeText(value)
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
+    .replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 /**
  * Resolves merchant name against existing records in D1.
- * If an existing merchant matches the alphanumeric key (e.g. "trader joes" matches "Trader Joe's"),
- * returns the existing canonical string. Otherwise, returns the Title Case normalized string.
+ * If an existing merchant matches the alphanumeric key (for example "trader joes" matches "Trader Joe's"),
+ * returns the existing canonical string with standardized whitespace and apostrophes.
+ * Otherwise, returns the Title Case normalized string.
  */
 export async function resolveMerchant(
   db: D1Database,
@@ -66,23 +68,21 @@ export async function resolveMerchant(
     return toTitleCase(normalizedInput);
   }
 
-  try {
-    const { results } = await db.prepare(query).all<{ merchant: string }>();
-    if (results && results.length > 0) {
-      for (const row of results) {
-        if (toAlphanumericKey(row.merchant) === targetKey) {
-          return row.merchant;
-        }
+  const { results } = await db.prepare(query).all<{ merchant: string }>();
+  if (results && results.length > 0) {
+    for (const row of results) {
+      if (toAlphanumericKey(row.merchant) === targetKey) {
+        return normalizeText(row.merchant);
       }
     }
-  } catch (error) {
-    // If selecting distinct merchants fails, fallback to title casing without breaking insertion
-    console.error("Merchant canonical resolution lookup failed", error);
   }
 
   return toTitleCase(normalizedInput);
 }
 
+/**
+ * Validates that an incoming payload conforms to the TransactionPayload interface.
+ */
 export function isValidPayload(body: unknown): body is TransactionPayload {
   if (typeof body !== "object" || body === null) {
     console.warn("Validation failed: body must be a non-null object");
@@ -114,6 +114,9 @@ export function isValidPayload(body: unknown): body is TransactionPayload {
   return true;
 }
 
+/**
+ * Handles incoming POST requests to validate, normalize, canonicalize, and persist transactions in D1.
+ */
 export async function handlePost(
   request: Request,
   db: D1Database,
@@ -141,7 +144,14 @@ export async function handlePost(
   const id = crypto.randomUUID();
   const normalizedCard = normalizeText(body.card);
   const normalizedCategory = normalizeText(body.category);
-  const canonicalMerchant = await resolveMerchant(db, selectMerchantsQuery, body.merchant);
+
+  let canonicalMerchant: string;
+  try {
+    canonicalMerchant = await resolveMerchant(db, selectMerchantsQuery, body.merchant);
+  } catch (error) {
+    console.error("Merchant canonical resolution failed", error);
+    return Response.json({ error: "Database error during merchant resolution" }, { status: 500 });
+  }
 
   try {
     await db
@@ -156,6 +166,9 @@ export async function handlePost(
   }
 }
 
+/**
+ * Cloudflare Pages Function entrypoint for POST /api/transactions.
+ */
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   return handlePost(request, env.DB, insertTransactionQuery, selectDistinctMerchantsQuery);
 };

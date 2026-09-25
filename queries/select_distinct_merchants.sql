@@ -1,4 +1,4 @@
 SELECT merchant
 FROM transactions
 GROUP BY merchant
-ORDER BY MAX(created_at) DESC;
+ORDER BY MAX(created_at) DESC, MAX(rowid) DESC;
