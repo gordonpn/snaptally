@@ -35,9 +35,11 @@
   <script>
     const form = document.getElementById("transaction-form");
     const statusDiv = document.getElementById("status");
+    const submitButton = document.getElementById("submit-button");
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      submitButton.disabled = true;
       statusDiv.textContent = "Submitting transaction...";
 
       const amountVal = parseFloat(document.getElementById("amount").value);
@@ -61,16 +63,24 @@
           body: JSON.stringify(payload)
         });
 
-        const data = await response.json();
+        let data = null;
+        try {
+          data = await response.json();
+        } catch {
+          // Handled below if data is null
+        }
 
-        if (response.status === 201 && data.ok) {
+        if (response.status === 201 && data?.ok) {
           statusDiv.textContent = `Transaction saved successfully. ID: ${data.id}`;
           form.reset();
         } else {
-          statusDiv.textContent = `Error: ${data.error || "Failed to save transaction"}`;
+          const errorMessage = data?.error || `Request failed with status ${response.status}`;
+          statusDiv.textContent = `Error: ${errorMessage}`;
         }
       } catch {
         statusDiv.textContent = "Network error: Unable to reach endpoint";
+      } finally {
+        submitButton.disabled = false;
       }
     });
   </script>
