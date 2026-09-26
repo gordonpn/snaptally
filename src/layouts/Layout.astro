@@ -17,12 +17,6 @@ const { title = "SnapTally" } = Astro.props;
   </head>
   <body class="min-h-screen bg-base-100 text-base-content antialiased">
     <slot />
-    <script>
-      import Alpine from "alpinejs";
-      import { intakeForm } from "../scripts/intake-form";
-      Alpine.data("intakeForm", intakeForm);
-      (window as unknown as { Alpine: typeof Alpine }).Alpine = Alpine;
-      Alpine.start();
-    </script>
+    <script src="../scripts/app.ts"></script>
   </body>
 </html>

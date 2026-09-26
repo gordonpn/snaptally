@@ -20,10 +20,17 @@ export function intakeForm() {
         merchant: this.merchant,
       };
 
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const token =
+        typeof localStorage !== "undefined" ? localStorage.getItem("snaptally_api_token") : null;
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
       try {
         const response = await fetch("/api/transactions", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify(payload),
         });
 
