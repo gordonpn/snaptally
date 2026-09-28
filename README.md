@@ -13,17 +13,18 @@ Logging transactions at checkout using full spreadsheet applications or heavy pe
 
 ## Tech Stack
 
-- **Frontend**: Plain HTML, CSS, Alpine.js (for reactive category filtering and state), Web App Manifest (standalone PWA).
+- **Frontend**: Astro (static output mode), DaisyUI, Tailwind CSS v4, Alpine.js (for reactive category filtering and state), Tabler Icons (`@tabler/icons-astro`), Web App Manifest (standalone PWA).
 - **Client Offline Storage**: IndexedDB via `idb-keyval` for queueing transactions offline.
 - **Compute / Routing**: Cloudflare Pages Functions running Hono (TypeScript).
 - **Database**: Cloudflare D1 (serverless SQLite at the edge).
 - **Authentication**: Pre-shared API bearer token stored in client local storage.
-- **Tooling**: Cloudflare Wrangler CLI.
+- **Tooling**: Cloudflare Wrangler CLI, Astro CLI, Biome.
 
 ## Repository Layout
 
 ```text
 snaptally/
+├── astro.config.mjs          # Astro static build configuration
 ├── docs/
 │   └── architecture.md       # Detailed system design and trade-offs
 ├── functions/
@@ -31,12 +32,16 @@ snaptally/
 │       └── [[route]].ts      # Hono API router and D1 queries
 ├── migrations/
 │   └── 0000_init.sql         # D1 database schema
-├── public/
-│   ├── app.js                # Form submission and outbox sync
-│   ├── icons/                # PWA icons
-│   ├── index.html            # Intake UI
-│   ├── manifest.json         # PWA configuration
-│   └── styles.css            # Touch-friendly styles
+├── public/                   # Static pass-through assets
+├── queries/
+│   └── select_distinct_merchants.sql # Reusable D1 SQL queries
+├── src/
+│   ├── layouts/
+│   │   └── Layout.astro      # Root HTML shell and Alpine.js bootstrap
+│   ├── pages/
+│   │   └── index.astro       # Intake UI page with DaisyUI and Tabler icons
+│   └── styles/
+│       └── global.css        # Tailwind CSS and DaisyUI theme directives
 ├── package.json
 ├── README.md
 └── wrangler.jsonc            # Cloudflare Pages and D1 binding config
@@ -76,9 +81,13 @@ For local development with Cloudflare Pages Functions, configure this variable i
    pnpm wrangler d1 migrations apply budget-db --local
    ```
 
-4. Start the local Pages development server:
+4. Build static assets and start the local Pages development server:
    ```bash
-   pnpm wrangler pages dev ./public
+   pnpm dev
+   ```
+   Or using the task runner:
+   ```bash
+   just dev
    ```
 
 5. Open `http://localhost:8788` in your browser.

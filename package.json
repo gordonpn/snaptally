@@ -7,7 +7,9 @@
     "node": ">=22.18.0"
   },
   "scripts": {
-    "dev": "wrangler pages dev ./public",
+    "build": "astro build",
+    "preview": "astro preview",
+    "dev": "astro build && wrangler pages dev ./dist",
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "node --experimental-test-coverage --test-coverage-lines=80 --test-coverage-functions=80 --test-coverage-branches=80 --test-coverage-exclude=\"tests/**\" --import ./tests/register-loader.js --test tests/*.test.ts",
@@ -17,7 +19,16 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260923.1",
+    "@tabler/icons-astro": "^3.48.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/alpinejs": "^3.13.11",
+    "astro": "^7.3.5",
+    "daisyui": "^5.7.46",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.7.3",
     "wrangler": "^4.137.0"
+  },
+  "dependencies": {
+    "alpinejs": "^3.17.4"
   }
 }
