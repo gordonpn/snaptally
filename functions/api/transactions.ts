@@ -9,10 +9,28 @@ interface Env {
 }
 
 export interface TransactionPayload {
-  amount: number;
+  date: string;
   card: string;
-  category: string;
+  parent_bucket: string;
+  subcategory: string;
   merchant: string;
+  gross_amount: number;
+  reimbursement?: number;
+}
+
+/**
+ * Validates that a string is a valid calendar date in YYYY-MM-DD format.
+ */
+export function isValidDate(dateStr: string): boolean {
+  const trimmed = dateStr.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return false;
+  }
+  const [year, month, day] = trimmed.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+  );
 }
 
 /**
@@ -92,10 +110,27 @@ export function isValidPayload(body: unknown): body is TransactionPayload {
     return false;
   }
 
-  const { amount, card, category, merchant } = body as Record<string, unknown>;
+  const { date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement } =
+    body as Record<string, unknown>;
 
-  if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
-    logger.warn("Validation failed: amount must be a positive finite number");
+  if (typeof date !== "string" || !isValidDate(date)) {
+    logger.warn("Validation failed: date must be a valid YYYY-MM-DD string");
+    return false;
+  }
+
+  if (typeof gross_amount !== "number" || !Number.isFinite(gross_amount) || gross_amount <= 0) {
+    logger.warn("Validation failed: gross_amount must be a positive finite number");
+    return false;
+  }
+
+  if (
+    reimbursement !== undefined &&
+    reimbursement !== null &&
+    (typeof reimbursement !== "number" || !Number.isFinite(reimbursement) || reimbursement < 0)
+  ) {
+    logger.warn(
+      "Validation failed: reimbursement must be a non-negative finite number if provided",
+    );
     return false;
   }
 
@@ -104,8 +139,13 @@ export function isValidPayload(body: unknown): body is TransactionPayload {
     return false;
   }
 
-  if (typeof category !== "string" || category.trim().length === 0) {
-    logger.warn("Validation failed: category must be a non-empty string");
+  if (typeof parent_bucket !== "string" || parent_bucket.trim().length === 0) {
+    logger.warn("Validation failed: parent_bucket must be a non-empty string");
+    return false;
+  }
+
+  if (typeof subcategory !== "string" || subcategory.trim().length === 0) {
+    logger.warn("Validation failed: subcategory must be a non-empty string");
     return false;
   }
 
@@ -144,15 +184,18 @@ export async function handlePost(
     return Response.json(
       {
         error:
-          "Invalid payload. Required fields: amount (positive number), card (string), category (string), merchant (string)",
+          "Invalid payload. Required fields: date (YYYY-MM-DD), card (string), parent_bucket (string), subcategory (string), merchant (string), gross_amount (positive number); optional: reimbursement (non-negative number)",
       },
       { status: 400 },
     );
   }
 
   const id = crypto.randomUUID();
+  const normalizedDate = body.date.trim();
   const normalizedCard = normalizeText(body.card);
-  const normalizedCategory = normalizeText(body.category);
+  const normalizedParentBucket = normalizeText(body.parent_bucket);
+  const normalizedSubcategory = normalizeText(body.subcategory);
+  const reimbursement = typeof body.reimbursement === "number" ? body.reimbursement : 0.0;
 
   let canonicalMerchant: string;
   try {
@@ -167,7 +210,16 @@ export async function handlePost(
   try {
     await db
       .prepare(insertQuery)
-      .bind(id, body.amount, normalizedCard, normalizedCategory, canonicalMerchant)
+      .bind(
+        id,
+        normalizedDate,
+        normalizedCard,
+        normalizedParentBucket,
+        normalizedSubcategory,
+        canonicalMerchant,
+        body.gross_amount,
+        reimbursement,
+      )
       .run();
 
     return Response.json({ ok: true, id }, { status: 201 });

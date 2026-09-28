@@ -13,11 +13,15 @@ export function intakeForm() {
       this.statusMessage = "Submitting transaction...";
       this.isError = false;
 
+      const today = new Date().toISOString().slice(0, 10);
       const payload = {
-        amount: parseFloat(this.amount),
+        date: today,
         card: this.card,
-        category: this.category,
+        parent_bucket: "Variable",
+        subcategory: this.category,
         merchant: this.merchant,
+        gross_amount: parseFloat(this.amount),
+        reimbursement: 0.0,
       };
 
       const headers: Record<string, string> = { "Content-Type": "application/json" };
