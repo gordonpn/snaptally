@@ -4,12 +4,13 @@ SnapTally is a lightweight, mobile-first progressive web application (PWA) desig
 
 ## Overview
 
-Logging transactions at checkout using full spreadsheet applications or heavy personal finance tools is slow and error-prone on mobile devices. SnapTally isolates the point-of-sale interaction to a single intake form optimized for speed:
+Logging transactions at checkout using full spreadsheet applications or heavy personal finance tools is slow and error-prone on mobile devices. SnapTally delivers an ultra-fast checkout entry experience paired with integrated Conscious Spending Plan analysis:
 
-- Single-tap pill chips for cards and categories instead of native wheel dropdowns.
+- Single-tap pill chips and custom on-screen ATM keypad for sub-5-second logging.
 - Instant submission with an optimistic client-side outbox using IndexedDB.
+- Integrated monthly Conscious Spending Plan budget analysis, burn-rate pacing, and sinking fund balance tracking.
 - Zero server maintenance and durable persistence on Cloudflare edge infrastructure.
-- Simple periodic reconciliation or export back to macro budget spreadsheets (such as Google Sheets).
+- Periodic reconciliation or export back to macro budget spreadsheets (such as Google Sheets).
 
 ## Tech Stack
 
@@ -26,7 +27,8 @@ Logging transactions at checkout using full spreadsheet applications or heavy pe
 snaptally/
 ├── astro.config.mjs          # Astro static build configuration
 ├── docs/
-│   └── architecture.md       # Detailed system design and trade-offs
+│   ├── architecture.md       # Detailed system design, data flows, and trade-offs
+│   └── budgeting.md          # Conscious Spending Plan framework, taxonomy, and rules
 ├── functions/
 │   └── api/
 │       └── [[route]].ts      # Hono API router and D1 queries
@@ -93,5 +95,6 @@ For local development with Cloudflare Pages Functions, configure this variable i
 5. Open `http://localhost:8788` in your browser.
 
 ## Documentation
-
-For full architectural specifications, data flows, database schemas, and free-tier operational limits, see [docs/architecture.md](docs/architecture.md).
+ 
+- [Architecture & Design](docs/architecture.md): Detailed system design, data flows, database schemas, and free-tier operational limits.
+- [Budgeting Methodology & Category Taxonomy](docs/budgeting.md): Conscious Spending Plan parent buckets, subcategories, sinking funds, travel categorization, and reimbursement rules.
