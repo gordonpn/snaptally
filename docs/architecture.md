@@ -81,16 +81,17 @@ CREATE TABLE IF NOT EXISTS transactions (
     subcategory TEXT NOT NULL,
     merchant TEXT NOT NULL,
     gross_amount REAL NOT NULL,
-    reimbursement REAL DEFAULT 0,
-    net_spend REAL NOT NULL,
+    reimbursement REAL DEFAULT 0.0,
+    net_spend REAL GENERATED ALWAYS AS (gross_amount - COALESCE(reimbursement, 0.0)) STORED,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
+CREATE INDEX IF NOT EXISTS idx_transactions_date_created_at ON transactions(date DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_transactions_merchant ON transactions(merchant);
 ```
 
 ### Net Spend Calculation
-Transactions track both `gross_amount` and `reimbursement`. `net_spend` is computed as `gross_amount - reimbursement` prior to storage, allowing direct aggregation on net out-of-pocket costs.
+Transactions track both `gross_amount` and `reimbursement`. `net_spend` is calculated automatically via SQLite stored generated column (`gross_amount - COALESCE(reimbursement, 0.0)`), allowing direct aggregation on net out-of-pocket costs without client-side calculation drift.
 
 ## Downstream Reconciliation & Google Sheets Integration
 

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
 import {
   handlePost,
+  isValidDate,
   isValidPayload,
   normalizeText,
   onRequestPost,
@@ -9,17 +13,58 @@ import {
   toAlphanumericKey,
   toTitleCase,
 } from "../functions/api/transactions.ts";
+import insertTransactionQuery from "../queries/insert_transaction.sql";
 import selectDistinctMerchantsQuery from "../queries/select_distinct_merchants.sql";
 
+describe("isValidDate", () => {
+  it("accepts valid ISO calendar date strings", () => {
+    assert.strictEqual(isValidDate("2026-09-28"), true);
+    assert.strictEqual(isValidDate("2024-02-29"), true);
+    assert.strictEqual(isValidDate("2000-01-01"), true);
+    assert.strictEqual(isValidDate("0042-05-15"), true);
+    assert.strictEqual(isValidDate("0001-01-01"), true);
+  });
+
+  it("rejects non-conforming date string formats", () => {
+    assert.strictEqual(isValidDate("2026/09/28"), false);
+    assert.strictEqual(isValidDate("2026-9-28"), false);
+    assert.strictEqual(isValidDate("2026-09-8"), false);
+    assert.strictEqual(isValidDate("09-28-2026"), false);
+    assert.strictEqual(isValidDate(""), false);
+    assert.strictEqual(isValidDate("not-a-date"), false);
+  });
+
+  it("rejects invalid calendar dates", () => {
+    assert.strictEqual(isValidDate("2025-02-29"), false);
+    assert.strictEqual(isValidDate("2026-02-30"), false);
+    assert.strictEqual(isValidDate("2026-04-31"), false);
+    assert.strictEqual(isValidDate("2026-13-01"), false);
+    assert.strictEqual(isValidDate("2026-00-10"), false);
+  });
+});
+
 describe("isValidPayload", () => {
-  it("accepts a valid transaction payload", () => {
-    const payload = {
-      amount: 18.5,
-      card: "Amex Gold",
-      category: "Dining",
-      merchant: "George Howell",
-    };
-    assert.strictEqual(isValidPayload(payload), true);
+  const validPayload = {
+    date: "2026-09-25",
+    card: "Amex Gold",
+    parent_bucket: "Guilt-Free",
+    subcategory: "Dining",
+    merchant: "George Howell",
+    gross_amount: 25.5,
+    reimbursement: 5.0,
+  };
+
+  it("accepts a valid transaction payload with reimbursement", () => {
+    assert.strictEqual(isValidPayload(validPayload), true);
+  });
+
+  it("accepts a valid transaction payload with omitted reimbursement", () => {
+    const { reimbursement, ...omittedReimbursement } = validPayload;
+    assert.strictEqual(isValidPayload(omittedReimbursement), true);
+  });
+
+  it("accepts a valid transaction payload with zero reimbursement", () => {
+    assert.strictEqual(isValidPayload({ ...validPayload, reimbursement: 0 }), true);
   });
 
   it("rejects non-object or null payloads", () => {
@@ -29,47 +74,39 @@ describe("isValidPayload", () => {
     assert.strictEqual(isValidPayload(123), false);
   });
 
-  it("rejects non-positive or non-finite amounts", () => {
+  it("rejects invalid or missing date values", () => {
+    assert.strictEqual(isValidPayload({ ...validPayload, date: "invalid-date" }), false);
+    assert.strictEqual(isValidPayload({ ...validPayload, date: "2026-02-30" }), false);
+    assert.strictEqual(isValidPayload({ ...validPayload, date: "" }), false);
+    assert.strictEqual(isValidPayload({ ...validPayload, date: 20260925 }), false);
+  });
+
+  it("rejects non-positive or non-finite gross_amount", () => {
+    assert.strictEqual(isValidPayload({ ...validPayload, gross_amount: 0 }), false);
+    assert.strictEqual(isValidPayload({ ...validPayload, gross_amount: -5 }), false);
+    assert.strictEqual(isValidPayload({ ...validPayload, gross_amount: Number.NaN }), false);
     assert.strictEqual(
-      isValidPayload({ amount: 0, card: "Amex", category: "Food", merchant: "Store" }),
+      isValidPayload({ ...validPayload, gross_amount: Number.POSITIVE_INFINITY }),
       false,
     );
+    assert.strictEqual(isValidPayload({ ...validPayload, gross_amount: "18.50" }), false);
+  });
+
+  it("rejects negative or non-finite reimbursement", () => {
+    assert.strictEqual(isValidPayload({ ...validPayload, reimbursement: -1 }), false);
+    assert.strictEqual(isValidPayload({ ...validPayload, reimbursement: Number.NaN }), false);
     assert.strictEqual(
-      isValidPayload({ amount: -5, card: "Amex", category: "Food", merchant: "Store" }),
+      isValidPayload({ ...validPayload, reimbursement: Number.POSITIVE_INFINITY }),
       false,
     );
-    assert.strictEqual(
-      isValidPayload({ amount: Number.NaN, card: "Amex", category: "Food", merchant: "Store" }),
-      false,
-    );
-    assert.strictEqual(
-      isValidPayload({
-        amount: Number.POSITIVE_INFINITY,
-        card: "Amex",
-        category: "Food",
-        merchant: "Store",
-      }),
-      false,
-    );
-    assert.strictEqual(
-      isValidPayload({ amount: "18.50", card: "Amex", category: "Food", merchant: "Store" }),
-      false,
-    );
+    assert.strictEqual(isValidPayload({ ...validPayload, reimbursement: "5.0" }), false);
   });
 
   it("rejects empty or whitespace-only string fields", () => {
-    assert.strictEqual(
-      isValidPayload({ amount: 10, card: "   ", category: "Food", merchant: "Store" }),
-      false,
-    );
-    assert.strictEqual(
-      isValidPayload({ amount: 10, card: "Amex", category: "", merchant: "Store" }),
-      false,
-    );
-    assert.strictEqual(
-      isValidPayload({ amount: 10, card: "Amex", category: "Food", merchant: "   " }),
-      false,
-    );
+    assert.strictEqual(isValidPayload({ ...validPayload, card: "   " }), false);
+    assert.strictEqual(isValidPayload({ ...validPayload, parent_bucket: "" }), false);
+    assert.strictEqual(isValidPayload({ ...validPayload, subcategory: "  " }), false);
+    assert.strictEqual(isValidPayload({ ...validPayload, merchant: "" }), false);
   });
 });
 
@@ -244,6 +281,12 @@ describe("resolveMerchant", () => {
     assert.strictEqual(result, "Trader Joe's");
   });
 
+  it("returns title case directly when alphanumeric key is empty", async () => {
+    const mockDb = {} as D1Database;
+    const result = await resolveMerchant(mockDb, selectDistinctMerchantsQuery, "???");
+    assert.strictEqual(result, "???");
+  });
+
   it("propagates database query errors", async () => {
     const mockDb = {
       prepare(query: string) {
@@ -264,8 +307,7 @@ describe("resolveMerchant", () => {
 });
 
 describe("handlePost", () => {
-  const dummyQuery =
-    "INSERT INTO transactions (id, amount, card, category, merchant) VALUES (?, ?, ?, ?, ?);";
+  const dummyQuery = insertTransactionQuery;
   const validToken = "test-secret-token";
 
   it("rejects request without Authorization header with HTTP 401 (Scenario 1)", async () => {
@@ -281,10 +323,13 @@ describe("handlePost", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        amount: 18.5,
+        date: "2026-09-25",
         card: "Amex Gold",
-        category: "Dining",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
         merchant: "George Howell",
+        gross_amount: 18.5,
+        reimbursement: 0.0,
       }),
     });
 
@@ -312,10 +357,13 @@ describe("handlePost", () => {
         Authorization: "Bearer invalid-token",
       },
       body: JSON.stringify({
-        amount: 18.5,
+        date: "2026-09-25",
         card: "Amex Gold",
-        category: "Dining",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
         merchant: "George Howell",
+        gross_amount: 18.5,
+        reimbursement: 0.0,
       }),
     });
 
@@ -362,10 +410,13 @@ describe("handlePost", () => {
         Authorization: `Bearer ${validToken}`,
       },
       body: JSON.stringify({
-        amount: 18.5,
+        date: "2026-09-25",
         card: "Amex Gold",
-        category: "Dining",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
         merchant: "George Howell",
+        gross_amount: 25.5,
+        reimbursement: 5.0,
       }),
     });
 
@@ -376,7 +427,74 @@ describe("handlePost", () => {
     assert.strictEqual(data.ok, true);
     assert.strictEqual(typeof data.id, "string");
     assert.strictEqual(executed, true);
-    assert.deepStrictEqual(boundArgs, [data.id, 18.5, "Amex Gold", "Dining", "George Howell"]);
+    assert.deepStrictEqual(boundArgs, [
+      data.id,
+      "2026-09-25",
+      "Amex Gold",
+      "Guilt-Free",
+      "Dining",
+      "George Howell",
+      25.5,
+      5.0,
+    ]);
+  });
+
+  it("inserts valid transaction with omitted reimbursement defaulting to zero (Scenario 4)", async () => {
+    let boundArgs: unknown[] = [];
+
+    const mockDb = {
+      prepare(query: string) {
+        if (query === selectDistinctMerchantsQuery) {
+          return {
+            async all() {
+              return { results: [] };
+            },
+          };
+        }
+        return {
+          bind(...args: unknown[]) {
+            boundArgs = args;
+            return {
+              async run() {
+                return { success: true };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${validToken}`,
+      },
+      body: JSON.stringify({
+        date: "2026-09-25",
+        card: "Amex Gold",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
+        merchant: "George Howell",
+        gross_amount: 18.0,
+      }),
+    });
+
+    const response = await handlePost(request, mockDb, dummyQuery, validToken);
+    assert.strictEqual(response.status, 201);
+
+    const data = (await response.json()) as { ok: boolean; id: string };
+    assert.strictEqual(data.ok, true);
+    assert.deepStrictEqual(boundArgs, [
+      data.id,
+      "2026-09-25",
+      "Amex Gold",
+      "Guilt-Free",
+      "Dining",
+      "George Howell",
+      18.0,
+      0.0,
+    ]);
   });
 
   it("rejects malformed JSON with HTTP 400 when authenticated", async () => {
@@ -405,7 +523,14 @@ describe("handlePost", () => {
         "Content-Type": "application/json",
         Authorization: `Bearer ${validToken}`,
       },
-      body: JSON.stringify({ amount: -10, card: "", category: "Food", merchant: "Store" }),
+      body: JSON.stringify({
+        date: "invalid-date",
+        card: "",
+        parent_bucket: "Food",
+        subcategory: "Dining",
+        merchant: "Store",
+        gross_amount: -10,
+      }),
     });
 
     const response = await handlePost(request, mockDb, dummyQuery, validToken);
@@ -444,10 +569,12 @@ describe("handlePost", () => {
         Authorization: `Bearer ${validToken}`,
       },
       body: JSON.stringify({
-        amount: 25.0,
+        date: "2026-09-25",
         card: "Visa",
-        category: "Groceries",
+        parent_bucket: "Fixed Costs",
+        subcategory: "Groceries",
         merchant: "Trader Joe",
+        gross_amount: 25.0,
       }),
     });
 
@@ -493,10 +620,13 @@ describe("handlePost", () => {
         Authorization: `Bearer ${validToken}`,
       },
       body: JSON.stringify({
-        amount: 42.5,
+        date: "  2026-09-25  ",
         card: "  Amex   Gold  ",
-        category: "  Groceries  ",
+        parent_bucket: "  Guilt-Free  ",
+        subcategory: "  Dining  ",
         merchant: "  trader   joes  ",
+        gross_amount: 42.5,
+        reimbursement: 2.5,
       }),
     });
 
@@ -510,7 +640,16 @@ describe("handlePost", () => {
     assert.strictEqual(response.status, 201);
     const data = (await response.json()) as { ok: boolean; id: string };
     assert.strictEqual(data.ok, true);
-    assert.deepStrictEqual(boundArgs, [data.id, 42.5, "Amex Gold", "Groceries", "Trader Joe's"]);
+    assert.deepStrictEqual(boundArgs, [
+      data.id,
+      "2026-09-25",
+      "Amex Gold",
+      "Guilt-Free",
+      "Dining",
+      "Trader Joe's",
+      42.5,
+      2.5,
+    ]);
   });
 
   it("normalizes new merchant to Title Case when no existing match in D1", async () => {
@@ -546,10 +685,12 @@ describe("handlePost", () => {
         Authorization: `Bearer ${validToken}`,
       },
       body: JSON.stringify({
-        amount: 3.99,
+        date: "2026-09-25",
         card: "Amex Gold",
-        category: "Coffee",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Coffee",
         merchant: "george howell",
+        gross_amount: 3.99,
       }),
     });
 
@@ -563,7 +704,16 @@ describe("handlePost", () => {
     assert.strictEqual(response.status, 201);
     const data = (await response.json()) as { ok: boolean; id: string };
     assert.strictEqual(data.ok, true);
-    assert.deepStrictEqual(boundArgs, [data.id, 3.99, "Amex Gold", "Coffee", "George Howell"]);
+    assert.deepStrictEqual(boundArgs, [
+      data.id,
+      "2026-09-25",
+      "Amex Gold",
+      "Guilt-Free",
+      "Coffee",
+      "George Howell",
+      3.99,
+      0.0,
+    ]);
   });
 
   it("returns HTTP 500 when merchant canonical resolution fails", async () => {
@@ -595,10 +745,12 @@ describe("handlePost", () => {
         Authorization: `Bearer ${validToken}`,
       },
       body: JSON.stringify({
-        amount: 25.0,
+        date: "2026-09-25",
         card: "Visa",
-        category: "Groceries",
+        parent_bucket: "Fixed Costs",
+        subcategory: "Groceries",
         merchant: "Trader Joe",
+        gross_amount: 25.0,
       }),
     });
 
@@ -642,10 +794,13 @@ describe("onRequestPost", () => {
         Authorization: `Bearer ${validToken}`,
       },
       body: JSON.stringify({
-        amount: 32.5,
+        date: "2026-09-25",
         card: "Chase Sapphire",
-        category: "Groceries",
+        parent_bucket: "Fixed Costs",
+        subcategory: "Groceries",
         merchant: "Whole Foods",
+        gross_amount: 32.5,
+        reimbursement: 0.0,
       }),
     });
 
@@ -661,9 +816,82 @@ describe("onRequestPost", () => {
     assert.strictEqual(data.ok, true);
     assert.strictEqual(typeof data.id, "string");
     assert.ok(executedQuery.includes("INSERT INTO transactions"));
-    assert.strictEqual(boundParams[1], 32.5);
+    assert.strictEqual(boundParams[1], "2026-09-25");
     assert.strictEqual(boundParams[2], "Chase Sapphire");
-    assert.strictEqual(boundParams[3], "Groceries");
-    assert.strictEqual(boundParams[4], "Whole Foods");
+    assert.strictEqual(boundParams[3], "Fixed Costs");
+    assert.strictEqual(boundParams[4], "Groceries");
+    assert.strictEqual(boundParams[5], "Whole Foods");
+    assert.strictEqual(boundParams[6], 32.5);
+    assert.strictEqual(boundParams[7], 0.0);
+  });
+});
+
+describe("Database Schema and Migrations", () => {
+  it("applies migrations cleanly and automatically stores generated net_spend in SQLite", () => {
+    const initSql = readFileSync(resolve("migrations/0000_init.sql"), "utf-8");
+    const migrationSql = readFileSync(resolve("migrations/0001_expanded_schema.sql"), "utf-8");
+
+    const db = new DatabaseSync(":memory:");
+    db.exec(initSql);
+
+    db.exec(`
+      INSERT INTO transactions (id, amount, card, category, merchant, created_at)
+      VALUES ('legacy-1', 45.0, 'Amex Gold', 'Groceries', 'Trader Joe', '2026-09-20 10:30:00');
+    `);
+
+    db.exec(migrationSql);
+
+    const migratedRow = db
+      .prepare("SELECT * FROM transactions WHERE id = ?")
+      .get("legacy-1") as Record<string, unknown>;
+
+    assert.strictEqual(migratedRow.id, "legacy-1");
+    assert.strictEqual(migratedRow.date, "2026-09-20");
+    assert.strictEqual(migratedRow.card, "Amex Gold");
+    assert.strictEqual(migratedRow.parent_bucket, "Variable");
+    assert.strictEqual(migratedRow.subcategory, "Groceries");
+    assert.strictEqual(migratedRow.merchant, "Trader Joe");
+    assert.strictEqual(migratedRow.gross_amount, 45.0);
+    assert.strictEqual(migratedRow.reimbursement, 0.0);
+    assert.strictEqual(migratedRow.net_spend, 45.0);
+
+    const insertStmt = db.prepare(insertTransactionQuery);
+    insertStmt.run(
+      "new-1",
+      "2026-09-25",
+      "Chase Sapphire",
+      "Guilt-Free",
+      "Dining",
+      "George Howell",
+      50.0,
+      15.0,
+    );
+
+    const insertedRow = db
+      .prepare("SELECT * FROM transactions WHERE id = ?")
+      .get("new-1") as Record<string, unknown>;
+
+    assert.strictEqual(insertedRow.gross_amount, 50.0);
+    assert.strictEqual(insertedRow.reimbursement, 15.0);
+    assert.strictEqual(insertedRow.net_spend, 35.0);
+
+    insertStmt.run("new-2", "2026-09-26", "Apple Cash", "Fixed Costs", "Transit", "MBTA", 2.4, 0.0);
+
+    const zeroReimbursementRow = db
+      .prepare("SELECT * FROM transactions WHERE id = ?")
+      .get("new-2") as Record<string, unknown>;
+
+    assert.strictEqual(zeroReimbursementRow.gross_amount, 2.4);
+    assert.strictEqual(zeroReimbursementRow.reimbursement, 0.0);
+    assert.strictEqual(zeroReimbursementRow.net_spend, 2.4);
+
+    const indexes = db.prepare("PRAGMA index_list(transactions)").all() as Array<{
+      name: string;
+    }>;
+    const indexNames = indexes.map((idx) => idx.name);
+    assert.ok(indexNames.includes("idx_transactions_date_created_at"));
+    assert.ok(indexNames.includes("idx_transactions_merchant"));
+
+    db.close();
   });
 });
