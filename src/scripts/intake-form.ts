@@ -13,7 +13,12 @@ export function intakeForm() {
       this.statusMessage = "Submitting transaction...";
       this.isError = false;
 
-      const today = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      const today = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, "0"),
+        String(now.getDate()).padStart(2, "0"),
+      ].join("-");
       const payload = {
         date: today,
         card: this.card,

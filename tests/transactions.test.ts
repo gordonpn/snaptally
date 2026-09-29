@@ -21,6 +21,8 @@ describe("isValidDate", () => {
     assert.strictEqual(isValidDate("2026-09-28"), true);
     assert.strictEqual(isValidDate("2024-02-29"), true);
     assert.strictEqual(isValidDate("2000-01-01"), true);
+    assert.strictEqual(isValidDate("0042-05-15"), true);
+    assert.strictEqual(isValidDate("0001-01-01"), true);
   });
 
   it("rejects non-conforming date string formats", () => {
