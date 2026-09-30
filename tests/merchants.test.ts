@@ -3,32 +3,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
-import { handleGet, onRequestGet, parseLimit } from "../functions/api/merchants.ts";
+import { handleGet, onRequestGet } from "../functions/api/merchants.ts";
 import insertTransactionQuery from "../queries/insert_transaction.sql";
 import selectFrequentMerchantsQuery from "../queries/select_frequent_merchants.sql";
-
-describe("parseLimit", () => {
-  it("returns defaultLimit when parameter is null, empty, or whitespace", () => {
-    assert.strictEqual(parseLimit(null, 50, 200), 50);
-    assert.strictEqual(parseLimit("", 50, 200), 50);
-    assert.strictEqual(parseLimit("   ", 50, 200), 50);
-  });
-
-  it("parses valid positive integer within bounds", () => {
-    assert.strictEqual(parseLimit("10", 50, 200), 10);
-    assert.strictEqual(parseLimit("200", 50, 200), 200);
-  });
-
-  it("clamps values exceeding maxLimit to maxLimit", () => {
-    assert.strictEqual(parseLimit("500", 50, 200), 200);
-  });
-
-  it("falls back to defaultLimit for non-numeric, negative, or zero values", () => {
-    assert.strictEqual(parseLimit("invalid", 50, 200), 50);
-    assert.strictEqual(parseLimit("0", 50, 200), 50);
-    assert.strictEqual(parseLimit("-5", 50, 200), 50);
-  });
-});
 
 describe("GET /api/merchants handleGet", () => {
   const validToken = "test-secret-token";
@@ -43,7 +20,7 @@ describe("GET /api/merchants handleGet", () => {
     } as unknown as D1Database;
 
     const request = new Request("http://localhost/api/merchants");
-    const response = await handleGet(request, mockDb, selectFrequentMerchantsQuery, validToken);
+    const response = await handleGet(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 401);
     const data = (await response.json()) as { error: string };
@@ -63,7 +40,7 @@ describe("GET /api/merchants handleGet", () => {
     const request = new Request("http://localhost/api/merchants", {
       headers: { Authorization: "Bearer wrong-token" },
     });
-    const response = await handleGet(request, mockDb, selectFrequentMerchantsQuery, validToken);
+    const response = await handleGet(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 401);
     const data = (await response.json()) as { error: string };
@@ -94,7 +71,7 @@ describe("GET /api/merchants handleGet", () => {
     const request = new Request("http://localhost/api/merchants", {
       headers: { Authorization: `Bearer ${validToken}` },
     });
-    const response = await handleGet(request, mockDb, selectFrequentMerchantsQuery, validToken);
+    const response = await handleGet(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 200);
     assert.strictEqual(boundLimit, 50);
@@ -123,10 +100,39 @@ describe("GET /api/merchants handleGet", () => {
     const request = new Request("http://localhost/api/merchants?limit=10", {
       headers: { Authorization: `Bearer ${validToken}` },
     });
-    const response = await handleGet(request, mockDb, selectFrequentMerchantsQuery, validToken);
+    const response = await handleGet(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 200);
     assert.strictEqual(boundLimit, 10);
+    const data = (await response.json()) as { merchants: string[] };
+    assert.deepStrictEqual(data.merchants, []);
+  });
+
+  it("clamps excessive limit to maxLimit 200", async () => {
+    let boundLimit: unknown = null;
+    const mockDb = {
+      prepare(query: string) {
+        assert.strictEqual(query, selectFrequentMerchantsQuery);
+        return {
+          bind(limit: unknown) {
+            boundLimit = limit;
+            return {
+              async all() {
+                return { results: [] };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/merchants?limit=9999", {
+      headers: { Authorization: `Bearer ${validToken}` },
+    });
+    const response = await handleGet(request, mockDb, validToken);
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(boundLimit, 200);
     const data = (await response.json()) as { merchants: string[] };
     assert.deepStrictEqual(data.merchants, []);
   });
@@ -149,7 +155,7 @@ describe("GET /api/merchants handleGet", () => {
     const request = new Request("http://localhost/api/merchants", {
       headers: { Authorization: `Bearer ${validToken}` },
     });
-    const response = await handleGet(request, mockDb, selectFrequentMerchantsQuery, validToken);
+    const response = await handleGet(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 200);
     const data = (await response.json()) as { merchants: string[] };
@@ -174,7 +180,7 @@ describe("GET /api/merchants handleGet", () => {
     const request = new Request("http://localhost/api/merchants", {
       headers: { Authorization: `Bearer ${validToken}` },
     });
-    const response = await handleGet(request, mockDb, selectFrequentMerchantsQuery, validToken);
+    const response = await handleGet(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 500);
     const data = (await response.json()) as { error: string };

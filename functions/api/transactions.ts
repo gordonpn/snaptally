@@ -3,6 +3,7 @@ import selectDistinctMerchantsQuery from "../../queries/select_distinct_merchant
 import selectRecentTransactionsQuery from "../../queries/select_recent_transactions.sql";
 import { validateBearerToken } from "./auth.ts";
 import { logger } from "./logger.ts";
+import { parseLimit } from "./query.ts";
 
 interface Env {
   DB: D1Database;
@@ -263,26 +264,11 @@ const DEFAULT_RECENT_LIMIT = 5;
 const MAX_RECENT_LIMIT = 50;
 
 /**
- * Parses and clamps a numeric limit query parameter.
- */
-export function parseLimit(param: string | null, defaultLimit: number, maxLimit: number): number {
-  if (param === null || param.trim() === "") {
-    return defaultLimit;
-  }
-  const parsed = Number.parseInt(param, 10);
-  if (Number.isNaN(parsed) || parsed <= 0) {
-    return defaultLimit;
-  }
-  return Math.min(parsed, maxLimit);
-}
-
-/**
  * Handles GET requests to retrieve recent transactions ordered by date descending.
  */
 export async function handleGet(
   request: Request,
   db: D1Database,
-  query: string = selectRecentTransactionsQuery,
   expectedToken?: string,
 ): Promise<Response> {
   const authResponse = await validateBearerToken(request, expectedToken);
@@ -294,7 +280,10 @@ export async function handleGet(
   const limit = parseLimit(url.searchParams.get("limit"), DEFAULT_RECENT_LIMIT, MAX_RECENT_LIMIT);
 
   try {
-    const { results } = await db.prepare(query).bind(limit).all<TransactionRecord>();
+    const { results } = await db
+      .prepare(selectRecentTransactionsQuery)
+      .bind(limit)
+      .all<TransactionRecord>();
     const transactions = results ?? [];
     return Response.json({ transactions });
   } catch (error) {
@@ -312,5 +301,5 @@ export async function handleGet(
  * Cloudflare Pages Function entrypoint for GET /api/transactions.
  */
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
-  return handleGet(request, env.DB, selectRecentTransactionsQuery, env.API_BEARER_TOKEN);
+  return handleGet(request, env.DB, env.API_BEARER_TOKEN);
 };

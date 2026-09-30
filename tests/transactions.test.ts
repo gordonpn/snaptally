@@ -11,7 +11,6 @@ import {
   normalizeText,
   onRequestGet as onRequestGetTransactions,
   onRequestPost,
-  parseLimit as parseTransactionsLimit,
   resolveMerchant,
   toAlphanumericKey,
   toTitleCase,
@@ -900,29 +899,6 @@ describe("Database Schema and Migrations", () => {
   });
 });
 
-describe("parseTransactionsLimit", () => {
-  it("returns defaultLimit when parameter is null, empty, or whitespace", () => {
-    assert.strictEqual(parseTransactionsLimit(null, 5, 50), 5);
-    assert.strictEqual(parseTransactionsLimit("", 5, 50), 5);
-    assert.strictEqual(parseTransactionsLimit("   ", 5, 50), 5);
-  });
-
-  it("parses valid positive integer within bounds", () => {
-    assert.strictEqual(parseTransactionsLimit("10", 5, 50), 10);
-    assert.strictEqual(parseTransactionsLimit("50", 5, 50), 50);
-  });
-
-  it("clamps values exceeding maxLimit to maxLimit", () => {
-    assert.strictEqual(parseTransactionsLimit("100", 5, 50), 50);
-  });
-
-  it("falls back to defaultLimit for non-numeric, zero, or negative values", () => {
-    assert.strictEqual(parseTransactionsLimit("invalid", 5, 50), 5);
-    assert.strictEqual(parseTransactionsLimit("0", 5, 50), 5);
-    assert.strictEqual(parseTransactionsLimit("-1", 5, 50), 5);
-  });
-});
-
 describe("GET /api/transactions handleGet", () => {
   const validToken = "test-secret-token";
 
@@ -936,12 +912,7 @@ describe("GET /api/transactions handleGet", () => {
     } as unknown as D1Database;
 
     const request = new Request("http://localhost/api/transactions");
-    const response = await handleGetTransactions(
-      request,
-      mockDb,
-      selectRecentTransactionsQuery,
-      validToken,
-    );
+    const response = await handleGetTransactions(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 401);
     const data = (await response.json()) as { error: string };
@@ -961,12 +932,7 @@ describe("GET /api/transactions handleGet", () => {
     const request = new Request("http://localhost/api/transactions", {
       headers: { Authorization: "Bearer wrong-token" },
     });
-    const response = await handleGetTransactions(
-      request,
-      mockDb,
-      selectRecentTransactionsQuery,
-      validToken,
-    );
+    const response = await handleGetTransactions(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 401);
     const data = (await response.json()) as { error: string };
@@ -1008,12 +974,7 @@ describe("GET /api/transactions handleGet", () => {
     const request = new Request("http://localhost/api/transactions", {
       headers: { Authorization: `Bearer ${validToken}` },
     });
-    const response = await handleGetTransactions(
-      request,
-      mockDb,
-      selectRecentTransactionsQuery,
-      validToken,
-    );
+    const response = await handleGetTransactions(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 200);
     assert.strictEqual(boundLimit, 5);
@@ -1042,15 +1003,39 @@ describe("GET /api/transactions handleGet", () => {
     const request = new Request("http://localhost/api/transactions?limit=25", {
       headers: { Authorization: `Bearer ${validToken}` },
     });
-    const response = await handleGetTransactions(
-      request,
-      mockDb,
-      selectRecentTransactionsQuery,
-      validToken,
-    );
+    const response = await handleGetTransactions(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 200);
     assert.strictEqual(boundLimit, 25);
+    const data = (await response.json()) as { transactions: unknown[] };
+    assert.deepStrictEqual(data.transactions, []);
+  });
+
+  it("clamps excessive limit to maxLimit 50", async () => {
+    let boundLimit: unknown = null;
+    const mockDb = {
+      prepare(query: string) {
+        assert.strictEqual(query, selectRecentTransactionsQuery);
+        return {
+          bind(limit: unknown) {
+            boundLimit = limit;
+            return {
+              async all() {
+                return { results: [] };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions?limit=9999", {
+      headers: { Authorization: `Bearer ${validToken}` },
+    });
+    const response = await handleGetTransactions(request, mockDb, validToken);
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(boundLimit, 50);
     const data = (await response.json()) as { transactions: unknown[] };
     assert.deepStrictEqual(data.transactions, []);
   });
@@ -1073,12 +1058,7 @@ describe("GET /api/transactions handleGet", () => {
     const request = new Request("http://localhost/api/transactions", {
       headers: { Authorization: `Bearer ${validToken}` },
     });
-    const response = await handleGetTransactions(
-      request,
-      mockDb,
-      selectRecentTransactionsQuery,
-      validToken,
-    );
+    const response = await handleGetTransactions(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 200);
     const data = (await response.json()) as { transactions: unknown[] };
@@ -1103,12 +1083,7 @@ describe("GET /api/transactions handleGet", () => {
     const request = new Request("http://localhost/api/transactions", {
       headers: { Authorization: `Bearer ${validToken}` },
     });
-    const response = await handleGetTransactions(
-      request,
-      mockDb,
-      selectRecentTransactionsQuery,
-      validToken,
-    );
+    const response = await handleGetTransactions(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 500);
     const data = (await response.json()) as { error: string };
