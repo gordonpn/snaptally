@@ -25,7 +25,7 @@ import Layout from "../layouts/Layout.astro";
       </div>
 
       <!-- Date selector chip -->
-      <div class="relative">
+      <div class="relative focus-within:ring-2 focus-within:ring-primary rounded-full">
         <input
           type="date"
           class="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
@@ -80,11 +80,11 @@ import Layout from "../layouts/Layout.astro";
     ></div>
 
     <!-- Amount Display (Non-input styled container) -->
-    <section class="flex flex-col items-center justify-center py-1 sm:py-2">
+    <section class="flex flex-col items-center justify-center py-1 sm:py-2 select-none">
       <div
-        class="text-5xl sm:text-6xl font-mono font-bold tracking-tight text-primary transition-all duration-75 select-none"
+        class="text-5xl sm:text-6xl font-mono font-bold tracking-tight text-primary transition-all duration-75"
         x-text="formattedAmount"
-        aria-live="polite"
+        aria-live="off"
       >
         $0.00
       </div>
@@ -168,24 +168,24 @@ import Layout from "../layouts/Layout.astro";
     </section>
 
     <!-- Built-in Numeric Keypad (3x4 Grid) -->
-    <section class="grid grid-cols-3 gap-2 pt-2">
+    <section class="grid grid-cols-3 gap-2 pt-2 select-none">
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-13 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
         @click="pressDigit(1)"
       >
         1
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-13 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
         @click="pressDigit(2)"
       >
         2
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-13 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
         @click="pressDigit(3)"
       >
         3
@@ -193,21 +193,21 @@ import Layout from "../layouts/Layout.astro";
 
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-13 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
         @click="pressDigit(4)"
       >
         4
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-13 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
         @click="pressDigit(5)"
       >
         5
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-13 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
         @click="pressDigit(6)"
       >
         6
@@ -215,21 +215,21 @@ import Layout from "../layouts/Layout.astro";
 
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-13 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
         @click="pressDigit(7)"
       >
         7
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-13 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
         @click="pressDigit(8)"
       >
         8
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-13 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
         @click="pressDigit(9)"
       >
         9
@@ -237,7 +237,7 @@ import Layout from "../layouts/Layout.astro";
 
       <button
         type="button"
-        class="btn btn-ghost bg-base-200/60 text-lg font-semibold h-13 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="btn btn-ghost bg-base-200/60 text-lg font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
         @click="pressClear()"
         aria-label="Clear Amount"
       >
@@ -245,14 +245,14 @@ import Layout from "../layouts/Layout.astro";
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-13 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
         @click="pressDigit(0)"
       >
         0
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200/60 text-lg font-semibold h-13 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px] flex items-center justify-center"
+        class="btn btn-ghost bg-base-200/60 text-lg font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px] flex items-center justify-center"
         @click="pressBackspace()"
         aria-label="Backspace"
       >
@@ -264,7 +264,7 @@ import Layout from "../layouts/Layout.astro";
     <footer class="pt-2 pb-1">
       <button
         type="button"
-        class="btn btn-primary w-full h-12 sm:h-13 rounded-2xl text-base font-semibold min-h-[48px]"
+        class="btn btn-primary w-full h-12 sm:h-14 rounded-2xl text-base font-semibold min-h-[48px]"
         :disabled="loading || amountCents <= 0"
         @click="submitTransaction()"
       >

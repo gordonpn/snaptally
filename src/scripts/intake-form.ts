@@ -62,7 +62,6 @@ export function intakeForm() {
 
     // Date state
     date: getTodayDate(),
-    isBackfill: false,
 
     // Token and settings state
     token: "",
@@ -99,12 +98,18 @@ export function intakeForm() {
       return this.date === getTodayDate();
     },
 
+    get isBackfill(): boolean {
+      return this.date !== getTodayDate();
+    },
+
     // Keypad actions
     pressDigit(digit: number): void {
       if (this.amountCents === 0 && digit === 0) {
         return;
       }
       if (this.amountCents >= this.maxCents) {
+        this.statusMessage = "Maximum amount reached";
+        this.isError = true;
         return;
       }
       this.amountCents = this.amountCents * 10 + digit;
@@ -143,7 +148,9 @@ export function intakeForm() {
     toggleCustomMerchant(): void {
       this.isCustomMerchant = !this.isCustomMerchant;
       if (this.isCustomMerchant) {
-        this.merchant = this.customMerchantInput;
+        if (this.customMerchantInput.trim().length > 0) {
+          this.merchant = this.customMerchantInput.trim();
+        }
       } else {
         this.merchant = this.frequentMerchants[0] || "";
       }
@@ -160,12 +167,10 @@ export function intakeForm() {
         return;
       }
       this.date = newDate;
-      this.isBackfill = newDate !== getTodayDate();
     },
 
     resetDateToToday(): void {
       this.date = getTodayDate();
-      this.isBackfill = false;
     },
 
     // Settings actions
@@ -218,7 +223,10 @@ export function intakeForm() {
         const data = (await response.json()) as { merchants?: string[] };
         if (data.merchants && data.merchants.length > 0) {
           this.frequentMerchants = data.merchants;
-          if (!this.isCustomMerchant) {
+          if (
+            !this.isCustomMerchant &&
+            (!this.merchant || !this.frequentMerchants.includes(this.merchant))
+          ) {
             this.merchant = data.merchants[0];
           }
         }

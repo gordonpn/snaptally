@@ -86,6 +86,8 @@ describe("intakeForm ATM Keypad & Amount Entry (Scenario 1)", () => {
     form.amountCents = 10000000;
     form.pressDigit(5);
     assert.strictEqual(form.amountCents, 10000000);
+    assert.strictEqual(form.statusMessage, "Maximum amount reached");
+    assert.strictEqual(form.isError, true);
   });
 
   it("pops the lowest digit on backspace", () => {
@@ -195,6 +197,10 @@ describe("intakeForm Card and Merchant Selection", () => {
     form.toggleCustomMerchant();
     assert.strictEqual(form.isCustomMerchant, false);
     assert.strictEqual(form.merchant, DEFAULT_FREQUENT_MERCHANTS[0]);
+
+    form.toggleCustomMerchant();
+    assert.strictEqual(form.isCustomMerchant, true);
+    assert.strictEqual(form.merchant, "Local Bakery");
   });
 });
 
@@ -426,6 +432,27 @@ describe("intakeForm Frequent Merchants Loading", () => {
     try {
       await form.loadFrequentMerchants();
       assert.deepStrictEqual(form.frequentMerchants, DEFAULT_FREQUENT_MERCHANTS);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("preserves currently selected merchant if present in fetched frequent merchants", async () => {
+    const form = intakeForm();
+    form.token = "valid-token";
+    form.merchant = "Star Market";
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({ merchants: ["Market Basket", "Star Market", "Trader Joe's"] }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      await form.loadFrequentMerchants();
+      assert.strictEqual(form.merchant, "Star Market");
     } finally {
       globalThis.fetch = originalFetch;
     }
