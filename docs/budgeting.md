@@ -19,7 +19,9 @@ SnapTally uses a budgeting framework inspired by Ramit Sethi's **Conscious Spend
 
 ## 2. Canonical Category Taxonomy
 
-Each transaction in SnapTally requires a `parent_bucket` and a `subcategory`. The canonical structure is defined below:
+> **Implementation status:** The transaction fields and calculations below describe the target budgeting model. In the initial baseline schema, transactions use a single free-form `category`. The expanded transaction schema adds `parent_bucket`, `subcategory`, `gross_amount`, `reimbursement`, and `net_spend`.
+
+The target transaction model requires a `parent_bucket` and a `subcategory`. The canonical structure is defined below:
 
 ### 2.1. Fixed Costs (Parent Bucket: `Fixed Costs`)
 Expenses necessary to live and work. These are generally predictable monthly commitments:
@@ -59,6 +61,7 @@ Discretionary lifestyle purchases that can be spent freely without anxiety once 
 - `Shopping`: Clothing, electronics, gear, home decor, and personal items.
 - `Hobbies`: Sports equipment, gaming, books, and creative projects.
 - `Personal Care`: Haircuts, grooming, spa visits, and gym/fitness memberships.
+- `Travel`: Discretionary trip expenses, spontaneous getaways, or vacation activities paid from current monthly cash flow (distinct from `Savings -> Travel Fund`).
 
 ---
 
@@ -84,7 +87,7 @@ Travel expenses follow three distinct rules based on context:
 2. **Spontaneous Leisure and Day Trips (Discretionary Cash Flow):**
    - Impromptu day trips, weekend road trips, or dining while on vacation paid directly from that month's paycheck.
    - **Parent Bucket:** `Guilt-Free`
-   - **Subcategory:** `Dining`, `Entertainment`, or `Shopping` (or a dedicated `Travel` discretionary subcategory if tracking trip-specific dining separately).
+   - **Subcategory:** `Travel`, `Dining`, `Entertainment`, or `Shopping`.
    - **Accounting Treatment:** Counts against the active month's Guilt-Free spending ceiling.
 
 3. **Daily Commuting and Transit (Fixed Cost):**
