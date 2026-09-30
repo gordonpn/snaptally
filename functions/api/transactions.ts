@@ -1,7 +1,9 @@
 import insertTransactionQuery from "../../queries/insert_transaction.sql";
 import selectDistinctMerchantsQuery from "../../queries/select_distinct_merchants.sql";
+import selectRecentTransactionsQuery from "../../queries/select_recent_transactions.sql";
 import { validateBearerToken } from "./auth.ts";
 import { logger } from "./logger.ts";
+import { parseLimit } from "./query.ts";
 
 interface Env {
   DB: D1Database;
@@ -16,6 +18,19 @@ export interface TransactionPayload {
   merchant: string;
   gross_amount: number;
   reimbursement?: number;
+}
+
+export interface TransactionRecord {
+  id: string;
+  date: string;
+  card: string;
+  parent_bucket: string;
+  subcategory: string;
+  merchant: string;
+  gross_amount: number;
+  reimbursement: number;
+  net_spend: number;
+  created_at: string;
 }
 
 /**
@@ -243,4 +258,48 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     env.API_BEARER_TOKEN,
     selectDistinctMerchantsQuery,
   );
+};
+
+const DEFAULT_RECENT_LIMIT = 5;
+const MAX_RECENT_LIMIT = 50;
+
+/**
+ * Handles GET requests to retrieve recent transactions ordered by date descending.
+ */
+export async function handleGet(
+  request: Request,
+  db: D1Database,
+  expectedToken?: string,
+): Promise<Response> {
+  const authResponse = await validateBearerToken(request, expectedToken);
+  if (authResponse) {
+    return authResponse;
+  }
+
+  const url = new URL(request.url);
+  const limit = parseLimit(url.searchParams.get("limit"), DEFAULT_RECENT_LIMIT, MAX_RECENT_LIMIT);
+
+  try {
+    const { results } = await db
+      .prepare(selectRecentTransactionsQuery)
+      .bind(limit)
+      .all<TransactionRecord>();
+    const transactions = results ?? [];
+    return Response.json({ transactions });
+  } catch (error) {
+    logger.error("Recent transactions retrieval failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return Response.json(
+      { error: "Database error during transactions retrieval" },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * Cloudflare Pages Function entrypoint for GET /api/transactions.
+ */
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  return handleGet(request, env.DB, env.API_BEARER_TOKEN);
 };

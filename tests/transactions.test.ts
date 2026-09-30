@@ -4,10 +4,12 @@ import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
 import {
+  handleGet as handleGetTransactions,
   handlePost,
   isValidDate,
   isValidPayload,
   normalizeText,
+  onRequestGet as onRequestGetTransactions,
   onRequestPost,
   resolveMerchant,
   toAlphanumericKey,
@@ -15,6 +17,7 @@ import {
 } from "../functions/api/transactions.ts";
 import insertTransactionQuery from "../queries/insert_transaction.sql";
 import selectDistinctMerchantsQuery from "../queries/select_distinct_merchants.sql";
+import selectRecentTransactionsQuery from "../queries/select_recent_transactions.sql";
 
 describe("isValidDate", () => {
   it("accepts valid ISO calendar date strings", () => {
@@ -891,6 +894,267 @@ describe("Database Schema and Migrations", () => {
     const indexNames = indexes.map((idx) => idx.name);
     assert.ok(indexNames.includes("idx_transactions_date_created_at"));
     assert.ok(indexNames.includes("idx_transactions_merchant"));
+
+    db.close();
+  });
+});
+
+describe("GET /api/transactions handleGet", () => {
+  const validToken = "test-secret-token";
+
+  it("rejects unauthenticated request with HTTP 401 (Scenario 3)", async () => {
+    let dbAccessed = false;
+    const mockDb = {
+      prepare() {
+        dbAccessed = true;
+        throw new Error("DB should not be called");
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions");
+    const response = await handleGetTransactions(request, mockDb, validToken);
+
+    assert.strictEqual(response.status, 401);
+    const data = (await response.json()) as { error: string };
+    assert.strictEqual(data.error, "Unauthorized");
+    assert.strictEqual(dbAccessed, false);
+  });
+
+  it("rejects request with invalid Bearer token with HTTP 401", async () => {
+    let dbAccessed = false;
+    const mockDb = {
+      prepare() {
+        dbAccessed = true;
+        throw new Error("DB should not be called");
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions", {
+      headers: { Authorization: "Bearer wrong-token" },
+    });
+    const response = await handleGetTransactions(request, mockDb, validToken);
+
+    assert.strictEqual(response.status, 401);
+    const data = (await response.json()) as { error: string };
+    assert.strictEqual(data.error, "Unauthorized");
+    assert.strictEqual(dbAccessed, false);
+  });
+
+  it("returns recent transactions with default limit 5 when authenticated (Scenario 2)", async () => {
+    let boundLimit: unknown = null;
+    const sampleRecord = {
+      id: "tx-1",
+      date: "2026-09-29",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "George Howell",
+      gross_amount: 18.5,
+      reimbursement: 0.0,
+      net_spend: 18.5,
+      created_at: "2026-09-29 12:00:00",
+    };
+
+    const mockDb = {
+      prepare(query: string) {
+        assert.strictEqual(query, selectRecentTransactionsQuery);
+        return {
+          bind(limit: unknown) {
+            boundLimit = limit;
+            return {
+              async all() {
+                return { results: [sampleRecord] };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions", {
+      headers: { Authorization: `Bearer ${validToken}` },
+    });
+    const response = await handleGetTransactions(request, mockDb, validToken);
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(boundLimit, 5);
+    const data = (await response.json()) as { transactions: (typeof sampleRecord)[] };
+    assert.deepStrictEqual(data.transactions, [sampleRecord]);
+  });
+
+  it("passes custom clamped limit from query parameters", async () => {
+    let boundLimit: unknown = null;
+    const mockDb = {
+      prepare(query: string) {
+        assert.strictEqual(query, selectRecentTransactionsQuery);
+        return {
+          bind(limit: unknown) {
+            boundLimit = limit;
+            return {
+              async all() {
+                return { results: [] };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions?limit=25", {
+      headers: { Authorization: `Bearer ${validToken}` },
+    });
+    const response = await handleGetTransactions(request, mockDb, validToken);
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(boundLimit, 25);
+    const data = (await response.json()) as { transactions: unknown[] };
+    assert.deepStrictEqual(data.transactions, []);
+  });
+
+  it("clamps excessive limit to maxLimit 50", async () => {
+    let boundLimit: unknown = null;
+    const mockDb = {
+      prepare(query: string) {
+        assert.strictEqual(query, selectRecentTransactionsQuery);
+        return {
+          bind(limit: unknown) {
+            boundLimit = limit;
+            return {
+              async all() {
+                return { results: [] };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions?limit=9999", {
+      headers: { Authorization: `Bearer ${validToken}` },
+    });
+    const response = await handleGetTransactions(request, mockDb, validToken);
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(boundLimit, 50);
+    const data = (await response.json()) as { transactions: unknown[] };
+    assert.deepStrictEqual(data.transactions, []);
+  });
+
+  it("handles null results from D1 gracefully returning empty array", async () => {
+    const mockDb = {
+      prepare() {
+        return {
+          bind() {
+            return {
+              async all() {
+                return { results: null };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions", {
+      headers: { Authorization: `Bearer ${validToken}` },
+    });
+    const response = await handleGetTransactions(request, mockDb, validToken);
+
+    assert.strictEqual(response.status, 200);
+    const data = (await response.json()) as { transactions: unknown[] };
+    assert.deepStrictEqual(data.transactions, []);
+  });
+
+  it("returns HTTP 500 when database query throws error", async () => {
+    const mockDb = {
+      prepare() {
+        return {
+          bind() {
+            return {
+              async all() {
+                throw new Error("D1 select failure");
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions", {
+      headers: { Authorization: `Bearer ${validToken}` },
+    });
+    const response = await handleGetTransactions(request, mockDb, validToken);
+
+    assert.strictEqual(response.status, 500);
+    const data = (await response.json()) as { error: string };
+    assert.strictEqual(data.error, "Database error during transactions retrieval");
+  });
+});
+
+describe("GET /api/transactions onRequestGet", () => {
+  it("delegates to handleGet with environment context", async () => {
+    const validToken = "test-secret-token";
+    let executed = false;
+
+    const mockDb = {
+      prepare: (query: string) => {
+        assert.strictEqual(query, selectRecentTransactionsQuery);
+        return {
+          bind: (limit: unknown) => {
+            assert.strictEqual(limit, 5);
+            return {
+              run: async () => ({ success: true }),
+              all: async () => {
+                executed = true;
+                return { results: [] };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions", {
+      headers: { Authorization: `Bearer ${validToken}` },
+    });
+
+    const context = {
+      request,
+      env: { DB: mockDb, API_BEARER_TOKEN: validToken },
+    } as unknown as Parameters<typeof onRequestGetTransactions>[0];
+
+    const response = await onRequestGetTransactions(context);
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(executed, true);
+
+    const data = (await response.json()) as { transactions: unknown[] };
+    assert.deepStrictEqual(data.transactions, []);
+  });
+});
+
+describe("Recent Transactions SQLite Query Integration", () => {
+  it("orders transactions by date descending, then created_at descending", () => {
+    const initSql = readFileSync(resolve("migrations/0000_init.sql"), "utf-8");
+    const migrationSql = readFileSync(resolve("migrations/0001_expanded_schema.sql"), "utf-8");
+
+    const db = new DatabaseSync(":memory:");
+    db.exec(initSql);
+    db.exec(migrationSql);
+
+    const insertStmt = db.prepare(insertTransactionQuery);
+    insertStmt.run("tx-past", "2026-09-20", "Amex", "Food", "Groceries", "Trader Joe", 20, 0);
+    insertStmt.run("tx-recent-1", "2026-09-25", "Chase", "Food", "Dining", "George Howell", 15, 0);
+    insertStmt.run("tx-recent-2", "2026-09-25", "Apple Cash", "Transit", "Subway", "MBTA", 2.4, 0);
+    insertStmt.run("tx-latest", "2026-09-28", "Amex", "Food", "Coffee", "Blue Bottle", 6.5, 0);
+
+    const queryStmt = db.prepare(selectRecentTransactionsQuery);
+    const rows = queryStmt.all(3) as Array<{ id: string; date: string }>;
+
+    assert.strictEqual(rows.length, 3);
+    assert.strictEqual(rows[0].id, "tx-latest");
+    assert.strictEqual(rows[0].date, "2026-09-28");
+    assert.strictEqual(rows[1].date, "2026-09-25");
+    assert.strictEqual(rows[2].date, "2026-09-25");
 
     db.close();
   });

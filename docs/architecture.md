@@ -71,6 +71,10 @@ Cloudflare Pages Functions provide the serverless backend without needing an ind
 - **Hono Router**: Runs on the V8 isolate environment (`workerd`) using web standards (`Request` and `Response`). Hono adds structured routing, typed bindings, and lightweight middleware in under 15 KB.
 - **Native D1 Binding**: The database is bound directly to the environment context (`c.env.DB`), allowing parameterized SQL execution without external network database drivers.
 - **Authentication**: Ingress is guarded by a lightweight bearer token check. The client stores a pre-shared token in local storage and sends it via the `Authorization: Bearer <TOKEN>` header.
+- **Endpoints**:
+  - `POST /api/transactions`: Ingestion endpoint validating and persisting expanded transaction records with canonical merchant resolution (backed by `queries/insert_transaction.sql` and `queries/select_distinct_merchants.sql`).
+  - `GET /api/merchants`: Returns `{ merchants: string[] }` ordered by occurrence count descending and recency (backed by `queries/select_frequent_merchants.sql`), with configurable `limit` (default 50, max 200) for autocomplete and frequent merchant quick chips.
+  - `GET /api/transactions`: Returns `{ transactions: TransactionRecord[] }` ordered by date and creation time descending (backed by `queries/select_recent_transactions.sql`), with configurable `limit` (default 5, max 50) for the recent transactions confirmation feed.
 
 ## Database Layer (Cloudflare D1)
 
