@@ -140,6 +140,21 @@ describe("intakeForm ATM Keypad & Amount Entry (Scenario 1)", () => {
     assert.strictEqual(form.amountCents, 0);
     assert.strictEqual(form.formattedAmount, "$0.00");
   });
+
+  it("ignores keypad presses while loading is in progress", () => {
+    const form = intakeForm();
+    form.pressDigit(5);
+    form.loading = true;
+
+    form.pressDigit(0);
+    assert.strictEqual(form.amountCents, 5);
+
+    form.pressBackspace();
+    assert.strictEqual(form.amountCents, 5);
+
+    form.pressClear();
+    assert.strictEqual(form.amountCents, 5);
+  });
 });
 
 describe("intakeForm Dynamic Subcategory Switching (Scenario 2)", () => {
@@ -291,6 +306,34 @@ describe("intakeForm Token Persistence (Scenario 3)", () => {
 
     assert.strictEqual(form.isSettingsOpen, false);
     assert.strictEqual(form.token, "initial-token");
+  });
+
+  it("handles storage exceptions gracefully when localStorage is restricted", () => {
+    Object.defineProperty(globalThis, "localStorage", {
+      value: {
+        getItem() {
+          throw new Error("SecurityError: Access denied");
+        },
+        setItem() {
+          throw new Error("QuotaExceededError");
+        },
+        removeItem() {
+          throw new Error("SecurityError");
+        },
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    const form = intakeForm();
+    form.init();
+    assert.strictEqual(form.token, "");
+
+    form.openSettings();
+    form.settingsTokenInput = "token-without-crash";
+    form.saveToken();
+    assert.strictEqual(form.token, "token-without-crash");
+    assert.strictEqual(form.isSettingsOpen, false);
   });
 
   it("includes Authorization header in outgoing requests when token is configured", async () => {
@@ -664,6 +707,34 @@ describe("intakeForm Submission Validation and Error Handling", () => {
       assert.strictEqual(result, false);
       assert.strictEqual(form.isError, true);
       assert.strictEqual(form.statusMessage, "Network error: Unable to reach endpoint");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("resets custom merchant state and selects first frequent merchant on successful submit", async () => {
+    const form = intakeForm();
+    form.pressDigit(2);
+    form.pressDigit(5);
+    form.pressDigit(0);
+    form.toggleCustomMerchant();
+    form.updateCustomMerchant("Neighborhood Pharmacy");
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(JSON.stringify({ ok: true, id: "tx-custom-success" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const success = await form.submitTransaction();
+      assert.strictEqual(success, true);
+      assert.strictEqual(form.isCustomMerchant, false);
+      assert.strictEqual(form.customMerchantInput, "");
+      assert.strictEqual(form.merchant, DEFAULT_FREQUENT_MERCHANTS[0]);
+      assert.strictEqual(form.statusMessage, "Saved $2.50 at Neighborhood Pharmacy");
     } finally {
       globalThis.fetch = originalFetch;
     }

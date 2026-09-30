@@ -104,6 +104,9 @@ export function intakeForm() {
 
     // Keypad actions
     pressDigit(digit: number): void {
+      if (this.loading) {
+        return;
+      }
       if (this.amountCents === 0 && digit === 0) {
         return;
       }
@@ -117,6 +120,9 @@ export function intakeForm() {
     },
 
     pressBackspace(): void {
+      if (this.loading) {
+        return;
+      }
       if (this.statusMessage === "Maximum amount reached") {
         this.statusMessage = "";
         this.isError = false;
@@ -125,6 +131,9 @@ export function intakeForm() {
     },
 
     pressClear(): void {
+      if (this.loading) {
+        return;
+      }
       if (this.statusMessage === "Maximum amount reached") {
         this.statusMessage = "";
         this.isError = false;
@@ -195,12 +204,16 @@ export function intakeForm() {
     saveToken(): void {
       const trimmed = this.settingsTokenInput.trim();
       this.token = trimmed;
-      if (typeof localStorage !== "undefined") {
-        if (trimmed.length > 0) {
-          localStorage.setItem(TOKEN_STORAGE_KEY, trimmed);
-        } else {
-          localStorage.removeItem(TOKEN_STORAGE_KEY);
+      try {
+        if (typeof localStorage !== "undefined") {
+          if (trimmed.length > 0) {
+            localStorage.setItem(TOKEN_STORAGE_KEY, trimmed);
+          } else {
+            localStorage.removeItem(TOKEN_STORAGE_KEY);
+          }
         }
+      } catch {
+        // Storage restricted or unavailable
       }
       this.isSettingsOpen = false;
       if (this.hasToken) {
@@ -278,11 +291,15 @@ export function intakeForm() {
     // Initialization lifecycle
     init(): void {
       this.resetDateToToday();
-      if (typeof localStorage !== "undefined") {
-        const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
-        if (storedToken) {
-          this.token = storedToken;
+      try {
+        if (typeof localStorage !== "undefined") {
+          const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+          if (storedToken) {
+            this.token = storedToken;
+          }
         }
+      } catch {
+        // Storage restricted or unavailable
       }
       if (this.hasToken) {
         this.loadFrequentMerchants();
@@ -309,13 +326,14 @@ export function intakeForm() {
       this.statusMessage = "Saving transaction...";
       this.isError = false;
 
+      const submittedAmountCents = this.amountCents;
       const payload = {
         date: this.date,
         card: this.card,
         parent_bucket: this.parentBucket,
         subcategory: this.subcategory,
         merchant: trimmedMerchant,
-        gross_amount: this.amountCents / 100,
+        gross_amount: submittedAmountCents / 100,
         reimbursement: 0.0,
       };
 
@@ -338,12 +356,13 @@ export function intakeForm() {
         } | null;
 
         if (response.status === 201 && data?.ok) {
-          this.statusMessage = `Saved $${(this.amountCents / 100).toFixed(2)} at ${trimmedMerchant}`;
+          this.statusMessage = `Saved $${(submittedAmountCents / 100).toFixed(2)} at ${trimmedMerchant}`;
           this.amountCents = 0;
           this.resetDateToToday();
           if (this.isCustomMerchant) {
             this.isCustomMerchant = false;
             this.customMerchantInput = "";
+            this.merchant = this.frequentMerchants[0] || "";
           }
           if (this.hasToken) {
             this.loadRecentTransactions();

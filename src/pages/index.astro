@@ -172,6 +172,7 @@ import Layout from "../layouts/Layout.astro";
       <button
         type="button"
         class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        :disabled="loading"
         @click="pressDigit(1)"
       >
         1
@@ -179,6 +180,7 @@ import Layout from "../layouts/Layout.astro";
       <button
         type="button"
         class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        :disabled="loading"
         @click="pressDigit(2)"
       >
         2
@@ -186,6 +188,7 @@ import Layout from "../layouts/Layout.astro";
       <button
         type="button"
         class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        :disabled="loading"
         @click="pressDigit(3)"
       >
         3
@@ -194,6 +197,7 @@ import Layout from "../layouts/Layout.astro";
       <button
         type="button"
         class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        :disabled="loading"
         @click="pressDigit(4)"
       >
         4
@@ -201,6 +205,7 @@ import Layout from "../layouts/Layout.astro";
       <button
         type="button"
         class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        :disabled="loading"
         @click="pressDigit(5)"
       >
         5
@@ -208,6 +213,7 @@ import Layout from "../layouts/Layout.astro";
       <button
         type="button"
         class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        :disabled="loading"
         @click="pressDigit(6)"
       >
         6
@@ -216,6 +222,7 @@ import Layout from "../layouts/Layout.astro";
       <button
         type="button"
         class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        :disabled="loading"
         @click="pressDigit(7)"
       >
         7
@@ -223,6 +230,7 @@ import Layout from "../layouts/Layout.astro";
       <button
         type="button"
         class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        :disabled="loading"
         @click="pressDigit(8)"
       >
         8
@@ -230,6 +238,7 @@ import Layout from "../layouts/Layout.astro";
       <button
         type="button"
         class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        :disabled="loading"
         @click="pressDigit(9)"
       >
         9
@@ -238,6 +247,7 @@ import Layout from "../layouts/Layout.astro";
       <button
         type="button"
         class="btn btn-ghost bg-base-200/60 text-lg font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        :disabled="loading"
         @click="pressClear()"
         aria-label="Clear Amount"
       >
@@ -246,6 +256,7 @@ import Layout from "../layouts/Layout.astro";
       <button
         type="button"
         class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        :disabled="loading"
         @click="pressDigit(0)"
       >
         0
@@ -253,6 +264,7 @@ import Layout from "../layouts/Layout.astro";
       <button
         type="button"
         class="btn btn-ghost bg-base-200/60 text-lg font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px] flex items-center justify-center"
+        :disabled="loading"
         @click="pressBackspace()"
         aria-label="Backspace"
       >
