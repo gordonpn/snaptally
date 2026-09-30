@@ -4,12 +4,13 @@ This document details the architectural choices, data flow, storage strategies, 
 
 ## System Overview
 
-SnapTally is an expense intake tool engineered for quick data entry at the point of sale. Rather than loading a complex spreadsheet or multi-screen budgeting platform on mobile, SnapTally restricts the intake scope to a fast PWA form with offline support.
+SnapTally provides a unified personal finance platform focused on rapid point-of-sale intake and planned Conscious Spending Plan budget analysis. The system combines an ultra-fast, fixed-viewport intake PWA with serverless edge analytics backed by Cloudflare D1.
 
 ```mermaid
 flowchart TD
     subgraph MobileClient["Mobile Client (Cloudflare Pages Static Host)"]
-        UI["Touch UI (HTML / CSS / Alpine.js)"]
+        UI["Intake UI (HTML / CSS / Alpine.js)"]
+        Dashboard["Analysis Dashboard (Alpine.js / DaisyUI)"]
         Outbox["Local Outbox (IndexedDB via idb-keyval)"]
         PWA["PWA Shell (manifest.json)"]
     end
@@ -17,29 +18,34 @@ flowchart TD
     subgraph EdgeCompute["Edge Compute (Cloudflare Pages Functions)"]
         Auth["Auth Middleware (Bearer Token)"]
         Router["Hono API Router"]
+        AnalyticsEngine["Analytics Engine (Aggregation Queries)"]
     end
 
     subgraph EdgeStorage["Durable Storage"]
         D1[("Cloudflare D1 (Serverless SQLite)")]
     end
 
-    subgraph MacroReporting["Downstream Reporting"]
-        Sheets["Google Sheets / External Dashboard"]
+    subgraph MacroReporting["External Integration"]
+        Sheets["Google Sheets / CSV Export"]
     end
 
     UI -->|"1. User taps Save (0ms perceived)"| Outbox
     Outbox -->|"2. Background sync (POST /api/transactions)"| Auth
     Auth --> Router
     Router -->|"3. Parameterized INSERT"| D1
-    D1 -.->|"4. GET /api/export (Periodic sync / CSV)"| Sheets
+    Dashboard -->|"4. Fetch monthly analytics (GET /api/analysis/*)"| Auth
+    Auth --> AnalyticsEngine
+    AnalyticsEngine -->|"5. Aggregation queries"| D1
+    D1 -.->|"6. GET /api/export (Periodic sync / CSV)"| Sheets
 ```
 
 ## Core Design Principles
 
 1. **Sub-5-Second Point of Sale Logging**: Tapping native dropdowns triggers slow platform pickers. SnapTally uses single-tap pill buttons for cards and parent categories, updating subcategories dynamically in memory.
-2. **Offline-First Resilience**: Bad network reception at grocery checkouts or basements must not block entry. Submissions persist immediately to client storage and synchronize when the network is reachable.
+2. **Offline-First Resilience**: Bad network reception at checkout counters or basements must not block entry. Submissions persist immediately to client storage and synchronize when the network is reachable.
 3. **Zero-Maintenance Infrastructure**: Serverless edge hosting and serverless relational storage remove OS patching, VPS maintenance, and container upkeep.
-4. **Separation of Intake from Analysis**: Dashboards, aggregate formulas, and trend reports remain in spreadsheets or reporting tools. SnapTally is strictly an intake and ledger engine.
+4. **Intake Speed Protection with Dedicated Edge Analysis**: While SnapTally plans integrated monthly Conscious Spending Plan analysis and sinking fund tracking, the primary intake viewport remains strictly decoupled from analytical computation to guarantee a sub-5-second checkout entry experience.
+5. **Clear Financial Accounting**: Methodology explicitly separates monthly discretionary cash flow from sinking fund drawdowns (e.g. travel funds) and accounts for reimbursements on a net-spend basis. See [docs/budgeting.md](budgeting.md) for full taxonomy and accounting rules.
 
 ## Client Layer
 
@@ -93,6 +99,25 @@ CREATE INDEX IF NOT EXISTS idx_transactions_merchant ON transactions(merchant);
 ### Net Spend Calculation
 Transactions track both `gross_amount` and `reimbursement`. `net_spend` is calculated automatically via SQLite stored generated column (`gross_amount - COALESCE(reimbursement, 0.0)`), allowing direct aggregation on net out-of-pocket costs without client-side calculation drift.
 
+## Analysis & Budgeting Engine Layer (Planned Phase 4)
+
+To support in-app budget tracking alongside rapid intake in Phase 4, SnapTally specifies an edge-native analytics engine:
+
+### Monthly Conscious Spending Plan Breakdown (Planned Phase 4)
+- **Endpoint**: `GET /api/analysis/monthly?month=YYYY-MM`
+- **Functionality**: Aggregates net spend by parent bucket (`Fixed Costs`, `Investments`, `Savings`, `Guilt-Free`) for the requested calendar month.
+- **Pacing**: Calculates the remaining daily discretionary allowance for Guilt-Free spending by subtracting current month Guilt-Free net spend from the configured monthly ceiling, divided by the remaining days in the month.
+
+### Sinking Funds & Reserve Ledger (Planned Phase 4)
+- **Endpoint**: `GET /api/analysis/sinking-funds`
+- **Functionality**: Planned capability to track cumulative allocations and historical drawdowns across dedicated sinking funds (e.g. Travel Fund, Emergency Fund).
+- **Accounting Distinction**: Prevents large planned vacation purchases from distorting monthly discretionary spending metrics by attributing them to the dedicated sinking fund reserve. Sinking fund reserves will be computed by pairing user-configured monthly allocations with drawdown transactions tagged under the `Savings` parent bucket.
+
+### Edge SQL Aggregation Strategy
+All analytics queries will run directly against D1 using indexed aggregation queries (`SUM(net_spend) ... GROUP BY parent_bucket, subcategory`) once the expanded schema migration is applied, avoiding the overhead of transferring raw transaction logs to the client for processing. In the initial baseline schema, transactions are stored with `amount` and `category`.
+
+See [docs/budgeting.md](budgeting.md) for complete details on the category taxonomy, sinking fund accounting, and reimbursement handling.
+
 ## Downstream Reconciliation & Google Sheets Integration
 
 SnapTally provides an export endpoint (`GET /api/export`) returning JSON or CSV data. This allows:
@@ -116,5 +141,7 @@ Cloudflare free tier allotments provide substantial headroom for personal budget
 ## Phased Implementation Roadmap
 
 1. **Phase 1 (Proof of Concept)**: Unstyled HTML form, single POST endpoint in Pages Functions, local D1 table verification via Wrangler.
-2. **Phase 2 (MVP Intake PWA)**: Alpine.js pill chips, touch styling, PWA manifest, IndexedDB outbox queue, pre-shared token authentication, recent transaction list.
-3. **Phase 3 (Modular CRUD & Tooling)**: Modular Hono routers for categories and accounts, Drizzle ORM for type-safe queries and schema migrations, and Google Sheets sync automation.
+2. **Phase 2 (MVP Intake PWA)**: Alpine.js pill chips, numeric amount entry, touch styling, PWA manifest, IndexedDB outbox queue, pre-shared token authentication, recent transaction list.
+3. **Phase 3 (Multi-Tenancy & Gating)**: Row-level tenant isolation, per-user hashed tokens, tenant provisioning CLI tooling.
+4. **Phase 4 (Integrated Budget Analysis & Sinking Fund Dashboard)**: Edge aggregation endpoints for monthly CSP targets, sinking fund reserve tracking, and mobile analytics dashboard.
+5. **Phase 5 (Automation & External Sync)**: Modular CRUD for custom categories, and Google Sheets sync automation.
