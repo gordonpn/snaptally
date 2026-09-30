@@ -83,11 +83,26 @@ describe("intakeForm ATM Keypad & Amount Entry (Scenario 1)", () => {
 
   it("caps amount at maximum ceiling to prevent numeric overflow", () => {
     const form = intakeForm();
-    form.amountCents = 10000000;
-    form.pressDigit(5);
-    assert.strictEqual(form.amountCents, 10000000);
+    form.amountCents = 9999999;
+    form.pressDigit(9);
+    assert.strictEqual(form.amountCents, 9999999);
     assert.strictEqual(form.statusMessage, "Maximum amount reached");
     assert.strictEqual(form.isError, true);
+
+    form.pressBackspace();
+    assert.strictEqual(form.statusMessage, "");
+    assert.strictEqual(form.isError, false);
+    assert.strictEqual(form.amountCents, 999999);
+
+    form.amountCents = 10000000;
+    form.pressDigit(1);
+    assert.strictEqual(form.amountCents, 10000000);
+    assert.strictEqual(form.statusMessage, "Maximum amount reached");
+
+    form.pressClear();
+    assert.strictEqual(form.statusMessage, "");
+    assert.strictEqual(form.isError, false);
+    assert.strictEqual(form.amountCents, 0);
   });
 
   it("pops the lowest digit on backspace", () => {
@@ -236,9 +251,26 @@ describe("intakeForm Token Persistence (Scenario 3)", () => {
     assert.strictEqual(form.hasToken, true);
   });
 
-  it("removes token from localStorage when empty string is saved", () => {
+  it("removes token from localStorage and resets merchants and transactions when empty string is saved", () => {
     mockStorage.setItem(TOKEN_STORAGE_KEY, "existing-token");
     const form = intakeForm();
+    form.token = "existing-token";
+    form.frequentMerchants = ["Custom Store"];
+    form.recentTransactions = [
+      {
+        id: "tx-test-1",
+        date: "2026-09-30",
+        card: "Amex Gold",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
+        merchant: "Custom Store",
+        gross_amount: 10,
+        reimbursement: 0,
+        net_spend: 10,
+        created_at: "2026-09-30 12:00:00",
+      },
+    ];
+
     form.openSettings();
     form.settingsTokenInput = "   ";
     form.saveToken();
@@ -246,6 +278,8 @@ describe("intakeForm Token Persistence (Scenario 3)", () => {
     assert.strictEqual(form.token, "");
     assert.strictEqual(mockStorage.getItem(TOKEN_STORAGE_KEY), null);
     assert.strictEqual(form.hasToken, false);
+    assert.deepStrictEqual(form.frequentMerchants, DEFAULT_FREQUENT_MERCHANTS);
+    assert.deepStrictEqual(form.recentTransactions, []);
   });
 
   it("cancels settings without saving when closeSettings is called", () => {
@@ -453,6 +487,36 @@ describe("intakeForm Frequent Merchants Loading", () => {
     try {
       await form.loadFrequentMerchants();
       assert.strictEqual(form.merchant, "Star Market");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("ignores in-flight merchant responses if token changed", async () => {
+    const form = intakeForm();
+    form.token = "initial-token";
+
+    let resolveFetch: ((res: Response) => void) | undefined;
+    const pendingPromise = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => pendingPromise) as unknown as typeof fetch;
+
+    try {
+      const loadPromise = form.loadFrequentMerchants();
+      form.token = "new-token";
+      if (resolveFetch) {
+        resolveFetch(
+          new Response(JSON.stringify({ merchants: ["Stale Merchant"] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+      await loadPromise;
+      assert.deepStrictEqual(form.frequentMerchants, DEFAULT_FREQUENT_MERCHANTS);
     } finally {
       globalThis.fetch = originalFetch;
     }

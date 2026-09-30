@@ -13,7 +13,7 @@ import Layout from "../layouts/Layout.astro";
 
 <Layout title="SnapTally Intake">
   <div
-    class="flex flex-col h-full max-w-md mx-auto px-4 py-2 justify-between"
+    class="flex flex-col h-full max-w-md mx-auto px-4 py-2 justify-between overflow-y-auto no-scrollbar"
     x-data="intakeForm"
     x-init="init()"
   >
@@ -275,7 +275,7 @@ import Layout from "../layouts/Layout.astro";
 
     <!-- Settings Modal -->
     <dialog class="modal" :class="{ 'modal-open': isSettingsOpen }">
-      <div class="modal-box p-5 max-w-sm rounded-2xl">
+      <div class="modal-box p-5 max-w-sm rounded-2xl max-h-[85vh] overflow-y-auto">
         <h3 class="font-bold text-lg">Settings</h3>
         <p class="text-xs text-base-content/70 mt-1">
           Configure pre-shared API bearer token stored locally in browser storage.

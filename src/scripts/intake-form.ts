@@ -107,19 +107,28 @@ export function intakeForm() {
       if (this.amountCents === 0 && digit === 0) {
         return;
       }
-      if (this.amountCents >= this.maxCents) {
+      const nextAmount = this.amountCents * 10 + digit;
+      if (nextAmount > this.maxCents) {
         this.statusMessage = "Maximum amount reached";
         this.isError = true;
         return;
       }
-      this.amountCents = this.amountCents * 10 + digit;
+      this.amountCents = nextAmount;
     },
 
     pressBackspace(): void {
+      if (this.statusMessage === "Maximum amount reached") {
+        this.statusMessage = "";
+        this.isError = false;
+      }
       this.amountCents = Math.floor(this.amountCents / 10);
     },
 
     pressClear(): void {
+      if (this.statusMessage === "Maximum amount reached") {
+        this.statusMessage = "";
+        this.isError = false;
+      }
       this.amountCents = 0;
     },
 
@@ -197,6 +206,9 @@ export function intakeForm() {
       if (this.hasToken) {
         this.loadFrequentMerchants();
         this.loadRecentTransactions();
+      } else {
+        this.frequentMerchants = [...DEFAULT_FREQUENT_MERCHANTS];
+        this.recentTransactions = [];
       }
     },
 
@@ -213,14 +225,18 @@ export function intakeForm() {
       if (!this.token) {
         return;
       }
+      const requestToken = this.token;
       try {
         const response = await fetch("/api/merchants?limit=8", {
-          headers: { Authorization: `Bearer ${this.token}` },
+          headers: { Authorization: `Bearer ${requestToken}` },
         });
-        if (!response.ok) {
+        if (!response.ok || this.token !== requestToken) {
           return;
         }
         const data = (await response.json()) as { merchants?: string[] };
+        if (this.token !== requestToken) {
+          return;
+        }
         if (data.merchants && data.merchants.length > 0) {
           this.frequentMerchants = data.merchants;
           if (
@@ -239,14 +255,18 @@ export function intakeForm() {
       if (!this.token) {
         return;
       }
+      const requestToken = this.token;
       try {
         const response = await fetch("/api/transactions?limit=5", {
-          headers: { Authorization: `Bearer ${this.token}` },
+          headers: { Authorization: `Bearer ${requestToken}` },
         });
-        if (!response.ok) {
+        if (!response.ok || this.token !== requestToken) {
           return;
         }
         const data = (await response.json()) as { transactions?: RecentTransaction[] };
+        if (this.token !== requestToken) {
+          return;
+        }
         if (data.transactions) {
           this.recentTransactions = data.transactions;
         }
