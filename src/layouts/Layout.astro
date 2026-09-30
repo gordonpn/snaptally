@@ -15,7 +15,7 @@ const { title = "SnapTally" } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>{title}</title>
   </head>
-  <body class="min-h-screen bg-base-100 text-base-content antialiased">
+  <body class="h-dvh overflow-hidden select-none bg-base-100 text-base-content antialiased">
     <slot />
     <script src="../scripts/app.ts"></script>
   </body>

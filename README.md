@@ -42,6 +42,9 @@ snaptally/
 │   │   └── Layout.astro      # Root HTML shell and Alpine.js bootstrap
 │   ├── pages/
 │   │   └── index.astro       # Intake UI page with DaisyUI and Tabler icons
+│   ├── scripts/
+│   │   ├── app.ts            # Alpine.js registration and bootstrap
+│   │   └── intake-form.ts    # Keypad state machine and API integration
 │   └── styles/
 │       └── global.css        # Tailwind CSS and DaisyUI theme directives
 ├── package.json

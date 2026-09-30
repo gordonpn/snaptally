@@ -50,8 +50,14 @@ flowchart TD
 ## Client Layer
 
 ### Touch-Friendly UI
-- **Pill Chips**: Cards and categories render as tap targets styled for thumb reaches.
-- **Dynamic Dependent Chips**: Selecting a parent category (for example, Fixed, Variable, or Guilt-Free) updates the visible subcategories in client state via Alpine.js without network roundtrips.
+- **Fixed Viewport**: Locked to `h-dvh overflow-hidden select-none` to eliminate iOS bounce, address bar shifting, and page jumping.
+- **Built-in On-Screen Keypad**: A custom 3x4 numeric keypad with ATM-style cents shifting (`$0.00` formatted amount display) ensures the native mobile virtual keyboard is never triggered for amount entry.
+- **Pill Chips**: Cards and categories render as touch-friendly tap targets styled for thumb reachability (minimum 44x44px touch targets).
+- **Dynamic Dependent Chips**: Selecting a parent category (for example, Guilt-Free, Fixed Costs, or Savings) updates visible subcategories in Alpine.js client state instantly with zero network requests.
+- **Merchant Quick Chips**: Displays top frequent merchants from `GET /api/merchants?limit=8` with an "Other..." toggle for custom merchant entry.
+- **Secondary Date Backfill**: Defaults to current local date (`YYYY-MM-DD`) with zero interaction needed at checkout. A secondary trigger reveals a native date picker for historical expenses, resetting back to today's date upon saving.
+- **Recent Transactions Feed**: A slide-over modal displays the 5 most recent transactions fetched from `GET /api/transactions?limit=5`.
+- **Token Configuration**: Settings modal manages pre-shared API bearer tokens in `localStorage` (`snaptally_api_token`), showing connection status directly in the header.
 - **PWA Manifest**: Configured with `display: standalone` and iOS touch icons to run without browser chrome, URL bars, or bottom navigation strips.
 
 ### Optimistic Outbox Flow
