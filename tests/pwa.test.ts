@@ -93,6 +93,8 @@ describe("PWA Service Worker (Scenario 2)", () => {
     assert.match(swContent, /addEventListener\(["']activate["']/);
     assert.match(swContent, /addEventListener\(["']fetch["']/);
     assert.match(swContent, /\/api\//, "Service worker must handle /api/ bypass");
+    assert.match(swContent, /["']\/index\.html["']/, "Service worker must precache /index.html");
+    assert.match(swContent, /location\.origin/, "Service worker must enforce same-origin check");
     assert.match(swContent, /caches\.open/, "Service worker must open static cache");
     assert.match(swContent, /caches\.match/, "Service worker must check cache first");
   });

@@ -2,6 +2,7 @@ const CACHE_NAME = "snaptally-shell-v1";
 
 const PRECACHE_ASSETS = [
   "/",
+  "/index.html",
   "/manifest.json",
   "/favicon.svg",
   "/icons/icon.svg",
@@ -11,6 +12,8 @@ const PRECACHE_ASSETS = [
   "/icons/icon-maskable-512.png",
   "/icons/apple-touch-icon.png",
 ];
+
+const PRECACHE_SET = new Set(PRECACHE_ASSETS);
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -40,6 +43,19 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Only handle same-origin requests
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  const isPrecached = PRECACHE_SET.has(url.pathname);
+  const isStaticAsset = url.pathname.startsWith("/_astro/") || url.pathname.startsWith("/icons/");
+
+  // Only apply caching strategy to precached assets, navigation, and static bundles
+  if (!isPrecached && !isStaticAsset && event.request.mode !== "navigate") {
+    return;
+  }
+
   // Cache-first strategy for static app shell assets and navigation
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
@@ -61,10 +77,13 @@ self.addEventListener("fetch", (event) => {
           }
           return networkResponse;
         })
-        .catch(() => {
+        .catch(async () => {
           // If offline and navigating, fall back to cached root app shell
           if (event.request.mode === "navigate") {
-            return caches.match("/");
+            const cachedRoot = (await caches.match("/")) || (await caches.match("/index.html"));
+            if (cachedRoot) {
+              return cachedRoot;
+            }
           }
           return new Response("Offline", { status: 503, statusText: "Offline" });
         });
