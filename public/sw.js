@@ -19,7 +19,22 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_ASSETS))
+      .then(async (cache) => {
+        await cache.addAll(PRECACHE_ASSETS);
+        try {
+          const indexResponse = await cache.match("/index.html");
+          if (indexResponse) {
+            const html = await indexResponse.text();
+            const matches = html.matchAll(/(?:href|src)="(\/_astro\/[^"]+)"/g);
+            const bundleUrls = Array.from(new Set([...matches].map((m) => m[1])));
+            if (bundleUrls.length > 0) {
+              await cache.addAll(bundleUrls);
+            }
+          }
+        } catch {
+          // Precache failure of dynamic bundles should not abort service worker installation
+        }
+      })
       .then(() => self.skipWaiting()),
   );
 });
@@ -48,15 +63,50 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  const isNavigation = event.request.mode === "navigate";
   const isPrecached = PRECACHE_SET.has(url.pathname);
   const isStaticAsset = url.pathname.startsWith("/_astro/") || url.pathname.startsWith("/icons/");
 
   // Only apply caching strategy to precached assets, navigation, and static bundles
-  if (!isPrecached && !isStaticAsset && event.request.mode !== "navigate") {
+  if (!isNavigation && !isPrecached && !isStaticAsset) {
     return;
   }
 
-  // Cache-first strategy for static app shell assets and navigation
+  // Network-first for navigation to ensure fresh application updates when online
+  if (isNavigation) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (
+            networkResponse &&
+            networkResponse.status === 200 &&
+            networkResponse.type === "basic"
+          ) {
+            const responseToCache = networkResponse.clone();
+            event.waitUntil(
+              caches
+                .open(CACHE_NAME)
+                .then((cache) => cache.put(event.request, responseToCache))
+                .catch(() => {}),
+            );
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cachedRoot =
+            (await caches.match(event.request)) ||
+            (await caches.match("/")) ||
+            (await caches.match("/index.html"));
+          if (cachedRoot) {
+            return cachedRoot;
+          }
+          return new Response("Offline", { status: 503, statusText: "Offline" });
+        }),
+    );
+    return;
+  }
+
+  // Cache-first strategy for static app shell assets (icons, manifest, favicon, bundles)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
@@ -71,22 +121,16 @@ self.addEventListener("fetch", (event) => {
             networkResponse.type === "basic"
           ) {
             const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
+            event.waitUntil(
+              caches
+                .open(CACHE_NAME)
+                .then((cache) => cache.put(event.request, responseToCache))
+                .catch(() => {}),
+            );
           }
           return networkResponse;
         })
-        .catch(async () => {
-          // If offline and navigating, fall back to cached root app shell
-          if (event.request.mode === "navigate") {
-            const cachedRoot = (await caches.match("/")) || (await caches.match("/index.html"));
-            if (cachedRoot) {
-              return cachedRoot;
-            }
-          }
-          return new Response("Offline", { status: 503, statusText: "Offline" });
-        });
+        .catch(() => new Response("Offline", { status: 503, statusText: "Offline" }));
     }),
   );
 });

@@ -94,9 +94,19 @@ describe("PWA Service Worker (Scenario 2)", () => {
     assert.match(swContent, /addEventListener\(["']fetch["']/);
     assert.match(swContent, /\/api\//, "Service worker must handle /api/ bypass");
     assert.match(swContent, /["']\/index\.html["']/, "Service worker must precache /index.html");
+    assert.match(
+      swContent,
+      /\/_astro\//,
+      "Service worker must discover and precache astro bundles",
+    );
     assert.match(swContent, /location\.origin/, "Service worker must enforce same-origin check");
-    assert.match(swContent, /caches\.open/, "Service worker must open static cache");
-    assert.match(swContent, /caches\.match/, "Service worker must check cache first");
+    assert.match(swContent, /caches\s*\.\s*open/, "Service worker must open static cache");
+    assert.match(swContent, /caches\s*\.\s*match/, "Service worker must check cache first");
+    assert.match(
+      swContent,
+      /event\s*\.\s*waitUntil/,
+      "Service worker must use event.waitUntil for lifecycle operations",
+    );
   });
 
   it("registerServiceWorker runs safely in browser environment and ignores unsupported environments", async () => {
