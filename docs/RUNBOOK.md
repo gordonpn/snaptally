@@ -54,7 +54,7 @@ Created database 'budget-db' with ID 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
 
 ### 3.2 Update Project Configuration
 
-Copy the returned `database_id` into [wrangler.jsonc](file:///Users/gordonpn/workspace/snaptally.opal-quartz/wrangler.jsonc), replacing the dummy placeholder:
+Copy the returned `database_id` into [wrangler.jsonc](../wrangler.jsonc), replacing the dummy placeholder:
 
 ```jsonc
 {
@@ -201,6 +201,17 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy ./dist --project-name=snaptally
 ```
+
+### 5.3 Continuous Integration and Code Coverage
+
+Pull requests and commits to `main` trigger automated unit tests and code coverage analysis via `.github/workflows/coverage.yml`.
+
+#### Codecov Configuration and Secret
+SnapTally uses Codecov to host visual coverage breakdowns and post line-by-line pull request diff analysis:
+
+- Repository secret: `CODECOV_TOKEN` (configured under **Settings** > **Secrets and variables** > **Actions**). Obtain from the repository dashboard on [Codecov](https://app.codecov.io/).
+- Workflow configuration: In `.github/workflows/coverage.yml`, `codecov/codecov-action@v5` uploads `coverage/lcov.info` with `fail_ci_if_error: false`.
+- Threshold configuration: [codecov.yml](../codecov.yml) enforces an 80% coverage threshold matching `--test-coverage-lines=80`.
 
 ---
 
