@@ -60,6 +60,7 @@ flowchart TD
 - **Recent Transactions Feed**: A slide-over modal displays the 5 most recent transactions fetched from `GET /api/transactions?limit=5`.
 - **Token Configuration**: Settings modal manages pre-shared API bearer tokens in `localStorage` (`snaptally_api_token`), showing connection status directly in the header.
 - **PWA Manifest**: Configured with `display: standalone` and iOS touch icons to run without browser chrome, URL bars, or bottom navigation strips.
+- **Service Worker & Offline Shell**: Static service worker (`public/sw.js`) precaches the core application shell (`/`, `/manifest.json`, `/favicon.svg`, and icon assets), serving them cache-first with network fallback while bypassing API endpoints (`/api/*`).
 
 ### Optimistic Outbox Flow
 The application uses IndexedDB (wrapped by `idb-keyval`) to implement an optimistic outbox:
