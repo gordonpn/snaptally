@@ -52,9 +52,10 @@ flowchart TD
 ### Touch-Friendly UI
 - **Fixed Viewport**: Locked to `h-dvh overflow-hidden select-none` to eliminate iOS bounce, address bar shifting, and page jumping.
 - **Built-in On-Screen Keypad**: A custom 3x4 numeric keypad with ATM-style cents shifting (`$0.00` formatted amount display) ensures the native mobile virtual keyboard is never triggered for amount entry.
-- **Pill Chips**: Cards and categories render as touch-friendly tap targets styled for thumb reachability (minimum 44x44px touch targets).
-- **Dynamic Dependent Chips**: Selecting a parent category (for example, Guilt-Free, Fixed Costs, or Savings) updates visible subcategories in Alpine.js client state instantly with zero network requests.
-- **Merchant Quick Chips**: Displays top frequent merchants from `GET /api/merchants?limit=8` with an "Other..." toggle for custom merchant entry.
+- **Pill Chips**: Cards, merchants, and categories render as touch-friendly tap targets styled for thumb reachability (minimum 44x44px touch targets).
+- **Dynamic Dependent Chips**: Categories and subcategories are declared in `src/config/intake.ts`. Selecting a parent category (for example, Guilt-Free, Fixed Costs, or Savings) updates visible subcategories in Alpine.js client state instantly with zero network requests.
+- **Dynamic Card Selection**: Card options are dynamically extracted from recent transactions, cached in `localStorage` (`snaptally_cards`), and support an "Other..." toggle for custom card entry without hardcoded defaults.
+- **Merchant Quick Chips**: Displays top frequent merchants from `GET /api/merchants?limit=8` (defaulting to the frequent merchant list in `src/config/intake.ts` when unauthenticated) with an "Other..." toggle for custom merchant entry.
 - **Secondary Date Backfill**: Defaults to current local date (`YYYY-MM-DD`) with zero interaction needed at checkout. A secondary trigger reveals a native date picker for historical expenses, resetting back to today's date upon saving.
 - **Recent Transactions Feed**: A slide-over modal displays the 5 most recent transactions fetched from `GET /api/transactions?limit=5`.
 - **Token Configuration**: Settings modal manages pre-shared API bearer tokens in `localStorage` (`snaptally_api_token`), showing connection status directly in the header.

@@ -35,7 +35,7 @@ import Layout from "../layouts/Layout.astro";
         />
         <button
           type="button"
-          class="btn btn-xs sm:btn-sm rounded-full gap-1 min-h-[36px] pointer-events-none"
+          class="btn btn-xs sm:btn-sm rounded-full gap-1 min-h-[44px] pointer-events-none"
           :class="isBackfill ? 'btn-warning text-warning-content' : 'btn-ghost bg-base-200'"
         >
           <IconCalendar class="w-4 h-4" />
@@ -98,7 +98,7 @@ import Layout from "../layouts/Layout.astro";
           <template x-for="m in frequentMerchants" :key="m">
             <button
               type="button"
-              class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[36px]"
+              class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[44px]"
               :class="merchant === m && !isCustomMerchant ? 'btn-primary text-primary-content' : 'btn-ghost bg-base-200'"
               @click="selectMerchant(m)"
               x-text="m"
@@ -106,7 +106,7 @@ import Layout from "../layouts/Layout.astro";
           </template>
           <button
             type="button"
-            class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[36px]"
+            class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[44px]"
             :class="isCustomMerchant ? 'btn-primary text-primary-content' : 'btn-ghost bg-base-200'"
             @click="toggleCustomMerchant()"
           >
@@ -129,7 +129,7 @@ import Layout from "../layouts/Layout.astro";
         <template x-for="b in buckets" :key="b">
           <button
             type="button"
-            class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[36px]"
+            class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[44px]"
             :class="parentBucket === b ? 'btn-secondary text-secondary-content' : 'btn-ghost bg-base-200'"
             @click="selectBucket(b)"
             x-text="b"
@@ -142,7 +142,7 @@ import Layout from "../layouts/Layout.astro";
         <template x-for="s in subcategories" :key="s">
           <button
             type="button"
-            class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[36px]"
+            class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[44px]"
             :class="subcategory === s ? 'btn-neutral text-neutral-content' : 'btn-outline border-base-300'"
             @click="selectSubcategory(s)"
             x-text="s"
@@ -151,19 +151,38 @@ import Layout from "../layouts/Layout.astro";
       </div>
 
       <!-- Card Selection Chips -->
-      <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-        <span class="text-base-content/60 flex items-center mr-1">
-          <IconCreditCard class="w-4 h-4" />
-        </span>
-        <template x-for="c in cards" :key="c">
+      <div class="space-y-1">
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          <span class="text-base-content/60 flex items-center mr-1">
+            <IconCreditCard class="w-4 h-4" />
+          </span>
+          <template x-for="c in cards" :key="c">
+            <button
+              type="button"
+              class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[44px]"
+              :class="card === c && !isCustomCard ? 'btn-accent text-accent-content' : 'btn-ghost bg-base-200'"
+              @click="selectCard(c)"
+              x-text="c"
+            ></button>
+          </template>
           <button
             type="button"
-            class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[36px]"
-            :class="card === c ? 'btn-accent text-accent-content' : 'btn-ghost bg-base-200'"
-            @click="selectCard(c)"
-            x-text="c"
-          ></button>
-        </template>
+            class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[44px]"
+            :class="isCustomCard ? 'btn-accent text-accent-content' : 'btn-ghost bg-base-200'"
+            @click="toggleCustomCard()"
+          >
+            Other...
+          </button>
+        </div>
+        <div x-show="isCustomCard" x-transition>
+          <input
+            type="text"
+            placeholder="Type card name..."
+            class="input input-sm input-bordered w-full rounded-lg"
+            x-model="customCardInput"
+            @input="updateCustomCard($event.target.value)"
+          />
+        </div>
       </div>
     </section>
 
@@ -305,10 +324,10 @@ import Layout from "../layouts/Layout.astro";
           />
         </div>
         <div class="modal-action mt-4 flex justify-end gap-2">
-          <button type="button" class="btn btn-sm btn-ghost rounded-lg min-h-[36px]" @click="closeSettings()">
+          <button type="button" class="btn btn-sm btn-ghost rounded-lg min-h-[44px]" @click="closeSettings()">
             Cancel
           </button>
-          <button type="button" class="btn btn-sm btn-primary rounded-lg min-h-[36px]" @click="saveToken()">
+          <button type="button" class="btn btn-sm btn-primary rounded-lg min-h-[44px]" @click="saveToken()">
             Save Token
           </button>
         </div>
@@ -325,7 +344,7 @@ import Layout from "../layouts/Layout.astro";
           </h3>
           <button
             type="button"
-            class="btn btn-ghost btn-circle btn-sm min-h-[36px] min-w-[36px]"
+            class="btn btn-ghost btn-circle btn-sm min-h-[44px] min-w-[44px]"
             @click="toggleRecent()"
             aria-label="Close Recent Transactions"
           >
@@ -362,7 +381,7 @@ import Layout from "../layouts/Layout.astro";
         <div class="pt-2 border-t border-base-300">
           <button
             type="button"
-            class="btn btn-sm btn-ghost w-full rounded-lg min-h-[36px]"
+            class="btn btn-sm btn-ghost w-full rounded-lg min-h-[44px]"
             @click="toggleRecent()"
           >
             Close

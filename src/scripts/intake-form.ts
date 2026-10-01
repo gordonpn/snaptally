@@ -1,3 +1,5 @@
+import { BUCKET_SUBCATEGORIES, DEFAULT_FREQUENT_MERCHANTS } from "../config/intake.ts";
+
 export interface RecentTransaction {
   id: string;
   date: string;
@@ -11,22 +13,10 @@ export interface RecentTransaction {
   created_at: string;
 }
 
-export const CATEGORIES_BY_BUCKET: Record<string, string[]> = {
-  "Guilt-Free": ["Dining", "Coffee", "Bars", "Shopping", "Entertainment"],
-  "Fixed Costs": ["Rent", "Utilities", "Groceries", "Subscriptions", "Transit"],
-  Savings: ["Emergency Fund", "Investments", "Travel Fund"],
-};
-
-export const DEFAULT_CARDS: string[] = ["Amex Gold", "Chase Sapphire", "Apple Cash"];
-
-export const DEFAULT_FREQUENT_MERCHANTS: string[] = [
-  "Trader Joe's",
-  "Whole Foods",
-  "George Howell",
-  "Blue Bottle",
-];
-
+export { BUCKET_SUBCATEGORIES, DEFAULT_FREQUENT_MERCHANTS };
+export const CATEGORIES_BY_BUCKET = BUCKET_SUBCATEGORIES;
 export const TOKEN_STORAGE_KEY = "snaptally_api_token";
+export const CARDS_STORAGE_KEY = "snaptally_cards";
 
 /**
  * Returns today's date in local YYYY-MM-DD calendar format.
@@ -45,14 +35,16 @@ export function intakeForm() {
     amountCents: 0,
     maxCents: 10000000,
 
-    // Card selection
-    cards: [...DEFAULT_CARDS],
-    card: DEFAULT_CARDS[0],
+    // Card selection (dynamically populated from recent transactions with Other... fallback)
+    cards: [] as string[],
+    card: "",
+    isCustomCard: false,
+    customCardInput: "",
 
     // Bucket and subcategory selection
-    buckets: Object.keys(CATEGORIES_BY_BUCKET),
+    buckets: Object.keys(BUCKET_SUBCATEGORIES),
     parentBucket: "Guilt-Free",
-    subcategory: CATEGORIES_BY_BUCKET["Guilt-Free"][0],
+    subcategory: BUCKET_SUBCATEGORIES["Guilt-Free"][0],
 
     // Merchant selection
     frequentMerchants: [...DEFAULT_FREQUENT_MERCHANTS],
@@ -144,11 +136,38 @@ export function intakeForm() {
     // Selectors
     selectCard(card: string): void {
       this.card = card;
+      this.isCustomCard = false;
+    },
+
+    toggleCustomCard(): void {
+      this.isCustomCard = !this.isCustomCard;
+      if (this.isCustomCard) {
+        if (this.customCardInput.trim().length > 0) {
+          this.card = this.customCardInput.trim();
+        }
+      } else {
+        this.card = this.cards[0] || "";
+      }
+    },
+
+    updateCustomCard(value: string): void {
+      this.customCardInput = value;
+      this.card = value;
+    },
+
+    persistCards(): void {
+      try {
+        if (typeof localStorage !== "undefined" && this.cards.length > 0) {
+          localStorage.setItem(CARDS_STORAGE_KEY, JSON.stringify(this.cards));
+        }
+      } catch {
+        // Storage restricted or unavailable
+      }
     },
 
     selectBucket(bucket: string): void {
       this.parentBucket = bucket;
-      const subcategories = CATEGORIES_BY_BUCKET[bucket];
+      const subcategories = BUCKET_SUBCATEGORIES[bucket];
       if (subcategories && subcategories.length > 0) {
         this.subcategory = subcategories[0];
       }
@@ -222,6 +241,17 @@ export function intakeForm() {
       } else {
         this.frequentMerchants = [...DEFAULT_FREQUENT_MERCHANTS];
         this.recentTransactions = [];
+        this.cards = [];
+        this.card = "";
+        this.isCustomCard = true;
+        this.customCardInput = "";
+        try {
+          if (typeof localStorage !== "undefined") {
+            localStorage.removeItem(CARDS_STORAGE_KEY);
+          }
+        } catch {
+          // Storage restricted or unavailable
+        }
       }
     },
 
@@ -281,7 +311,36 @@ export function intakeForm() {
           return;
         }
         if (data.transactions) {
-          this.recentTransactions = data.transactions;
+          this.recentTransactions = [...data.transactions].sort((a, b) => {
+            const dateDiff = b.date.localeCompare(a.date);
+            if (dateDiff !== 0) return dateDiff;
+            return (b.created_at || "").localeCompare(a.created_at || "");
+          });
+
+          // Dynamically extract distinct cards from recent transactions
+          const extractedCards: string[] = [];
+          for (const tx of data.transactions) {
+            const cardName = tx.card?.trim();
+            if (cardName && !extractedCards.includes(cardName)) {
+              extractedCards.push(cardName);
+            }
+          }
+          if (extractedCards.length > 0) {
+            const merged = [...this.cards];
+            for (const c of extractedCards) {
+              if (!merged.includes(c)) {
+                merged.push(c);
+              }
+            }
+            this.cards = merged;
+            if (!this.customCardInput.trim()) {
+              this.isCustomCard = false;
+            }
+            if (!this.isCustomCard && (!this.card || !this.cards.includes(this.card))) {
+              this.card = this.cards[0];
+            }
+            this.persistCards();
+          }
         }
       } catch {
         // Silently preserve existing recent records on network or parse failures
@@ -297,9 +356,25 @@ export function intakeForm() {
           if (storedToken) {
             this.token = storedToken;
           }
+          const storedCards = localStorage.getItem(CARDS_STORAGE_KEY);
+          if (storedCards) {
+            const parsed = JSON.parse(storedCards) as unknown;
+            if (
+              Array.isArray(parsed) &&
+              parsed.every((item): item is string => typeof item === "string")
+            ) {
+              this.cards = parsed;
+              if (parsed.length > 0) {
+                this.card = parsed[0];
+              }
+            }
+          }
         }
       } catch {
         // Storage restricted or unavailable
+      }
+      if (this.cards.length === 0) {
+        this.isCustomCard = true;
       }
       if (this.hasToken) {
         this.loadFrequentMerchants();
@@ -312,6 +387,13 @@ export function intakeForm() {
       if (this.amountCents <= 0) {
         this.isError = true;
         this.statusMessage = "Please enter an amount";
+        return false;
+      }
+
+      const trimmedCard = this.card.trim();
+      if (!trimmedCard) {
+        this.isError = true;
+        this.statusMessage = "Please select or enter a card";
         return false;
       }
 
@@ -329,7 +411,7 @@ export function intakeForm() {
       const submittedAmountCents = this.amountCents;
       const payload = {
         date: this.date,
-        card: this.card,
+        card: trimmedCard,
         parent_bucket: this.parentBucket,
         subcategory: this.subcategory,
         merchant: trimmedMerchant,
@@ -363,6 +445,15 @@ export function intakeForm() {
             this.isCustomMerchant = false;
             this.customMerchantInput = "";
             this.merchant = this.frequentMerchants[0] || "";
+          }
+          if (this.isCustomCard) {
+            if (!this.cards.includes(trimmedCard)) {
+              this.cards.unshift(trimmedCard);
+              this.persistCards();
+            }
+            this.isCustomCard = false;
+            this.customCardInput = "";
+            this.card = trimmedCard;
           }
           if (this.hasToken) {
             this.loadRecentTransactions();
