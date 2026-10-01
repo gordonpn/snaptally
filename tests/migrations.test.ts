@@ -13,6 +13,12 @@ describe("Multi-tenant Schema Migrations", () => {
   );
   const insertTransactionQuery = readFileSync(resolve("queries/insert_transaction.sql"), "utf-8");
 
+  /**
+   * Creates an in-memory SQLite database instance with foreign keys enabled
+   * and all schema migrations applied sequentially.
+   *
+   * @returns An initialized DatabaseSync instance with the latest schema.
+   */
   function createMigratedDatabase(): DatabaseSync {
     const db = new DatabaseSync(":memory:");
     db.exec("PRAGMA foreign_keys = ON;");
