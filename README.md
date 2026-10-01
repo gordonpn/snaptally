@@ -28,7 +28,8 @@ snaptally/
 ├── astro.config.mjs          # Astro static build configuration
 ├── docs/
 │   ├── architecture.md       # Detailed system design, data flows, and trade-offs
-│   └── budgeting.md          # Conscious Spending Plan framework, taxonomy, and rules
+│   ├── budgeting.md          # Conscious Spending Plan framework, taxonomy, and rules
+│   └── RUNBOOK.md            # Production provisioning, deployment, and operational runbook
 ├── functions/
 │   └── api/
 │       └── [[route]].ts      # Hono API router and D1 queries
@@ -98,3 +99,4 @@ For local development with Cloudflare Pages Functions, configure this variable i
  
 - [Architecture & Design](docs/architecture.md): Detailed system design, data flows, database schemas, and free-tier operational limits.
 - [Budgeting Methodology & Category Taxonomy](docs/budgeting.md): Conscious Spending Plan parent buckets, subcategories, sinking funds, travel categorization, and reimbursement rules.
+- [Operational Runbook](docs/RUNBOOK.md): Step-by-step procedures for production Cloudflare D1 provisioning, Pages configuration, deployments, and diagnostics.
