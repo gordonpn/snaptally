@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
-import insertTransactionQuery from "../queries/insert_transaction.sql";
 
 describe("Multi-tenant Schema Migrations", () => {
   const initSql = readFileSync(resolve("migrations/0000_init.sql"), "utf-8");
@@ -12,6 +11,7 @@ describe("Multi-tenant Schema Migrations", () => {
     resolve("migrations/0002_multi_tenant_schema.sql"),
     "utf-8",
   );
+  const insertTransactionQuery = readFileSync(resolve("queries/insert_transaction.sql"), "utf-8");
 
   function createMigratedDatabase(): DatabaseSync {
     const db = new DatabaseSync(":memory:");
@@ -57,7 +57,11 @@ describe("Multi-tenant Schema Migrations", () => {
     }>;
     const tokenIndexNames = tokenIndexes.map((idx) => idx.name);
 
+    assert.ok(tokenIndexNames.includes("idx_user_tokens_user_id"));
     assert.ok(tokenIndexNames.includes("idx_user_tokens_lookup"));
+
+    const fkViolations = db.prepare("PRAGMA foreign_key_check;").all();
+    assert.strictEqual(fkViolations.length, 0);
 
     db.close();
   });
@@ -102,8 +106,12 @@ describe("Multi-tenant Schema Migrations", () => {
           );
         `).run();
       },
-      {
-        message: /FOREIGN KEY constraint failed/,
+      (err: unknown) => {
+        const error = err as Error & { code?: string; errcode?: number };
+        return (
+          error.code === "ERR_SQLITE_ERROR" &&
+          (error.errcode === 787 || /FOREIGN KEY constraint failed/.test(error.message))
+        );
       },
     );
 
@@ -120,8 +128,12 @@ describe("Multi-tenant Schema Migrations", () => {
           VALUES ('tok-1', 'usr_nonexistent', 'hash1234567890', 'Mobile Client');
         `).run();
       },
-      {
-        message: /FOREIGN KEY constraint failed/,
+      (err: unknown) => {
+        const error = err as Error & { code?: string; errcode?: number };
+        return (
+          error.code === "ERR_SQLITE_ERROR" &&
+          (error.errcode === 787 || /FOREIGN KEY constraint failed/.test(error.message))
+        );
       },
     );
 
@@ -143,8 +155,12 @@ describe("Multi-tenant Schema Migrations", () => {
           VALUES ('tok-2', 'usr_default', 'unique-token-hash-1', 'Duplicate Token');
         `).run();
       },
-      {
-        message: /UNIQUE constraint failed: user_tokens\.token_hash/,
+      (err: unknown) => {
+        const error = err as Error & { code?: string; errcode?: number };
+        return (
+          error.code === "ERR_SQLITE_ERROR" &&
+          (error.errcode === 2067 || /UNIQUE constraint failed/.test(error.message))
+        );
       },
     );
 

@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS user_tokens (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TABLE IF EXISTS transactions_new;
+
 CREATE TABLE transactions_new (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL DEFAULT 'usr_default' REFERENCES users(id) ON DELETE CASCADE,
@@ -63,4 +65,5 @@ ALTER TABLE transactions_new RENAME TO transactions;
 CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_date_created_at ON transactions(date DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_merchant ON transactions(merchant);
+CREATE INDEX IF NOT EXISTS idx_user_tokens_user_id ON user_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_tokens_lookup ON user_tokens(token_hash, revoked_at);
