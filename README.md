@@ -94,8 +94,12 @@ For local development with Cloudflare Pages Functions, configure this variable i
    ```bash
    just dev
    ```
+   To access the development server from other devices on your local network (for example, a mobile phone):
+   ```bash
+   just dev-network
+   ```
 
-5. Open `http://localhost:8788` in your browser.
+5. Open `http://localhost:8788` in your browser (or your local network IP when using `just dev-network`).
 
 ## Documentation
  

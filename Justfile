@@ -42,3 +42,10 @@ build:
 # Build static assets and start Cloudflare Pages local development server
 dev: build
     pnpm wrangler pages dev ./dist
+
+# Build static assets and start development server accessible across local network
+dev-network: build
+    pnpm wrangler pages dev ./dist --ip 0.0.0.0
+
+alias dev-host := dev-network
+
