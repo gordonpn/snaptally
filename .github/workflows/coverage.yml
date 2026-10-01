@@ -39,6 +39,14 @@ jobs:
       - name: Run tests with coverage
         run: pnpm run test:coverage
 
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage/lcov.info
+          fail_ci_if_error: false
+          slug: gordonpn/snaptally
+
       - name: Report code coverage
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         uses: zgosalvez/github-actions-report-lcov@v4
