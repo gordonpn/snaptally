@@ -283,7 +283,7 @@ describe("intakeForm Token Persistence (Scenario 3)", () => {
     assert.strictEqual(form.hasToken, true);
   });
 
-  it("removes token from localStorage and resets merchants, cards, and transactions when empty string is saved", () => {
+  it("removes token from localStorage and resets merchants and transactions while preserving cards", () => {
     mockStorage.setItem(TOKEN_STORAGE_KEY, "existing-token");
     mockStorage.setItem(CARDS_STORAGE_KEY, JSON.stringify(["Amex Gold"]));
     const form = intakeForm();
@@ -313,14 +313,13 @@ describe("intakeForm Token Persistence (Scenario 3)", () => {
 
     assert.strictEqual(form.token, "");
     assert.strictEqual(mockStorage.getItem(TOKEN_STORAGE_KEY), null);
-    assert.strictEqual(mockStorage.getItem(CARDS_STORAGE_KEY), null);
+    assert.strictEqual(mockStorage.getItem(CARDS_STORAGE_KEY), JSON.stringify(["Amex Gold"]));
     assert.strictEqual(form.hasToken, false);
     assert.deepStrictEqual(form.frequentMerchants, DEFAULT_FREQUENT_MERCHANTS);
     assert.deepStrictEqual(form.recentTransactions, []);
-    assert.deepStrictEqual(form.cards, []);
-    assert.strictEqual(form.card, "");
-    assert.strictEqual(form.isCustomCard, true);
-    assert.strictEqual(form.customCardInput, "");
+    assert.deepStrictEqual(form.cards, ["Amex Gold"]);
+    assert.strictEqual(form.card, "Amex Gold");
+    assert.strictEqual(form.isCustomCard, false);
   });
 
   it("cancels settings without saving when closeSettings is called", () => {
@@ -504,6 +503,52 @@ describe("intakeForm Recent Transactions Feed (Scenario 4)", () => {
         mockStorage.getItem(CARDS_STORAGE_KEY),
         JSON.stringify(["Chase Sapphire", "Amex Gold"]),
       );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("preserves active custom card mode during background refresh", async () => {
+    mockStorage.setItem(TOKEN_STORAGE_KEY, "valid-token");
+    const form = intakeForm();
+    form.token = "valid-token";
+    form.cards = ["Chase Sapphire"];
+    form.card = "Chase Sapphire";
+    form.toggleCustomCard();
+    assert.strictEqual(form.isCustomCard, true);
+    assert.strictEqual(form.autoCustomCard, false);
+    assert.strictEqual(form.customCardInput, "");
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({
+          transactions: [
+            {
+              id: "tx-1",
+              date: "2026-09-30",
+              card: "Amex Gold",
+              parent_bucket: "Guilt-Free",
+              subcategory: "Dining",
+              merchant: "Dig",
+              gross_amount: 15.0,
+              reimbursement: 0.0,
+              net_spend: 15.0,
+              created_at: "2026-09-30 09:00:00",
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      await form.loadRecentTransactions();
+      assert.strictEqual(form.isCustomCard, true);
+      assert.deepStrictEqual(form.cards, ["Chase Sapphire", "Amex Gold"]);
     } finally {
       globalThis.fetch = originalFetch;
     }

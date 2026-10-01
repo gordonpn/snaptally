@@ -40,6 +40,7 @@ export function intakeForm() {
     card: "",
     isCustomCard: false,
     customCardInput: "",
+    autoCustomCard: false,
 
     // Bucket and subcategory selection
     buckets: Object.keys(BUCKET_SUBCATEGORIES),
@@ -137,10 +138,12 @@ export function intakeForm() {
     selectCard(card: string): void {
       this.card = card;
       this.isCustomCard = false;
+      this.autoCustomCard = false;
     },
 
     toggleCustomCard(): void {
       this.isCustomCard = !this.isCustomCard;
+      this.autoCustomCard = false;
       if (this.isCustomCard) {
         if (this.customCardInput.trim().length > 0) {
           this.card = this.customCardInput.trim();
@@ -241,17 +244,6 @@ export function intakeForm() {
       } else {
         this.frequentMerchants = [...DEFAULT_FREQUENT_MERCHANTS];
         this.recentTransactions = [];
-        this.cards = [];
-        this.card = "";
-        this.isCustomCard = true;
-        this.customCardInput = "";
-        try {
-          if (typeof localStorage !== "undefined") {
-            localStorage.removeItem(CARDS_STORAGE_KEY);
-          }
-        } catch {
-          // Storage restricted or unavailable
-        }
       }
     },
 
@@ -333,8 +325,9 @@ export function intakeForm() {
               }
             }
             this.cards = merged;
-            if (!this.customCardInput.trim()) {
+            if (this.autoCustomCard) {
               this.isCustomCard = false;
+              this.autoCustomCard = false;
             }
             if (!this.isCustomCard && (!this.card || !this.cards.includes(this.card))) {
               this.card = this.cards[0];
@@ -375,6 +368,7 @@ export function intakeForm() {
       }
       if (this.cards.length === 0) {
         this.isCustomCard = true;
+        this.autoCustomCard = true;
       }
       if (this.hasToken) {
         this.loadFrequentMerchants();
@@ -452,6 +446,7 @@ export function intakeForm() {
               this.persistCards();
             }
             this.isCustomCard = false;
+            this.autoCustomCard = false;
             this.customCardInput = "";
             this.card = trimmedCard;
           }
