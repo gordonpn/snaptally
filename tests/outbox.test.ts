@@ -127,8 +127,9 @@ describe("Background Sync Manager", () => {
       globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
         const urlStr = String(url);
         if (urlStr.includes("/api/transactions") && init?.method === "POST") {
-          const body = JSON.parse(String(init.body)) as { merchant: string };
+          const body = JSON.parse(String(init.body)) as { merchant: string; id: string };
           syncedIds.push(body.merchant);
+          assert.strictEqual(body.id, `tx-${syncedIds.length}`);
           return new Response(JSON.stringify({ ok: true, id: `server-${syncedIds.length}` }), {
             status: 201,
             headers: { "Content-Type": "application/json" },
@@ -296,6 +297,53 @@ describe("Background Sync Manager", () => {
       const remaining = await getOutbox();
       assert.strictEqual(remaining.length, 1);
       assert.strictEqual(remaining[0].retry_count, 1);
+      assert.ok(remaining[0].next_retry_at !== undefined);
+      assert.ok((remaining[0].next_retry_at ?? 0) > Date.now() - 1000);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("applies exponential backoff schedule and skips queued items until backoff window expires unless forced", async () => {
+    const item: OutboxItem = {
+      id: "tx-backoff",
+      date: "2026-10-02",
+      card: "Visa",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Throttled",
+      gross_amount: 12,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+      retry_count: 2,
+      next_retry_at: Date.now() + 10000, // 10 seconds in the future
+    };
+
+    await saveOutboxItem(item);
+
+    const originalFetch = globalThis.fetch;
+    let fetchAttempts = 0;
+    try {
+      globalThis.fetch = (async () => {
+        fetchAttempts++;
+        return new Response(JSON.stringify({ ok: true, id: "srv-backoff" }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }) as typeof fetch;
+
+      // 1. Sync without force: should skip item because next_retry_at is in future
+      const skippedResult = await syncOutbox({ token: "test-token" });
+      assert.strictEqual(skippedResult.syncedCount, 0);
+      assert.strictEqual(fetchAttempts, 0);
+
+      // 2. Sync with force: should ignore backoff and attempt sync immediately
+      const forcedResult = await syncOutbox({ token: "test-token", force: true });
+      assert.strictEqual(forcedResult.syncedCount, 1);
+      assert.strictEqual(fetchAttempts, 1);
+
+      const remaining = await getOutbox();
+      assert.strictEqual(remaining.length, 0);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -456,7 +504,7 @@ describe("Optimistic Intake Form & Merchant Autocomplete (Scenario 1 & 2)", () =
         });
       }) as typeof fetch;
 
-      const syncResult = await form.syncPendingOutbox();
+      const syncResult = await form.syncPendingOutbox(true);
       assert.strictEqual(syncResult.syncedCount, 1);
 
       // Outbox is now empty

@@ -111,6 +111,16 @@ describe("isValidPayload", () => {
     assert.strictEqual(isValidPayload({ ...validPayload, subcategory: "  " }), false);
     assert.strictEqual(isValidPayload({ ...validPayload, merchant: "" }), false);
   });
+
+  it("accepts a payload with a valid custom id", () => {
+    assert.strictEqual(isValidPayload({ ...validPayload, id: "tx-custom-123" }), true);
+  });
+
+  it("rejects invalid id fields when provided", () => {
+    assert.strictEqual(isValidPayload({ ...validPayload, id: "" }), false);
+    assert.strictEqual(isValidPayload({ ...validPayload, id: "   " }), false);
+    assert.strictEqual(isValidPayload({ ...validPayload, id: 12345 }), false);
+  });
 });
 
 describe("normalizeText", () => {
@@ -498,6 +508,56 @@ describe("handlePost", () => {
       18.0,
       0.0,
     ]);
+  });
+
+  it("uses custom id provided in payload for idempotent insertion", async () => {
+    let boundArgs: unknown[] = [];
+
+    const mockDb = {
+      prepare(query: string) {
+        if (query === selectDistinctMerchantsQuery) {
+          return {
+            async all() {
+              return { results: [] };
+            },
+          };
+        }
+        return {
+          bind(...args: unknown[]) {
+            boundArgs = args;
+            return {
+              async run() {
+                return { success: true };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${validToken}`,
+      },
+      body: JSON.stringify({
+        id: "tx-idempotent-42",
+        date: "2026-09-25",
+        card: "Amex Gold",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
+        merchant: "George Howell",
+        gross_amount: 15.0,
+      }),
+    });
+
+    const response = await handlePost(request, mockDb, dummyQuery, validToken);
+    assert.strictEqual(response.status, 201);
+
+    const data = (await response.json()) as { ok: boolean; id: string };
+    assert.strictEqual(data.id, "tx-idempotent-42");
+    assert.strictEqual(boundArgs[0], "tx-idempotent-42");
   });
 
   it("rejects malformed JSON with HTTP 400 when authenticated", async () => {
@@ -1155,6 +1215,28 @@ describe("Recent Transactions SQLite Query Integration", () => {
     assert.strictEqual(rows[0].date, "2026-09-28");
     assert.strictEqual(rows[1].date, "2026-09-25");
     assert.strictEqual(rows[2].date, "2026-09-25");
+
+    db.close();
+  });
+
+  it("ignores duplicate id insertions via ON CONFLICT DO NOTHING", () => {
+    const initSql = readFileSync(resolve("migrations/0000_init.sql"), "utf-8");
+    const migrationSql = readFileSync(resolve("migrations/0001_expanded_schema.sql"), "utf-8");
+
+    const db = new DatabaseSync(":memory:");
+    db.exec(initSql);
+    db.exec(migrationSql);
+
+    const insertStmt = db.prepare(insertTransactionQuery);
+    insertStmt.run("tx-dup-1", "2026-09-20", "Amex", "Food", "Groceries", "Trader Joe", 20, 0);
+    // Duplicate run with the same id should not throw and should be ignored
+    insertStmt.run("tx-dup-1", "2026-09-20", "Amex", "Food", "Groceries", "Trader Joe", 20, 0);
+
+    const countStmt = db.prepare(
+      "SELECT COUNT(*) AS total FROM transactions WHERE id = 'tx-dup-1'",
+    );
+    const row = countStmt.get() as { total: number };
+    assert.strictEqual(row.total, 1);
 
     db.close();
   });

@@ -50,7 +50,7 @@ import Layout from "../layouts/Layout.astro";
           x-show="outboxCount > 0"
           x-transition
           class="badge badge-warning badge-sm gap-1 font-mono cursor-pointer min-h-[28px] px-2"
-          @click="syncPendingOutbox()"
+          @click="syncPendingOutbox(true)"
           aria-label="Pending offline transactions"
           title="Pending offline transactions. Click to sync."
         >

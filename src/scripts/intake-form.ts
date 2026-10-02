@@ -377,11 +377,12 @@ export function intakeForm() {
     },
 
     // Background sync
-    async syncPendingOutbox(): Promise<SyncResult> {
+    async syncPendingOutbox(force = false): Promise<SyncResult> {
       this.isSyncing = true;
       try {
         const result = await syncOutbox({
           token: this.token,
+          force,
           onItemSynced: (item) => {
             // Prepend newly synced record to local recent feed
             const newTx: RecentTransaction = {
@@ -475,8 +476,8 @@ export function intakeForm() {
         this.outboxCount = count;
       });
 
-      setupSyncListeners(() => {
-        this.syncPendingOutbox();
+      setupSyncListeners((force) => {
+        this.syncPendingOutbox(force);
       });
 
       if (this.hasToken) {
