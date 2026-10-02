@@ -846,7 +846,7 @@ describe("intakeForm Submission Validation and Error Handling", () => {
     }
   });
 
-  it("handles network failure gracefully", async () => {
+  it("handles network failure by optimistically queueing in outbox", async () => {
     const form = intakeForm();
     form.pressDigit(1);
     form.pressDigit(5);
@@ -861,9 +861,11 @@ describe("intakeForm Submission Validation and Error Handling", () => {
 
     try {
       const result = await form.submitTransaction();
-      assert.strictEqual(result, false);
-      assert.strictEqual(form.isError, true);
-      assert.strictEqual(form.statusMessage, "Network error: Unable to reach endpoint");
+      assert.strictEqual(result, true);
+      assert.strictEqual(form.isError, false);
+      assert.strictEqual(form.statusMessage, "Saved $1.50 at Trader Joe's");
+      assert.strictEqual(form.amountCents, 0);
+      assert.strictEqual(form.outboxCount, 1);
     } finally {
       globalThis.fetch = originalFetch;
     }
