@@ -44,8 +44,20 @@ import Layout from "../layouts/Layout.astro";
         </button>
       </div>
 
-      <!-- Actions: Recent & Settings -->
+      <!-- Actions: Recent, Outbox & Settings -->
       <div class="flex items-center gap-2">
+        <button
+          type="button"
+          x-show="outboxCount > 0"
+          x-transition
+          class="badge badge-warning badge-sm gap-1 font-mono cursor-pointer min-h-[28px] px-2"
+          @click="syncPendingOutbox()"
+          aria-label="Pending offline transactions"
+          title="Pending offline transactions. Click to sync."
+        >
+          <span x-show="isSyncing" class="loading loading-spinner loading-xs"></span>
+          <span x-text="outboxCount"></span>
+        </button>
         <button
           type="button"
           class="w-11 h-11 rounded-full neu-raised-sm neu-pressed flex items-center justify-center text-neu-text transition-all min-h-[44px] min-w-[44px]"
@@ -121,11 +133,17 @@ import Layout from "../layouts/Layout.astro";
         <div x-show="isCustomMerchant" x-transition>
           <input
             type="text"
+            list="merchants-list"
             placeholder="Type merchant name..."
             class="neu-inset w-full rounded-xl px-3 py-2 text-base text-neu-text focus:outline-none focus:ring-2 focus:ring-primary/40 mt-1"
             x-model="customMerchantInput"
             @input="updateCustomMerchant($event.target.value)"
           />
+          <datalist id="merchants-list">
+            <template x-for="m in allMerchants" :key="m">
+              <option :value="m" x-text="m"></option>
+            </template>
+          </datalist>
         </div>
       </div>
 
