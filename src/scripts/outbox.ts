@@ -12,10 +12,12 @@ export interface OutboxItem {
   reimbursement: number;
   created_at: string;
   retry_count?: number;
+  next_retry_at?: number;
 }
 
 export interface SyncOptions {
   token?: string;
+  force?: boolean;
   onItemSynced?: (item: OutboxItem, serverResponse?: unknown) => void;
   onStatusChange?: (isSyncing: boolean, pendingCount: number) => void;
 }
@@ -203,7 +205,12 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
     options.onStatusChange?.(true, items.length);
 
     for (const item of items) {
+      if (!options.force && item.next_retry_at && Date.now() < item.next_retry_at) {
+        continue;
+      }
+
       const payload = {
+        id: item.id,
         date: item.date,
         card: item.card,
         parent_bucket: item.parent_bucket,
@@ -250,14 +257,20 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
           continue;
         }
 
-        // Server error or unexpected status: increment retry count and stop current flush
-        item.retry_count = (item.retry_count ?? 0) + 1;
+        // Server error or unexpected status: apply exponential backoff (1s, 2s, 4s, capped at 60s)
+        const retryCount = (item.retry_count ?? 0) + 1;
+        item.retry_count = retryCount;
+        const backoffMs = Math.min(60000, 1000 * Math.pow(2, retryCount - 1));
+        item.next_retry_at = Date.now() + backoffMs;
         await saveOutboxItem(item);
         failedCount++;
         break;
       } catch {
-        // Network error / offline: retain item in outbox with incremented retry count
-        item.retry_count = (item.retry_count ?? 0) + 1;
+        // Network error / offline: apply exponential backoff (1s, 2s, 4s, capped at 60s)
+        const retryCount = (item.retry_count ?? 0) + 1;
+        item.retry_count = retryCount;
+        const backoffMs = Math.min(60000, 1000 * Math.pow(2, retryCount - 1));
+        item.next_retry_at = Date.now() + backoffMs;
         await saveOutboxItem(item);
         failedCount++;
         break;
@@ -275,15 +288,15 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
 /**
  * Registers window event listeners for online and visibilitychange events to trigger sync.
  */
-export function setupSyncListeners(triggerSync: () => void): () => void {
+export function setupSyncListeners(triggerSync: (force?: boolean) => void): () => void {
   if (typeof window === "undefined") {
     return () => {};
   }
 
-  const handleOnline = () => triggerSync();
+  const handleOnline = () => triggerSync(true);
   const handleVisibility = () => {
     if (document.visibilityState === "visible") {
-      triggerSync();
+      triggerSync(false);
     }
   };
 
