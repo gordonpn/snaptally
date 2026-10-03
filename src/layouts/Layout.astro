@@ -9,10 +9,13 @@ const { title = "SnapTally" } = Astro.props;
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" class="h-dvh overflow-hidden overscroll-none select-none">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <title>{title}</title>
 
     <link rel="manifest" href="/manifest.json" />
@@ -27,7 +30,7 @@ const { title = "SnapTally" } = Astro.props;
     <meta name="theme-color" content="#e0e5ec" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#1e232a" media="(prefers-color-scheme: dark)" />
   </head>
-  <body class="h-dvh overflow-hidden neu-surface antialiased">
+  <body class="h-dvh overflow-hidden overscroll-none neu-surface antialiased">
     <slot />
     <script src="../scripts/app.ts"></script>
   </body>

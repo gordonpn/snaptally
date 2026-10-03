@@ -13,6 +13,34 @@
   }
 }
 
+@utility scroll-mask-right {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    black 0%,
+    black calc(100% - 32px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(to right, black 0%, black calc(100% - 32px), transparent 100%);
+}
+
+html,
+body {
+  touch-action: manipulation;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+button,
+[role="button"],
+.neu-key,
+.neu-pressed {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
 :root,
 [data-theme="light"] {
   /* DaisyUI theme overrides */
@@ -23,15 +51,14 @@
   --color-accent: #0d9488;
   --color-accent-content: #ffffff;
 
-  /* Neumorphic surface and shadow tokens */
+  /* Neumorphic surface and softened shadow tokens */
   --neu-surface: #e0e5ec;
   --neu-surface-gradient-start: #f0f5fc;
   --neu-surface-gradient-end: #d0d5dc;
-  --neu-shadow-dark: #a3b1c6;
-  --neu-shadow-light: #ffffff;
-  --neu-inset-dark: rgba(163, 177, 198, 0.75);
-  --neu-inset-light: rgba(255, 255, 255, 0.95);
-  --neu-border: rgba(255, 255, 255, 0.6);
+  --neu-shadow-dark: rgba(163, 177, 198, 0.45);
+  --neu-shadow-light: rgba(255, 255, 255, 0.85);
+  --neu-inset-dark: rgba(163, 177, 198, 0.55);
+  --neu-inset-light: rgba(255, 255, 255, 0.9);
   --neu-text: #1e293b;
   --neu-text-muted: #64748b;
 }
@@ -48,11 +75,10 @@
     --neu-surface: #1e232a;
     --neu-surface-gradient-start: #242a32;
     --neu-surface-gradient-end: #181c22;
-    --neu-shadow-dark: #121519;
-    --neu-shadow-light: #2a313b;
-    --neu-inset-dark: rgba(18, 21, 25, 0.85);
-    --neu-inset-light: rgba(42, 49, 59, 0.7);
-    --neu-border: rgba(255, 255, 255, 0.05);
+    --neu-shadow-dark: rgba(0, 0, 0, 0.5);
+    --neu-shadow-light: rgba(255, 255, 255, 0.04);
+    --neu-inset-dark: rgba(0, 0, 0, 0.55);
+    --neu-inset-light: rgba(255, 255, 255, 0.03);
     --neu-text: #f1f5f9;
     --neu-text-muted: #94a3b8;
   }
@@ -69,11 +95,10 @@
   --neu-surface: #1e232a;
   --neu-surface-gradient-start: #242a32;
   --neu-surface-gradient-end: #181c22;
-  --neu-shadow-dark: #121519;
-  --neu-shadow-light: #2a313b;
-  --neu-inset-dark: rgba(18, 21, 25, 0.85);
-  --neu-inset-light: rgba(42, 49, 59, 0.7);
-  --neu-border: rgba(255, 255, 255, 0.05);
+  --neu-shadow-dark: rgba(0, 0, 0, 0.5);
+  --neu-shadow-light: rgba(255, 255, 255, 0.04);
+  --neu-inset-dark: rgba(0, 0, 0, 0.55);
+  --neu-inset-light: rgba(255, 255, 255, 0.03);
   --neu-text: #f1f5f9;
   --neu-text-muted: #94a3b8;
 }
@@ -90,34 +115,30 @@
 
 @utility neu-raised {
   background-color: var(--neu-surface);
-  border: 1px solid var(--neu-border);
   box-shadow:
-    6px 6px 12px var(--neu-shadow-dark),
-    -6px -6px 12px var(--neu-shadow-light);
+    4px 4px 10px var(--neu-shadow-dark),
+    -4px -4px 10px var(--neu-shadow-light);
 }
 
 @utility neu-raised-sm {
   background-color: var(--neu-surface);
-  border: 1px solid var(--neu-border);
   box-shadow:
-    3px 3px 6px var(--neu-shadow-dark),
-    -3px -3px 6px var(--neu-shadow-light);
+    2px 2px 5px var(--neu-shadow-dark),
+    -2px -2px 5px var(--neu-shadow-light);
 }
 
 @utility neu-inset {
   background-color: var(--neu-surface);
-  border: 1px solid var(--neu-border);
   box-shadow:
-    inset 4px 4px 8px var(--neu-inset-dark),
-    inset -4px -4px 8px var(--neu-inset-light);
+    inset 3px 3px 6px var(--neu-inset-dark),
+    inset -3px -3px 6px var(--neu-inset-light);
 }
 
 @utility neu-inset-sm {
   background-color: var(--neu-surface);
-  border: 1px solid var(--neu-border);
   box-shadow:
-    inset 2px 2px 5px var(--neu-inset-dark),
-    inset -2px -2px 5px var(--neu-inset-light);
+    inset 1.5px 1.5px 3px var(--neu-inset-dark),
+    inset -1.5px -1.5px 3px var(--neu-inset-light);
 }
 
 @utility neu-convex {
@@ -126,27 +147,28 @@
     var(--neu-surface-gradient-start),
     var(--neu-surface-gradient-end)
   );
-  border: 1px solid var(--neu-border);
   box-shadow:
-    6px 6px 14px var(--neu-shadow-dark),
-    -6px -6px 14px var(--neu-shadow-light);
+    4px 4px 10px var(--neu-shadow-dark),
+    -4px -4px 10px var(--neu-shadow-light);
 }
 
 @utility neu-key {
   cursor: pointer;
+  touch-action: manipulation;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   background-color: var(--neu-surface);
-  border: 1px solid var(--neu-border);
   box-shadow:
-    5px 5px 10px var(--neu-shadow-dark),
-    -5px -5px 10px var(--neu-shadow-light);
+    3px 3px 6px var(--neu-shadow-dark),
+    -3px -3px 6px var(--neu-shadow-light);
   transition:
     box-shadow 0.1s ease,
     transform 0.1s ease;
   &:active {
     box-shadow:
-      inset 4px 4px 8px var(--neu-inset-dark),
-      inset -4px -4px 8px var(--neu-inset-light);
+      inset 2px 2px 5px var(--neu-inset-dark),
+      inset -2px -2px 5px var(--neu-inset-light);
     transform: scale(0.97);
   }
   &:disabled {
@@ -157,13 +179,14 @@
 
 @utility neu-pressed {
   cursor: pointer;
+  touch-action: manipulation;
   transition:
     box-shadow 0.1s ease,
     transform 0.1s ease;
   &:active {
     box-shadow:
-      inset 3px 3px 6px var(--neu-inset-dark),
-      inset -3px -3px 6px var(--neu-inset-light);
+      inset 2px 2px 5px var(--neu-inset-dark),
+      inset -2px -2px 5px var(--neu-inset-light);
     transform: scale(0.98);
   }
   &:disabled {
