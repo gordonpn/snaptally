@@ -85,7 +85,7 @@ import Layout from "../layouts/Layout.astro";
     <section class="w-full py-1 sm:py-2 select-none">
       <div class="neu-inset rounded-2xl py-3 px-4 flex flex-col items-center justify-center transition-all duration-75">
         <div
-          class="text-5xl sm:text-6xl font-mono font-bold tracking-tight text-primary drop-shadow-sm"
+          class="text-5xl sm:text-6xl font-mono font-bold tracking-tight text-neu-text drop-shadow-sm"
           x-text="formattedAmount"
           aria-live="off"
         >
@@ -98,7 +98,7 @@ import Layout from "../layouts/Layout.astro";
     <section class="space-y-2 text-xs sm:text-sm">
       <!-- Merchant Chips -->
       <div class="space-y-1">
-        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-2.5 px-2.5 py-1.5">
           <template x-for="m in frequentMerchants" :key="m">
             <button
               type="button"
@@ -129,7 +129,7 @@ import Layout from "../layouts/Layout.astro";
       </div>
 
       <!-- Parent Bucket Chips -->
-      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-2.5 px-2.5 py-1.5">
         <template x-for="b in buckets" :key="b">
           <button
             type="button"
@@ -142,7 +142,7 @@ import Layout from "../layouts/Layout.astro";
       </div>
 
       <!-- Dynamic Subcategory Chips -->
-      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-2.5 px-2.5 py-1.5">
         <template x-for="s in subcategories" :key="s">
           <button
             type="button"
@@ -156,7 +156,7 @@ import Layout from "../layouts/Layout.astro";
 
       <!-- Card Selection Chips -->
       <div class="space-y-1">
-        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-2.5 px-2.5 py-1.5">
           <span class="text-neu-text-muted flex items-center mr-0.5">
             <IconCreditCard class="w-4 h-4" />
           </span>
