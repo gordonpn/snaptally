@@ -905,6 +905,45 @@ describe("intakeForm Submission Validation and Error Handling", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("blocks submission when loading is already in progress", async () => {
+    const form = intakeForm();
+    form.amountCents = 1500;
+    form.card = "Amex Gold";
+    form.merchant = "Trader Joe's";
+    form.loading = true;
+
+    const result = await form.submitTransaction();
+    assert.strictEqual(result, false);
+    assert.strictEqual(form.outboxCount, 0);
+  });
+
+  it("blocks rapid concurrent submissions via synchronous loading guard", async () => {
+    const form = intakeForm();
+    form.amountCents = 1500;
+    form.card = "Amex Gold";
+    form.merchant = "Trader Joe's";
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(JSON.stringify({ ok: true, id: "tx-rapid" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const firstSubmit = form.submitTransaction();
+      const secondSubmit = form.submitTransaction();
+
+      const [res1, res2] = await Promise.all([firstSubmit, secondSubmit]);
+      assert.strictEqual(res1, true);
+      assert.strictEqual(res2, false);
+      assert.strictEqual(form.loading, false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 describe("intakeForm Card Lifecycle and Storage", () => {
