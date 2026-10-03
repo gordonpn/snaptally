@@ -13,13 +13,17 @@
   }
 }
 
-:root {
+:root,
+[data-theme="light"] {
+  /* DaisyUI theme overrides */
   --color-primary: #2563eb;
   --color-primary-content: #ffffff;
   --color-secondary: #059669;
   --color-secondary-content: #ffffff;
   --color-accent: #0d9488;
   --color-accent-content: #ffffff;
+
+  /* Neumorphic surface and shadow tokens */
   --neu-surface: #e0e5ec;
   --neu-surface-gradient-start: #f0f5fc;
   --neu-surface-gradient-end: #d0d5dc;
@@ -30,8 +34,6 @@
   --neu-border: rgba(255, 255, 255, 0.6);
   --neu-text: #1e293b;
   --neu-text-muted: #64748b;
-  --neu-accent: #2563eb;
-  --neu-accent-glow: rgba(37, 99, 235, 0.35);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -42,6 +44,7 @@
     --color-secondary-content: #ffffff;
     --color-accent: #14b8a6;
     --color-accent-content: #ffffff;
+
     --neu-surface: #1e232a;
     --neu-surface-gradient-start: #242a32;
     --neu-surface-gradient-end: #181c22;
@@ -52,8 +55,6 @@
     --neu-border: rgba(255, 255, 255, 0.05);
     --neu-text: #f1f5f9;
     --neu-text-muted: #94a3b8;
-    --neu-accent: #3b82f6;
-    --neu-accent-glow: rgba(59, 130, 246, 0.3);
   }
 }
 
@@ -64,6 +65,7 @@
   --color-secondary-content: #ffffff;
   --color-accent: #14b8a6;
   --color-accent-content: #ffffff;
+
   --neu-surface: #1e232a;
   --neu-surface-gradient-start: #242a32;
   --neu-surface-gradient-end: #181c22;
@@ -74,29 +76,11 @@
   --neu-border: rgba(255, 255, 255, 0.05);
   --neu-text: #f1f5f9;
   --neu-text-muted: #94a3b8;
-  --neu-accent: #3b82f6;
-  --neu-accent-glow: rgba(59, 130, 246, 0.3);
 }
 
-[data-theme="light"] {
-  --color-primary: #2563eb;
-  --color-primary-content: #ffffff;
-  --color-secondary: #059669;
-  --color-secondary-content: #ffffff;
-  --color-accent: #0d9488;
-  --color-accent-content: #ffffff;
-  --neu-surface: #e0e5ec;
-  --neu-surface-gradient-start: #f0f5fc;
-  --neu-surface-gradient-end: #d0d5dc;
-  --neu-shadow-dark: #a3b1c6;
-  --neu-shadow-light: #ffffff;
-  --neu-inset-dark: rgba(163, 177, 198, 0.75);
-  --neu-inset-light: rgba(255, 255, 255, 0.95);
-  --neu-border: rgba(255, 255, 255, 0.6);
-  --neu-text: #1e293b;
-  --neu-text-muted: #64748b;
-  --neu-accent: #2563eb;
-  --neu-accent-glow: rgba(37, 99, 235, 0.35);
+@theme inline {
+  --color-neu-text: var(--neu-text);
+  --color-neu-text-muted: var(--neu-text-muted);
 }
 
 @utility neu-surface {
@@ -149,27 +133,51 @@
 }
 
 @utility neu-key {
+  cursor: pointer;
+  user-select: none;
   background-color: var(--neu-surface);
   border: 1px solid var(--neu-border);
-  color: var(--neu-text);
   box-shadow:
     5px 5px 10px var(--neu-shadow-dark),
     -5px -5px 10px var(--neu-shadow-light);
-  transition: all 0.1s ease;
+  transition:
+    box-shadow 0.1s ease,
+    transform 0.1s ease;
   &:active {
     box-shadow:
       inset 4px 4px 8px var(--neu-inset-dark),
       inset -4px -4px 8px var(--neu-inset-light);
     transform: scale(0.97);
   }
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
 }
 
 @utility neu-pressed {
-  transition: all 0.1s ease;
+  cursor: pointer;
+  transition:
+    box-shadow 0.1s ease,
+    transform 0.1s ease;
   &:active {
     box-shadow:
       inset 3px 3px 6px var(--neu-inset-dark),
       inset -3px -3px 6px var(--neu-inset-light);
     transform: scale(0.98);
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .neu-key,
+  .neu-pressed {
+    transition: none;
+    &:active {
+      transform: none;
+    }
   }
 }

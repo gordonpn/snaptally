@@ -38,7 +38,7 @@ import Layout from "../layouts/Layout.astro";
         <button
           type="button"
           class="neu-raised-sm rounded-full px-3 py-1.5 min-h-[44px] inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium pointer-events-none transition-all"
-          :class="isBackfill ? 'text-warning font-semibold ring-1 ring-warning/50' : 'text-neu-text'"
+          :class="isBackfill ? 'text-warning font-semibold outline outline-1 outline-warning/50' : 'text-neu-text'"
         >
           <IconCalendar class="w-4 h-4 text-primary" />
           <span x-text="isToday ? 'Today' : date"></span>
@@ -103,7 +103,7 @@ import Layout from "../layouts/Layout.astro";
             <button
               type="button"
               class="neu-pressed rounded-full px-3.5 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
-              :class="merchant === m && !isCustomMerchant ? 'neu-inset-sm font-bold text-primary ring-1 ring-primary/40' : 'neu-raised-sm font-medium text-neu-text'"
+              :class="merchant === m && !isCustomMerchant ? 'neu-inset-sm font-bold text-primary outline outline-1 outline-primary/40' : 'neu-raised-sm font-medium text-neu-text'"
               @click="selectMerchant(m)"
               x-text="m"
             ></button>
@@ -111,7 +111,7 @@ import Layout from "../layouts/Layout.astro";
           <button
             type="button"
             class="neu-pressed rounded-full px-3.5 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
-            :class="isCustomMerchant ? 'neu-inset-sm font-bold text-primary ring-1 ring-primary/40' : 'neu-raised-sm font-medium text-neu-text'"
+            :class="isCustomMerchant ? 'neu-inset-sm font-bold text-primary outline outline-1 outline-primary/40' : 'neu-raised-sm font-medium text-neu-text'"
             @click="toggleCustomMerchant()"
           >
             Other...
@@ -134,7 +134,7 @@ import Layout from "../layouts/Layout.astro";
           <button
             type="button"
             class="neu-pressed rounded-full px-3.5 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
-            :class="parentBucket === b ? 'neu-inset-sm font-bold text-secondary ring-1 ring-secondary/40' : 'neu-raised-sm font-medium text-neu-text'"
+            :class="parentBucket === b ? 'neu-inset-sm font-bold text-secondary outline outline-1 outline-secondary/40' : 'neu-raised-sm font-medium text-neu-text'"
             @click="selectBucket(b)"
             x-text="b"
           ></button>
@@ -147,7 +147,7 @@ import Layout from "../layouts/Layout.astro";
           <button
             type="button"
             class="neu-pressed rounded-full px-3.5 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
-            :class="subcategory === s ? 'neu-inset-sm font-bold text-accent ring-1 ring-accent/40' : 'neu-raised-sm font-medium text-neu-text'"
+            :class="subcategory === s ? 'neu-inset-sm font-bold text-accent outline outline-1 outline-accent/40' : 'neu-raised-sm font-medium text-neu-text'"
             @click="selectSubcategory(s)"
             x-text="s"
           ></button>
@@ -164,7 +164,7 @@ import Layout from "../layouts/Layout.astro";
             <button
               type="button"
               class="neu-pressed rounded-full px-3.5 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
-              :class="card === c && !isCustomCard ? 'neu-inset-sm font-bold text-primary ring-1 ring-primary/40' : 'neu-raised-sm font-medium text-neu-text'"
+              :class="card === c && !isCustomCard ? 'neu-inset-sm font-bold text-primary outline outline-1 outline-primary/40' : 'neu-raised-sm font-medium text-neu-text'"
               @click="selectCard(c)"
               x-text="c"
             ></button>
@@ -172,7 +172,7 @@ import Layout from "../layouts/Layout.astro";
           <button
             type="button"
             class="neu-pressed rounded-full px-3.5 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
-            :class="isCustomCard ? 'neu-inset-sm font-bold text-primary ring-1 ring-primary/40' : 'neu-raised-sm font-medium text-neu-text'"
+            :class="isCustomCard ? 'neu-inset-sm font-bold text-primary outline outline-1 outline-primary/40' : 'neu-raised-sm font-medium text-neu-text'"
             @click="toggleCustomCard()"
           >
             Other...
@@ -310,7 +310,7 @@ import Layout from "../layouts/Layout.astro";
 
     <!-- Settings Modal -->
     <dialog class="modal" :class="{ 'modal-open': isSettingsOpen }">
-      <div class="modal-box p-5 max-w-sm rounded-2xl max-h-[85vh] overflow-y-auto neu-raised border border-base-content/10">
+      <div class="modal-box p-5 max-w-sm rounded-2xl max-h-[85vh] overflow-y-auto neu-raised">
         <h3 class="font-bold text-lg text-neu-text">Settings</h3>
         <p class="text-xs text-neu-text-muted mt-1">
           Configure pre-shared API bearer token stored locally in browser storage.
@@ -340,7 +340,7 @@ import Layout from "../layouts/Layout.astro";
 
     <!-- Recent Transactions Modal -->
     <dialog class="modal" :class="{ 'modal-open': isRecentOpen }">
-      <div class="modal-box p-5 max-w-sm rounded-2xl max-h-[85vh] flex flex-col neu-raised border border-base-content/10">
+      <div class="modal-box p-5 max-w-sm rounded-2xl max-h-[85vh] flex flex-col neu-raised">
         <div class="flex items-center justify-between pb-3 border-b border-base-content/10">
           <h3 class="font-bold text-lg flex items-center gap-2 text-neu-text">
             <IconHistory class="w-5 h-5 text-primary" />
