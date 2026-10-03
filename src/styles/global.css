@@ -53,12 +53,13 @@ button,
 
   /* Neumorphic surface and softened shadow tokens */
   --neu-surface: #e0e5ec;
+  --neu-surface-recessed: #d4d9e2;
   --neu-surface-gradient-start: #f0f5fc;
   --neu-surface-gradient-end: #d0d5dc;
   --neu-shadow-dark: rgba(163, 177, 198, 0.45);
   --neu-shadow-light: rgba(255, 255, 255, 0.85);
-  --neu-inset-dark: rgba(163, 177, 198, 0.55);
-  --neu-inset-light: rgba(255, 255, 255, 0.9);
+  --neu-inset-dark: rgba(0, 0, 0, 0.18);
+  --neu-inset-light: rgba(255, 255, 255, 0.95);
   --neu-text: #1e293b;
   --neu-text-muted: #64748b;
 }
@@ -73,12 +74,13 @@ button,
     --color-accent-content: #ffffff;
 
     --neu-surface: #1e232a;
+    --neu-surface-recessed: #14181d;
     --neu-surface-gradient-start: #242a32;
     --neu-surface-gradient-end: #181c22;
     --neu-shadow-dark: rgba(0, 0, 0, 0.5);
     --neu-shadow-light: rgba(255, 255, 255, 0.04);
-    --neu-inset-dark: rgba(0, 0, 0, 0.55);
-    --neu-inset-light: rgba(255, 255, 255, 0.03);
+    --neu-inset-dark: rgba(0, 0, 0, 0.75);
+    --neu-inset-light: rgba(255, 255, 255, 0.07);
     --neu-text: #f1f5f9;
     --neu-text-muted: #94a3b8;
   }
@@ -93,12 +95,13 @@ button,
   --color-accent-content: #ffffff;
 
   --neu-surface: #1e232a;
+  --neu-surface-recessed: #14181d;
   --neu-surface-gradient-start: #242a32;
   --neu-surface-gradient-end: #181c22;
   --neu-shadow-dark: rgba(0, 0, 0, 0.5);
   --neu-shadow-light: rgba(255, 255, 255, 0.04);
-  --neu-inset-dark: rgba(0, 0, 0, 0.55);
-  --neu-inset-light: rgba(255, 255, 255, 0.03);
+  --neu-inset-dark: rgba(0, 0, 0, 0.75);
+  --neu-inset-light: rgba(255, 255, 255, 0.07);
   --neu-text: #f1f5f9;
   --neu-text-muted: #94a3b8;
 }
@@ -128,17 +131,17 @@ button,
 }
 
 @utility neu-inset {
-  background-color: var(--neu-surface);
+  background-color: var(--neu-surface-recessed);
   box-shadow:
     inset 3px 3px 6px var(--neu-inset-dark),
     inset -3px -3px 6px var(--neu-inset-light);
 }
 
 @utility neu-inset-sm {
-  background-color: var(--neu-surface);
+  background-color: var(--neu-surface-recessed);
   box-shadow:
-    inset 1.5px 1.5px 3px var(--neu-inset-dark),
-    inset -1.5px -1.5px 3px var(--neu-inset-light);
+    inset 2.5px 2.5px 5px var(--neu-inset-dark),
+    inset -2.5px -2.5px 5px var(--neu-inset-light);
 }
 
 @utility neu-convex {
@@ -166,9 +169,10 @@ button,
     box-shadow 0.1s ease,
     transform 0.1s ease;
   &:active {
+    background-color: var(--neu-surface-recessed);
     box-shadow:
-      inset 2px 2px 5px var(--neu-inset-dark),
-      inset -2px -2px 5px var(--neu-inset-light);
+      inset 2.5px 2.5px 5px var(--neu-inset-dark),
+      inset -2.5px -2.5px 5px var(--neu-inset-light);
     transform: scale(0.97);
   }
   &:disabled {
@@ -184,9 +188,10 @@ button,
     box-shadow 0.1s ease,
     transform 0.1s ease;
   &:active {
+    background-color: var(--neu-surface-recessed);
     box-shadow:
-      inset 2px 2px 5px var(--neu-inset-dark),
-      inset -2px -2px 5px var(--neu-inset-light);
+      inset 2.5px 2.5px 5px var(--neu-inset-dark),
+      inset -2.5px -2.5px 5px var(--neu-inset-light);
     transform: scale(0.98);
   }
   &:disabled {
