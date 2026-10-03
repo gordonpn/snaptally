@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   CARDS_STORAGE_KEY,
   DEFAULT_FREQUENT_MERCHANTS,
@@ -7,6 +7,7 @@ import {
   intakeForm,
   TOKEN_STORAGE_KEY,
 } from "../src/scripts/intake-form.ts";
+import { clearOutbox, clearRetryTimer } from "../src/scripts/outbox.ts";
 
 class MockLocalStorage {
   private store: Map<string, string> = new Map();
@@ -27,6 +28,11 @@ class MockLocalStorage {
     this.store.clear();
   }
 }
+
+afterEach(async () => {
+  clearRetryTimer();
+  await clearOutbox();
+});
 
 describe("getTodayDate helper", () => {
   it("returns current local calendar date in YYYY-MM-DD format", () => {
