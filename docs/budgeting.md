@@ -130,3 +130,80 @@ With the dual-scope expansion into both intake and analysis, SnapTally computes 
    $$\text{Current Fund Reserve} = \text{Initial Balance} + \sum \text{Allocations} - \sum \text{Drawdowns}$$
 4. **Income Allocation Comparison:**
    Calculates actual spend percentages against the Conscious Spending Plan benchmarks (50-60% Fixed, 10%+ Investments, 5-10% Savings, 20-35% Guilt-Free).
+
+---
+
+## 6. Credit Card Multiplier and Payment Routing Matrix
+
+To maximize cash flow rewards without cognitive friction at the point of sale, categories map to target payment methods based on reward multipliers:
+
+| Category Bucket | Subcategory | Target Card / Payment Method | Reward Optimization |
+| :--- | :--- | :--- | :--- |
+| **Fixed Essentials** | Rent & Housing | Checking ACH | Zero fee |
+| | Core Utilities | Fidelity Rewards Visa | 2% cash back |
+| | Transit & Commute | Fidelity Rewards Visa / Amex Gold | 2% to 4x points |
+| | Phone & Internet (Net) | Fidelity Rewards Visa | 2% cash back after $50 subsidy |
+| **Variable Essentials** | Groceries & Supermarkets | American Express Gold Card | 4x points (Star Market, H Mart, Trader Joe's) |
+| | Household & Personal Care | Fidelity Rewards Visa | 2% cash back |
+| **Guilt-Free Living** | Restaurants & Dining | American Express Gold Card | 4x points (sit-down dining, social outings) |
+| | Fast Casual & Takeout | American Express Gold Card | 4x points (DoorDash, Grubhub, pickup) |
+| | Cafes & Bakeries | American Express Gold Card | 4x points (espresso, bakeries, coffee beans) |
+| | Climbing & Fitness | Capital One Savor | 4% cash back (gym dues, gear, entertainment) |
+| | Personal Hobbies & Tech | PayPal Cashback Mastercard | 3% cash back on online checkout (homelab, tech) |
+| **Debt Service** | CAD Family Loan Interest | Wise / Checking ACH | Low-fee FX remittance ($529.25 CAD/month) |
+| **Sinking Funds** | Travel & Escapes | American Express Gold / Wealthsimple VIP | Point transfers, no foreign transaction fees |
+| | Annual Subscriptions | Fidelity Rewards Visa | 2% cash back |
+| **Long-Term Wealth** | Post-Tax Brokerage | Fidelity Brokerage | Direct index investing (VOO / VTI) |
+
+---
+
+## 7. Food Segregation and Basket Item Splitting
+
+Broad category logging creates severe blind spots in spending analysis. SnapTally enforces two principles:
+
+### 7.1 Food Segregation
+Food expenditures must not be lumped into a single generic "Food" bucket. Home groceries are strictly separated from dining out and convenience takeout:
+1. `Variable Essentials -> Groceries & Supermarkets`: Essential weekly home nutrition (Star Market, H Mart, Trader Joe's).
+2. `Guilt-Free -> Restaurants & Dining`: Sit-down dinners, social gatherings, bars.
+3. `Guilt-Free -> Fast Casual & Takeout`: Convenience delivery premiums and quick pickup.
+4. `Guilt-Free -> Cafes & Bakeries`: Daily coffee runs, bakeries, and casual drinks.
+
+This segregation immediately clarifies whether a high food month was driven by grocery inflation or convenience delivery premiums.
+
+### 7.2 Basket Item Splitting (Multi-Category Retailers)
+Purchases at retailers like Amazon or Target often span multiple economic categories on a single receipt (for example, a $120 Amazon order containing $40 of household cleaning supplies and $80 of climbing or homelab gear). Rather than dumping the entire amount into a catch-all "Shopping" bucket, transactions can be split into linked sibling entries sharing the same date and card:
+- Entry A: $40.00 -> `Variable Essentials -> Household & Personal Care`
+- Entry B: $80.00 -> `Guilt-Free -> Personal Hobbies & Tech`
+
+---
+
+## 8. Income Normalization and Pre-Tax Wealth Velocity
+
+### 8.1 Biweekly 2-Check Baseline and the 3rd Paycheck Windfall
+Because biweekly payroll produces 26 paychecks per year, 10 months have 2 paychecks and 2 months have 3 paychecks:
+- **Baseline Budget**: All monthly targets are modeled against the standard **2-check baseline** (~$7,700/month net take-home).
+- **The 3rd Paycheck Rule**: The two annual "3-check" windfall months (~$3,850 extra each) are never absorbed into recurring monthly lifestyle spending. They are treated as automatic lump-sum allocations directly into sinking funds (e.g. Travel, Emergency Buffer) or post-tax brokerage.
+- **Social Security Withholding Cap**: In late-year months when the Social Security tax cap is reached and net take-home rises from ~$7,700 to ~$8,480, the extra ~$780/month difference is routed into sinking funds rather than inflating monthly lifestyle budgets.
+
+### 8.2 Pre-Tax Wealth Velocity Banner
+Traditional budgeting applications look only at post-tax checking accounts, creating the false impression that wealth velocity is lagging. SnapTally tracks automated payroll deductions via a top-level wealth banner:
+- Traditional 401(k): $1,857.92/month
+- Health Savings Account (HSA): $325.00/month
+- Combined with post-tax surplus (~$1,140 brokerage + ~$1,100 sinking funds), true monthly wealth velocity exceeds $4,300/month.
+
+---
+
+## 9. Cross-Border Real Estate and CAD Debt Servicing
+
+SnapTally separates US domestic living cash flow from Canadian assets and debt servicing:
+
+### 9.1 Family Loan Liability
+- Principal: $146,000.00 CAD
+- Interest Rate: 4.35% fixed APR
+- Monthly Servicing: $146,000 * 0.0435 / 12 = **$529.25 CAD/month** (~$370 to $390 USD/month).
+- Servicing Channel: Wise remittance from US checking.
+
+### 9.2 Montreal Duplex Cash Flow
+- Gross Rental Revenue: Unit 2675 ($1,650 CAD) + Unit 2677 ($1,800 CAD) = **$3,450.00 CAD/month**.
+- Operating Deductions: Municipal and school taxes, building insurance, CRA non-resident withholding, and maintenance reserves.
+- Currency Conversion: Tracked using a live or fixed exchange rate peg (~0.702 USD per CAD).
