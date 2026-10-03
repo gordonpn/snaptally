@@ -15,7 +15,6 @@ import Layout from "../layouts/Layout.astro";
   <div
     class="flex flex-col h-full max-w-md mx-auto px-4 py-2 justify-between overflow-y-auto no-scrollbar"
     x-data="intakeForm"
-    x-init="init()"
   >
     <!-- Header -->
     <header class="flex items-center justify-between pb-2 border-b border-base-300">
@@ -43,8 +42,20 @@ import Layout from "../layouts/Layout.astro";
         </button>
       </div>
 
-      <!-- Actions: Recent & Settings -->
+      <!-- Actions: Recent, Outbox & Settings -->
       <div class="flex items-center gap-1">
+        <button
+          type="button"
+          x-show="outboxCount > 0"
+          x-transition
+          class="badge badge-warning badge-sm gap-1 font-mono cursor-pointer min-h-[28px] px-2"
+          @click="syncPendingOutbox(true)"
+          aria-label="Pending offline transactions"
+          title="Pending offline transactions. Click to sync."
+        >
+          <span x-show="isSyncing" class="loading loading-spinner loading-xs"></span>
+          <span x-text="outboxCount"></span>
+        </button>
         <button
           type="button"
           class="btn btn-ghost btn-circle btn-sm min-h-[44px] min-w-[44px]"
@@ -116,11 +127,17 @@ import Layout from "../layouts/Layout.astro";
         <div x-show="isCustomMerchant" x-transition>
           <input
             type="text"
+            list="merchants-list"
             placeholder="Type merchant name..."
             class="input input-sm input-bordered w-full rounded-lg"
             x-model="customMerchantInput"
             @input="updateCustomMerchant($event.target.value)"
           />
+          <datalist id="merchants-list">
+            <template x-for="m in allMerchants" :key="m">
+              <option :value="m" x-text="m"></option>
+            </template>
+          </datalist>
         </div>
       </div>
 

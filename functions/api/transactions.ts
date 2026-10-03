@@ -11,6 +11,7 @@ interface Env {
 }
 
 export interface TransactionPayload {
+  id?: string;
   date: string;
   card: string;
   parent_bucket: string;
@@ -126,8 +127,13 @@ export function isValidPayload(body: unknown): body is TransactionPayload {
     return false;
   }
 
-  const { date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement } =
+  const { id, date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement } =
     body as Record<string, unknown>;
+
+  if (id !== undefined && (typeof id !== "string" || id.trim().length === 0)) {
+    logger.warn("Validation failed: id must be a non-empty string if provided");
+    return false;
+  }
 
   if (typeof date !== "string" || !isValidDate(date)) {
     logger.warn("Validation failed: date must be a valid YYYY-MM-DD string");
@@ -206,7 +212,8 @@ export async function handlePost(
     );
   }
 
-  const id = crypto.randomUUID();
+  const transactionId =
+    typeof body.id === "string" && body.id.trim().length > 0 ? body.id.trim() : crypto.randomUUID();
   const normalizedDate = body.date.trim();
   const normalizedCard = normalizeText(body.card);
   const normalizedParentBucket = normalizeText(body.parent_bucket);
@@ -227,7 +234,7 @@ export async function handlePost(
     await db
       .prepare(insertQuery)
       .bind(
-        id,
+        transactionId,
         normalizedDate,
         normalizedCard,
         normalizedParentBucket,
@@ -238,7 +245,7 @@ export async function handlePost(
       )
       .run();
 
-    return Response.json({ ok: true, id }, { status: 201 });
+    return Response.json({ ok: true, id: transactionId }, { status: 201 });
   } catch (error) {
     logger.error("Transaction insertion failed", {
       error: error instanceof Error ? error.message : String(error),

@@ -55,22 +55,25 @@ flowchart TD
 - **Pill Chips**: Cards, merchants, and categories render as touch-friendly tap targets styled for thumb reachability (minimum 44x44px touch targets).
 - **Dynamic Dependent Chips**: Categories and subcategories are declared in `src/config/intake.ts`. Selecting a parent category (for example, Guilt-Free, Fixed Costs, or Savings) updates visible subcategories in Alpine.js client state instantly with zero network requests.
 - **Dynamic Card Selection**: Card options are dynamically extracted from recent transactions, cached in `localStorage` (`snaptally_cards`), and support an "Other..." toggle for custom card entry without hardcoded defaults.
-- **Merchant Quick Chips**: Displays top frequent merchants from `GET /api/merchants?limit=8` (defaulting to the frequent merchant list in `src/config/intake.ts` when unauthenticated) with an "Other..." toggle for custom merchant entry.
+- **Merchant Quick Chips & Offline Autocomplete**: Displays top frequent merchants from `GET /api/merchants?limit=8` (defaulting to the frequent merchant list in `src/config/intake.ts` when unauthenticated) with an "Other..." toggle. Custom merchant entry connects to a native HTML5 `<datalist id="merchants-list">` seeded from locally cached merchants (`snaptally_merchants`) for offline autocomplete without external JavaScript libraries. Newly entered custom merchants are appended to the local cache immediately.
 - **Secondary Date Backfill**: Defaults to current local date (`YYYY-MM-DD`) with zero interaction needed at checkout. A secondary trigger reveals a native date picker for historical expenses, resetting back to today's date upon saving.
-- **Recent Transactions Feed**: A slide-over modal displays the 5 most recent transactions fetched from `GET /api/transactions?limit=5`.
+- **Recent Transactions Feed**: A slide-over modal displays the 5 most recent transactions fetched from `GET /api/transactions?limit=5`. Newly synced transactions are prepended immediately upon successful sync.
 - **Token Configuration**: Settings modal manages pre-shared API bearer tokens in `localStorage` (`snaptally_api_token`), showing connection status directly in the header.
+- **Pending Outbox Indicator**: A badge in the header shows the count of pending offline transactions with an active sync spinner, allowing users to manually trigger a sync flush on tap.
 - **PWA Manifest**: Configured with `display: standalone` and iOS touch icons to run without browser chrome, URL bars, or bottom navigation strips.
 - **Service Worker & Offline Shell**: Static service worker (`public/sw.js`) precaches the core application shell (`/`, `/manifest.json`, `/favicon.svg`, and icon assets), serving them cache-first with network fallback while bypassing API endpoints (`/api/*`).
 
-### Optimistic Outbox Flow
-The application uses IndexedDB (wrapped by `idb-keyval`) to implement an optimistic outbox:
+### Optimistic Outbox & Background Sync
+The application uses native IndexedDB (`snaptally_db`, object store `outbox`) with resilient local storage fallback:
 
 1. The user taps **Save**.
-2. The transaction record is written to the local IndexedDB outbox with a client-generated UUID and timestamp.
-3. The UI resets the input fields immediately and provides instant feedback.
-4. An asynchronous sync handler attempts to flush the queue via `POST /api/transactions`.
-5. Upon receiving an HTTP 201 response, the record is removed from IndexedDB.
-6. If the device is offline or the network fails, items remain queued in IndexedDB until connectivity restores or the app is reopened.
+2. The transaction record is written immediately to the local IndexedDB outbox with a client-generated UUID, timestamp, and zero initial retry count.
+3. The UI resets the input fields immediately and provides instant feedback with 0ms perceived latency.
+4. The background sync runner flushes queued items sequentially to `POST /api/transactions` with the pre-shared Bearer token.
+5. Upon receiving an HTTP 201 response, the record is removed from IndexedDB and prepended to the local recent activity feed.
+6. On HTTP 400 validation failure, invalid records are evicted from the queue to prevent blocking subsequent transactions.
+7. On HTTP 401 unauthorized, the sync loop pauses to prevent spamming unauthenticated requests until the user updates the token in settings.
+8. If the device is offline or the network fails, items remain queued in IndexedDB with exponential retry tracking. Window event listeners for `online` and `visibilitychange` automatically resume background flushing once connectivity returns.
 
 ## Compute Layer (Cloudflare Pages Functions + Hono)
 
