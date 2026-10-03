@@ -135,22 +135,25 @@ With the dual-scope expansion into both intake and analysis, SnapTally computes 
 
 ## 6. Credit Card Multiplier and Payment Routing Matrix
 
+> **Target Architecture Note:** The 6-bucket model below (`Fixed Essentials`, `Variable Essentials`, `Guilt-Free Living`, `Debt Service`, `Sinking Funds`, `Long-Term Wealth`) represents the planned expansion specified in Issue #41, refining the baseline 4-bucket schema from Section 2.
+
 To maximize cash flow rewards without cognitive friction at the point of sale, categories map to target payment methods based on reward multipliers:
 
 | Category Bucket | Subcategory | Target Card / Payment Method | Reward Optimization |
 | :--- | :--- | :--- | :--- |
 | **Fixed Essentials** | Rent & Housing | Checking ACH | Zero fee |
 | | Core Utilities | Fidelity Rewards Visa | 2% cash back |
-| | Transit & Commute | Fidelity Rewards Visa / Amex Gold | 2% to 4x points |
+| | Transit & Commute | Fidelity Rewards Visa | 2% cash back (reserve Amex Gold for 3x flights) |
 | | Phone & Internet (Net) | Fidelity Rewards Visa | 2% cash back after $50 subsidy |
 | **Variable Essentials** | Groceries & Supermarkets | American Express Gold Card | 4x points (Star Market, H Mart, Trader Joe's) |
 | | Household & Personal Care | Fidelity Rewards Visa | 2% cash back |
 | **Guilt-Free Living** | Restaurants & Dining | American Express Gold Card | 4x points (sit-down dining, social outings) |
 | | Fast Casual & Takeout | American Express Gold Card | 4x points (DoorDash, Grubhub, pickup) |
 | | Cafes & Bakeries | American Express Gold Card | 4x points (espresso, bakeries, coffee beans) |
-| | Climbing & Fitness | Capital One Savor | 4% cash back (gym dues, gear, entertainment) |
-| | Personal Hobbies & Tech | PayPal Cashback Mastercard | 3% cash back on online checkout (homelab, tech) |
-| **Debt Service** | CAD Family Loan Interest | Wise / Checking ACH | Low-fee FX remittance ($529.25 CAD/month) |
+| | Entertainment & Recreation | Capital One Savor | 3% to 4% cash back on eligible entertainment ticket purchases |
+| | Climbing & Fitness | Fidelity Rewards Visa | 2% cash back (gym dues and gear typically code as 1% on Savor) |
+| | Personal Hobbies & Tech | PayPal Cashback Mastercard | 3% cash back when paying via PayPal checkout |
+| **Debt Service** | CAD Family Loan Interest | Wise / Checking ACH | Low-fee FX remittance ($529.25 CAD/month interest-only) |
 | **Sinking Funds** | Travel & Escapes | American Express Gold / Wealthsimple VIP | Point transfers, no foreign transaction fees |
 | | Annual Subscriptions | Fidelity Rewards Visa | 2% cash back |
 | **Long-Term Wealth** | Post-Tax Brokerage | Fidelity Brokerage | Direct index investing (VOO / VTI) |
@@ -159,21 +162,21 @@ To maximize cash flow rewards without cognitive friction at the point of sale, c
 
 ## 7. Food Segregation and Basket Item Splitting
 
-Broad category logging creates severe blind spots in spending analysis. SnapTally enforces two principles:
+Broad category logging creates blind spots in spending analysis. SnapTally adopts two principles for detailed category tracking:
 
 ### 7.1 Food Segregation
 Food expenditures must not be lumped into a single generic "Food" bucket. Home groceries are strictly separated from dining out and convenience takeout:
 1. `Variable Essentials -> Groceries & Supermarkets`: Essential weekly home nutrition (Star Market, H Mart, Trader Joe's).
-2. `Guilt-Free -> Restaurants & Dining`: Sit-down dinners, social gatherings, bars.
-3. `Guilt-Free -> Fast Casual & Takeout`: Convenience delivery premiums and quick pickup.
-4. `Guilt-Free -> Cafes & Bakeries`: Daily coffee runs, bakeries, and casual drinks.
+2. `Guilt-Free Living -> Restaurants & Dining`: Sit-down dinners, social gatherings, bars.
+3. `Guilt-Free Living -> Fast Casual & Takeout`: Convenience delivery premiums and quick pickup.
+4. `Guilt-Free Living -> Cafes & Bakeries`: Daily coffee runs, bakeries, and casual drinks.
 
-This segregation immediately clarifies whether a high food month was driven by grocery inflation or convenience delivery premiums.
+This segregation clarifies whether a high food month was driven by grocery inflation or convenience delivery premiums.
 
 ### 7.2 Basket Item Splitting (Multi-Category Retailers)
-Purchases at retailers like Amazon or Target often span multiple economic categories on a single receipt (for example, a $120 Amazon order containing $40 of household cleaning supplies and $80 of climbing or homelab gear). Rather than dumping the entire amount into a catch-all "Shopping" bucket, transactions can be split into linked sibling entries sharing the same date and card:
+Purchases at retailers like Amazon or Target often span multiple economic categories on a single receipt (for example, a $120 Amazon order containing $40 of household cleaning supplies and $80 of climbing or homelab gear). In accordance with Issue #62, transactions can be split into linked sibling entries sharing the same date and card:
 - Entry A: $40.00 -> `Variable Essentials -> Household & Personal Care`
-- Entry B: $80.00 -> `Guilt-Free -> Personal Hobbies & Tech`
+- Entry B: $80.00 -> `Guilt-Free Living -> Personal Hobbies & Tech`
 
 ---
 
@@ -186,10 +189,12 @@ Because biweekly payroll produces 26 paychecks per year, 10 months have 2 payche
 - **Social Security Withholding Cap**: In late-year months when the Social Security tax cap is reached and net take-home rises from ~$7,700 to ~$8,480, the extra ~$780/month difference is routed into sinking funds rather than inflating monthly lifestyle budgets.
 
 ### 8.2 Pre-Tax Wealth Velocity Banner
-Traditional budgeting applications look only at post-tax checking accounts, creating the false impression that wealth velocity is lagging. SnapTally tracks automated payroll deductions via a top-level wealth banner:
+Traditional budgeting applications look only at post-tax checking accounts, creating the false impression that wealth velocity is lagging. SnapTally tracks automated payroll deductions alongside liquid investments:
 - Traditional 401(k): $1,857.92/month
 - Health Savings Account (HSA): $325.00/month
-- Combined with post-tax surplus (~$1,140 brokerage + ~$1,100 sinking funds), true monthly wealth velocity exceeds $4,300/month.
+- Post-Tax Brokerage Surplus: ~$1,140.00/month
+- **Durable Wealth Velocity**: Combining automated payroll investments with taxable brokerage yields **$3,322.92/month** in durable balance sheet growth.
+- **Total Capital Allocations**: Including ~$1,100/month in sinking fund cash reserves (earmarked for deferred expenditures like travel and annual bills), total monthly non-lifestyle capital allocations exceed **$4,400/month**.
 
 ---
 
@@ -200,10 +205,10 @@ SnapTally separates US domestic living cash flow from Canadian assets and debt s
 ### 9.1 Family Loan Liability
 - Principal: $146,000.00 CAD
 - Interest Rate: 4.35% fixed APR
-- Monthly Servicing: $146,000 * 0.0435 / 12 = **$529.25 CAD/month** (~$370 to $390 USD/month).
+- Monthly Interest-Only Payment: $146,000 * 0.0435 / 12 = **$529.25 CAD/month** (~$370 to $390 USD/month); principal is not amortized.
 - Servicing Channel: Wise remittance from US checking.
 
 ### 9.2 Montreal Duplex Cash Flow
 - Gross Rental Revenue: Unit 2675 ($1,650 CAD) + Unit 2677 ($1,800 CAD) = **$3,450.00 CAD/month**.
 - Operating Deductions: Municipal and school taxes, building insurance, CRA non-resident withholding, and maintenance reserves.
-- Currency Conversion: Tracked using a live or fixed exchange rate peg (~0.702 USD per CAD).
+- Currency Conversion: Evaluated using a deterministic exchange rate peg (0.702 USD per CAD) persisted per transaction via the fx_rate column in accordance with Issue #63.
