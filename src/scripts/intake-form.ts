@@ -489,6 +489,10 @@ export function intakeForm() {
 
     // Transaction submission with 0ms optimistic outbox write
     async submitTransaction(): Promise<boolean> {
+      if (this.loading) {
+        return false;
+      }
+
       if (this.amountCents <= 0) {
         this.isError = true;
         this.statusMessage = "Please enter an amount";
@@ -509,65 +513,70 @@ export function intakeForm() {
         return false;
       }
 
-      const submittedAmountCents = this.amountCents;
-      const submittedGrossAmount = submittedAmountCents / 100;
-      const formatted = (submittedAmountCents / 100).toFixed(2);
+      this.loading = true;
+      try {
+        const submittedAmountCents = this.amountCents;
+        const submittedGrossAmount = submittedAmountCents / 100;
+        const formatted = (submittedAmountCents / 100).toFixed(2);
 
-      const outboxItem: OutboxItem = {
-        id:
-          typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-            ? crypto.randomUUID()
-            : `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        date: this.date,
-        card: trimmedCard,
-        parent_bucket: this.parentBucket,
-        subcategory: this.subcategory,
-        merchant: trimmedMerchant,
-        gross_amount: submittedGrossAmount,
-        reimbursement: 0.0,
-        created_at: new Date().toISOString(),
-      };
+        const outboxItem: OutboxItem = {
+          id:
+            typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+              ? crypto.randomUUID()
+              : `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          date: this.date,
+          card: trimmedCard,
+          parent_bucket: this.parentBucket,
+          subcategory: this.subcategory,
+          merchant: trimmedMerchant,
+          gross_amount: submittedGrossAmount,
+          reimbursement: 0.0,
+          created_at: new Date().toISOString(),
+        };
 
-      // 1. Optimistic write to IndexedDB outbox
-      await saveOutboxItem(outboxItem);
-      this.outboxCount = await getOutboxCount();
+        // 1. Optimistic write to IndexedDB outbox
+        await saveOutboxItem(outboxItem);
+        this.outboxCount = await getOutboxCount();
 
-      // 2. 0ms UI reset
-      this.statusMessage = `Saved $${formatted} at ${trimmedMerchant}`;
-      this.isError = false;
-      this.amountCents = 0;
-      this.resetDateToToday();
+        // 2. 0ms UI reset
+        this.statusMessage = `Saved $${formatted} at ${trimmedMerchant}`;
+        this.isError = false;
+        this.amountCents = 0;
+        this.resetDateToToday();
 
-      // Add merchant to local autocomplete cache
-      if (!this.allMerchants.includes(trimmedMerchant)) {
-        this.allMerchants.push(trimmedMerchant);
-        this.persistMerchants();
-      }
-
-      if (this.isCustomMerchant) {
-        this.isCustomMerchant = false;
-        this.customMerchantInput = "";
-        this.merchant = this.frequentMerchants[0] || "";
-      }
-
-      if (this.isCustomCard) {
-        if (!this.cards.includes(trimmedCard)) {
-          this.cards.unshift(trimmedCard);
-          this.persistCards();
+        // Add merchant to local autocomplete cache
+        if (!this.allMerchants.includes(trimmedMerchant)) {
+          this.allMerchants.push(trimmedMerchant);
+          this.persistMerchants();
         }
-        this.isCustomCard = false;
-        this.autoCustomCard = false;
-        this.customCardInput = "";
-        this.card = trimmedCard;
-      }
 
-      // 3. Trigger background sync
-      const syncResult = await this.syncPendingOutbox();
-      if (syncResult.lastError) {
-        return false;
-      }
+        if (this.isCustomMerchant) {
+          this.isCustomMerchant = false;
+          this.customMerchantInput = "";
+          this.merchant = this.frequentMerchants[0] || "";
+        }
 
-      return true;
+        if (this.isCustomCard) {
+          if (!this.cards.includes(trimmedCard)) {
+            this.cards.unshift(trimmedCard);
+            this.persistCards();
+          }
+          this.isCustomCard = false;
+          this.autoCustomCard = false;
+          this.customCardInput = "";
+          this.card = trimmedCard;
+        }
+
+        // 3. Trigger background sync
+        const syncResult = await this.syncPendingOutbox();
+        if (syncResult.lastError) {
+          return false;
+        }
+
+        return true;
+      } finally {
+        this.loading = false;
+      }
     },
   };
 }
