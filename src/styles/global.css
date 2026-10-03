@@ -69,6 +69,7 @@ input[type="search"] {
   --neu-inset-dark: rgba(0, 0, 0, 0.12);
   --neu-inset-light: rgba(255, 255, 255, 0.5);
   --neu-border: rgba(0, 0, 0, 0.08);
+  --neu-highlight: rgba(255, 255, 255, 0.6);
   --neu-text: #1e293b;
   --neu-text-muted: #64748b;
 }
@@ -91,6 +92,7 @@ input[type="search"] {
     --neu-inset-dark: rgba(0, 0, 0, 0.75);
     --neu-inset-light: rgba(255, 255, 255, 0.07);
     --neu-border: rgba(255, 255, 255, 0.08);
+    --neu-highlight: rgba(255, 255, 255, 0.12);
     --neu-text: #f1f5f9;
     --neu-text-muted: #94a3b8;
   }
@@ -113,6 +115,7 @@ input[type="search"] {
   --neu-inset-dark: rgba(0, 0, 0, 0.75);
   --neu-inset-light: rgba(255, 255, 255, 0.07);
   --neu-border: rgba(255, 255, 255, 0.08);
+  --neu-highlight: rgba(255, 255, 255, 0.12);
   --neu-text: #f1f5f9;
   --neu-text-muted: #94a3b8;
 }
@@ -164,12 +167,16 @@ input[type="search"] {
     var(--neu-surface-gradient-start),
     var(--neu-surface-gradient-end)
   );
-  border: 1px solid var(--neu-border);
   box-shadow:
-    2px 2px 5px var(--neu-shadow-dark),
-    -2px -2px 5px var(--neu-shadow-light);
+    4px 4px 10px var(--neu-shadow-dark),
+    -4px -4px 10px var(--neu-shadow-light),
+    inset 1px 1px 1.5px var(--neu-highlight),
+    inset -1px -1px 1.5px var(--neu-inset-dark);
   &:disabled {
-    box-shadow: none;
+    box-shadow:
+      2.5px 2.5px 6px var(--neu-shadow-dark),
+      -2.5px -2.5px 6px var(--neu-shadow-light),
+      inset 0.5px 0.5px 1px var(--neu-highlight);
   }
 }
 
@@ -218,7 +225,6 @@ input[type="search"] {
   &:disabled {
     opacity: 0.4;
     cursor: not-allowed;
-    box-shadow: none;
   }
 }
 

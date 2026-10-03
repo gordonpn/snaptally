@@ -295,7 +295,8 @@ import Layout from "../layouts/Layout.astro";
     <footer class="pt-1.5 pb-1">
       <button
         type="button"
-        class="neu-convex neu-pressed w-full h-11 sm:h-12 rounded-2xl text-base font-bold text-primary min-h-[44px] flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+        class="neu-convex neu-pressed w-full h-11 sm:h-12 rounded-2xl text-base font-bold min-h-[44px] flex items-center justify-center transition-all disabled:cursor-not-allowed"
+        :class="amountCents > 0 ? 'text-primary' : 'text-neu-text-muted/60'"
         :disabled="loading || amountCents <= 0"
         @click="submitTransaction()"
       >
