@@ -20,6 +20,7 @@ export interface SyncOptions {
   force?: boolean;
   onItemSynced?: (item: OutboxItem, serverResponse?: unknown) => void;
   onStatusChange?: (isSyncing: boolean, pendingCount: number) => void;
+  onScheduleRetry?: (delayMs: number) => void;
 }
 
 export interface SyncResult {
@@ -165,10 +166,24 @@ export async function deleteOutboxItem(id: string): Promise<void> {
   }
 }
 
+let activeRetryTimer: ReturnType<typeof setTimeout> | undefined;
+let registeredSyncTrigger: ((force?: boolean) => void) | undefined;
+
+/**
+ * Clears any scheduled automatic retry timer.
+ */
+export function clearRetryTimer(): void {
+  if (activeRetryTimer !== undefined) {
+    clearTimeout(activeRetryTimer);
+    activeRetryTimer = undefined;
+  }
+}
+
 /**
  * Clears all items from the outbox.
  */
 export async function clearOutbox(): Promise<void> {
+  clearRetryTimer();
   try {
     const db = await openDatabase();
     await new Promise<void>((resolve, reject) => {
@@ -264,6 +279,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         item.next_retry_at = Date.now() + backoffMs;
         await saveOutboxItem(item);
         failedCount++;
+        scheduleDueRetry(backoffMs, options);
         break;
       } catch {
         // Network error / offline: apply exponential backoff (1s, 2s, 4s, capped at 60s)
@@ -273,27 +289,58 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         item.next_retry_at = Date.now() + backoffMs;
         await saveOutboxItem(item);
         failedCount++;
+        scheduleDueRetry(backoffMs, options);
         break;
       }
     }
   } finally {
     isSyncInProgress = false;
     const remainingCount = await getOutboxCount();
+    if (remainingCount === 0) {
+      clearRetryTimer();
+    }
     options.onStatusChange?.(false, remainingCount);
   }
 
   return { syncedCount, failedCount, unauthorized, lastError };
 }
 
+function scheduleDueRetry(delayMs: number, options: SyncOptions): void {
+  clearRetryTimer();
+  if (options.onScheduleRetry) {
+    options.onScheduleRetry(delayMs);
+  } else if (registeredSyncTrigger) {
+    activeRetryTimer = setTimeout(() => {
+      activeRetryTimer = undefined;
+      registeredSyncTrigger?.(false);
+    }, delayMs);
+    activeRetryTimer.unref?.();
+  } else {
+    activeRetryTimer = setTimeout(() => {
+      activeRetryTimer = undefined;
+      void syncOutbox({ ...options, force: false });
+    }, delayMs);
+    activeRetryTimer.unref?.();
+  }
+}
+
 /**
  * Registers window event listeners for online and visibilitychange events to trigger sync.
  */
 export function setupSyncListeners(triggerSync: (force?: boolean) => void): () => void {
+  registeredSyncTrigger = triggerSync;
+
   if (typeof window === "undefined") {
-    return () => {};
+    return () => {
+      clearRetryTimer();
+      registeredSyncTrigger = undefined;
+    };
   }
 
-  const handleOnline = () => triggerSync(true);
+  const handleOnline = () => {
+    clearRetryTimer();
+    triggerSync(true);
+  };
   const handleVisibility = () => {
     if (document.visibilityState === "visible") {
       triggerSync(false);
@@ -304,6 +351,8 @@ export function setupSyncListeners(triggerSync: (force?: boolean) => void): () =
   document.addEventListener("visibilitychange", handleVisibility);
 
   return () => {
+    clearRetryTimer();
+    registeredSyncTrigger = undefined;
     window.removeEventListener("online", handleOnline);
     document.removeEventListener("visibilitychange", handleVisibility);
   };

@@ -7,6 +7,7 @@ import {
 } from "../src/scripts/intake-form.ts";
 import {
   clearOutbox,
+  clearRetryTimer,
   deleteOutboxItem,
   getOutbox,
   getOutboxCount,
@@ -346,6 +347,43 @@ describe("Background Sync Manager", () => {
       assert.strictEqual(remaining.length, 0);
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("schedules automatic retry callback on failure and clears it on cleanup", async () => {
+    const item: OutboxItem = {
+      id: "tx-timer-test",
+      date: "2026-10-02",
+      card: "Visa",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Failing Server",
+      gross_amount: 15,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(item);
+
+    const originalFetch = globalThis.fetch;
+    let scheduledDelayMs = -1;
+    try {
+      globalThis.fetch = (async () => {
+        return new Response("Internal Server Error", { status: 500 });
+      }) as typeof fetch;
+
+      await syncOutbox({
+        token: "test-token",
+        onScheduleRetry: (delayMs) => {
+          scheduledDelayMs = delayMs;
+        },
+      });
+
+      assert.strictEqual(scheduledDelayMs, 1000);
+      assert.doesNotThrow(() => clearRetryTimer());
+    } finally {
+      globalThis.fetch = originalFetch;
+      clearRetryTimer();
     }
   });
 
