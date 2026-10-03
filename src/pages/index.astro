@@ -2,7 +2,6 @@
 import {
   IconBackspace,
   IconCalendar,
-  IconCreditCard,
   IconHistory,
   IconReceipt2,
   IconSettings,
@@ -121,7 +120,7 @@ import Layout from "../layouts/Layout.astro";
           <input
             type="text"
             placeholder="Type merchant name..."
-            class="neu-inset w-full rounded-xl px-3 py-2 text-xs sm:text-sm text-neu-text focus:outline-none focus:ring-2 focus:ring-primary/40 mt-1"
+            class="neu-inset w-full rounded-xl px-3 py-2 text-base text-neu-text focus:outline-none focus:ring-2 focus:ring-primary/40 mt-1"
             x-model="customMerchantInput"
             @input="updateCustomMerchant($event.target.value)"
           />
@@ -157,9 +156,6 @@ import Layout from "../layouts/Layout.astro";
       <!-- Card Selection Chips -->
       <div class="space-y-1">
         <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right -mx-2.5 px-2.5 pr-8 py-1">
-          <span class="text-neu-text-muted flex items-center mr-0.5">
-            <IconCreditCard class="w-4 h-4" />
-          </span>
           <template x-for="c in cards" :key="c">
             <button
               type="button"
@@ -182,7 +178,7 @@ import Layout from "../layouts/Layout.astro";
           <input
             type="text"
             placeholder="Type card name..."
-            class="neu-inset w-full rounded-xl px-3 py-2 text-xs sm:text-sm text-neu-text focus:outline-none focus:ring-2 focus:ring-primary/40 mt-1"
+            class="neu-inset w-full rounded-xl px-3 py-2 text-base text-neu-text focus:outline-none focus:ring-2 focus:ring-primary/40 mt-1"
             x-model="customCardInput"
             @input="updateCustomCard($event.target.value)"
           />
@@ -322,7 +318,7 @@ import Layout from "../layouts/Layout.astro";
           <input
             type="password"
             id="api-token-input"
-            class="neu-inset w-full rounded-xl px-3 py-2 text-xs sm:text-sm text-neu-text focus:outline-none focus:ring-2 focus:ring-primary/40 mt-1"
+            class="neu-inset w-full rounded-xl px-3 py-2 text-base text-neu-text focus:outline-none focus:ring-2 focus:ring-primary/40 mt-1"
             placeholder="Paste token here"
             x-model="settingsTokenInput"
           />

@@ -41,6 +41,14 @@ button,
   -webkit-touch-callout: none;
 }
 
+input[type="text"],
+input[type="password"],
+input[type="date"],
+input[type="number"],
+input[type="search"] {
+  font-size: 16px;
+}
+
 :root,
 [data-theme="light"] {
   /* DaisyUI theme overrides */
