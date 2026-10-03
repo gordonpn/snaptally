@@ -18,14 +18,16 @@ import Layout from "../layouts/Layout.astro";
     x-init="init()"
   >
     <!-- Header -->
-    <header class="flex items-center justify-between pb-2 border-b border-base-300">
+    <header class="flex items-center justify-between pb-2 border-b border-base-content/10">
       <div class="flex items-center gap-2">
-        <IconReceipt2 class="w-6 h-6 text-primary" />
-        <span class="text-lg font-bold tracking-tight">SnapTally</span>
+        <div class="w-8 h-8 rounded-xl neu-raised-sm flex items-center justify-center text-primary">
+          <IconReceipt2 class="w-5 h-5" />
+        </div>
+        <span class="text-lg font-bold tracking-tight text-neu-text">SnapTally</span>
       </div>
 
       <!-- Date selector chip -->
-      <div class="relative focus-within:ring-2 focus-within:ring-primary rounded-full">
+      <div class="relative focus-within:ring-2 focus-within:ring-primary/40 rounded-full">
         <input
           type="date"
           class="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
@@ -35,19 +37,19 @@ import Layout from "../layouts/Layout.astro";
         />
         <button
           type="button"
-          class="btn btn-xs sm:btn-sm rounded-full gap-1 min-h-[44px] pointer-events-none"
-          :class="isBackfill ? 'btn-warning text-warning-content' : 'btn-ghost bg-base-200'"
+          class="neu-raised-sm rounded-full px-3 py-1.5 min-h-[44px] inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium pointer-events-none transition-all"
+          :class="isBackfill ? 'text-warning font-semibold ring-1 ring-warning/50' : 'text-neu-text'"
         >
-          <IconCalendar class="w-4 h-4" />
+          <IconCalendar class="w-4 h-4 text-primary" />
           <span x-text="isToday ? 'Today' : date"></span>
         </button>
       </div>
 
       <!-- Actions: Recent & Settings -->
-      <div class="flex items-center gap-1">
+      <div class="flex items-center gap-2">
         <button
           type="button"
-          class="btn btn-ghost btn-circle btn-sm min-h-[44px] min-w-[44px]"
+          class="w-10 h-10 rounded-full neu-raised-sm neu-pressed flex items-center justify-center text-neu-text transition-all min-h-[44px] min-w-[44px]"
           @click="toggleRecent()"
           aria-label="Recent Transactions"
         >
@@ -55,13 +57,13 @@ import Layout from "../layouts/Layout.astro";
         </button>
         <button
           type="button"
-          class="btn btn-ghost btn-circle btn-sm min-h-[44px] min-w-[44px] relative"
+          class="w-10 h-10 rounded-full neu-raised-sm neu-pressed flex items-center justify-center text-neu-text transition-all min-h-[44px] min-w-[44px] relative"
           @click="openSettings()"
           aria-label="Settings"
         >
           <IconSettings class="w-5 h-5" />
           <span
-            class="absolute top-2 right-2 w-2.5 h-2.5 rounded-full ring-2 ring-base-100"
+            class="absolute top-2 right-2 w-2.5 h-2.5 rounded-full ring-2 ring-[var(--neu-surface)]"
             :class="hasToken ? 'bg-success' : 'bg-warning'"
           ></span>
         </button>
@@ -79,14 +81,16 @@ import Layout from "../layouts/Layout.astro";
       x-text="statusMessage"
     ></div>
 
-    <!-- Amount Display (Non-input styled container) -->
-    <section class="flex flex-col items-center justify-center py-1 sm:py-2 select-none">
-      <div
-        class="text-5xl sm:text-6xl font-mono font-bold tracking-tight text-primary transition-all duration-75"
-        x-text="formattedAmount"
-        aria-live="off"
-      >
-        $0.00
+    <!-- Amount Display (Debossed / Inset container) -->
+    <section class="w-full py-1 sm:py-2 select-none">
+      <div class="neu-inset rounded-2xl py-3 px-4 flex flex-col items-center justify-center transition-all duration-75">
+        <div
+          class="text-5xl sm:text-6xl font-mono font-bold tracking-tight text-primary drop-shadow-sm"
+          x-text="formattedAmount"
+          aria-live="off"
+        >
+          $0.00
+        </div>
       </div>
     </section>
 
@@ -94,20 +98,20 @@ import Layout from "../layouts/Layout.astro";
     <section class="space-y-2 text-xs sm:text-sm">
       <!-- Merchant Chips -->
       <div class="space-y-1">
-        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
           <template x-for="m in frequentMerchants" :key="m">
             <button
               type="button"
-              class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[44px]"
-              :class="merchant === m && !isCustomMerchant ? 'btn-primary text-primary-content' : 'btn-ghost bg-base-200'"
+              class="neu-pressed rounded-full px-3.5 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
+              :class="merchant === m && !isCustomMerchant ? 'neu-inset-sm font-bold text-primary ring-1 ring-primary/40' : 'neu-raised-sm font-medium text-neu-text'"
               @click="selectMerchant(m)"
               x-text="m"
             ></button>
           </template>
           <button
             type="button"
-            class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[44px]"
-            :class="isCustomMerchant ? 'btn-primary text-primary-content' : 'btn-ghost bg-base-200'"
+            class="neu-pressed rounded-full px-3.5 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
+            :class="isCustomMerchant ? 'neu-inset-sm font-bold text-primary ring-1 ring-primary/40' : 'neu-raised-sm font-medium text-neu-text'"
             @click="toggleCustomMerchant()"
           >
             Other...
@@ -117,7 +121,7 @@ import Layout from "../layouts/Layout.astro";
           <input
             type="text"
             placeholder="Type merchant name..."
-            class="input input-sm input-bordered w-full rounded-lg"
+            class="neu-inset w-full rounded-xl px-3 py-2 text-xs sm:text-sm text-neu-text focus:outline-none focus:ring-2 focus:ring-primary/40 mt-1"
             x-model="customMerchantInput"
             @input="updateCustomMerchant($event.target.value)"
           />
@@ -125,12 +129,12 @@ import Layout from "../layouts/Layout.astro";
       </div>
 
       <!-- Parent Bucket Chips -->
-      <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
         <template x-for="b in buckets" :key="b">
           <button
             type="button"
-            class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[44px]"
-            :class="parentBucket === b ? 'btn-secondary text-secondary-content' : 'btn-ghost bg-base-200'"
+            class="neu-pressed rounded-full px-3.5 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
+            :class="parentBucket === b ? 'neu-inset-sm font-bold text-secondary ring-1 ring-secondary/40' : 'neu-raised-sm font-medium text-neu-text'"
             @click="selectBucket(b)"
             x-text="b"
           ></button>
@@ -138,12 +142,12 @@ import Layout from "../layouts/Layout.astro";
       </div>
 
       <!-- Dynamic Subcategory Chips -->
-      <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
         <template x-for="s in subcategories" :key="s">
           <button
             type="button"
-            class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[44px]"
-            :class="subcategory === s ? 'btn-neutral text-neutral-content' : 'btn-outline border-base-300'"
+            class="neu-pressed rounded-full px-3.5 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
+            :class="subcategory === s ? 'neu-inset-sm font-bold text-accent ring-1 ring-accent/40' : 'neu-raised-sm font-medium text-neu-text'"
             @click="selectSubcategory(s)"
             x-text="s"
           ></button>
@@ -152,23 +156,23 @@ import Layout from "../layouts/Layout.astro";
 
       <!-- Card Selection Chips -->
       <div class="space-y-1">
-        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-          <span class="text-base-content/60 flex items-center mr-1">
+        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+          <span class="text-neu-text-muted flex items-center mr-0.5">
             <IconCreditCard class="w-4 h-4" />
           </span>
           <template x-for="c in cards" :key="c">
             <button
               type="button"
-              class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[44px]"
-              :class="card === c && !isCustomCard ? 'btn-accent text-accent-content' : 'btn-ghost bg-base-200'"
+              class="neu-pressed rounded-full px-3.5 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
+              :class="card === c && !isCustomCard ? 'neu-inset-sm font-bold text-primary ring-1 ring-primary/40' : 'neu-raised-sm font-medium text-neu-text'"
               @click="selectCard(c)"
               x-text="c"
             ></button>
           </template>
           <button
             type="button"
-            class="btn btn-xs sm:btn-sm rounded-full whitespace-nowrap min-h-[44px]"
-            :class="isCustomCard ? 'btn-accent text-accent-content' : 'btn-ghost bg-base-200'"
+            class="neu-pressed rounded-full px-3.5 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
+            :class="isCustomCard ? 'neu-inset-sm font-bold text-primary ring-1 ring-primary/40' : 'neu-raised-sm font-medium text-neu-text'"
             @click="toggleCustomCard()"
           >
             Other...
@@ -178,7 +182,7 @@ import Layout from "../layouts/Layout.astro";
           <input
             type="text"
             placeholder="Type card name..."
-            class="input input-sm input-bordered w-full rounded-lg"
+            class="neu-inset w-full rounded-xl px-3 py-2 text-xs sm:text-sm text-neu-text focus:outline-none focus:ring-2 focus:ring-primary/40 mt-1"
             x-model="customCardInput"
             @input="updateCustomCard($event.target.value)"
           />
@@ -187,10 +191,10 @@ import Layout from "../layouts/Layout.astro";
     </section>
 
     <!-- Built-in Numeric Keypad (3x4 Grid) -->
-    <section class="grid grid-cols-3 gap-2 pt-2 select-none">
+    <section class="grid grid-cols-3 gap-2.5 pt-2 select-none">
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="neu-key text-2xl font-semibold h-12 sm:h-14 rounded-2xl min-h-[48px] flex items-center justify-center"
         :disabled="loading"
         @click="pressDigit(1)"
       >
@@ -198,7 +202,7 @@ import Layout from "../layouts/Layout.astro";
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="neu-key text-2xl font-semibold h-12 sm:h-14 rounded-2xl min-h-[48px] flex items-center justify-center"
         :disabled="loading"
         @click="pressDigit(2)"
       >
@@ -206,7 +210,7 @@ import Layout from "../layouts/Layout.astro";
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="neu-key text-2xl font-semibold h-12 sm:h-14 rounded-2xl min-h-[48px] flex items-center justify-center"
         :disabled="loading"
         @click="pressDigit(3)"
       >
@@ -215,7 +219,7 @@ import Layout from "../layouts/Layout.astro";
 
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="neu-key text-2xl font-semibold h-12 sm:h-14 rounded-2xl min-h-[48px] flex items-center justify-center"
         :disabled="loading"
         @click="pressDigit(4)"
       >
@@ -223,7 +227,7 @@ import Layout from "../layouts/Layout.astro";
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="neu-key text-2xl font-semibold h-12 sm:h-14 rounded-2xl min-h-[48px] flex items-center justify-center"
         :disabled="loading"
         @click="pressDigit(5)"
       >
@@ -231,7 +235,7 @@ import Layout from "../layouts/Layout.astro";
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="neu-key text-2xl font-semibold h-12 sm:h-14 rounded-2xl min-h-[48px] flex items-center justify-center"
         :disabled="loading"
         @click="pressDigit(6)"
       >
@@ -240,7 +244,7 @@ import Layout from "../layouts/Layout.astro";
 
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="neu-key text-2xl font-semibold h-12 sm:h-14 rounded-2xl min-h-[48px] flex items-center justify-center"
         :disabled="loading"
         @click="pressDigit(7)"
       >
@@ -248,7 +252,7 @@ import Layout from "../layouts/Layout.astro";
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="neu-key text-2xl font-semibold h-12 sm:h-14 rounded-2xl min-h-[48px] flex items-center justify-center"
         :disabled="loading"
         @click="pressDigit(8)"
       >
@@ -256,7 +260,7 @@ import Layout from "../layouts/Layout.astro";
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="neu-key text-2xl font-semibold h-12 sm:h-14 rounded-2xl min-h-[48px] flex items-center justify-center"
         :disabled="loading"
         @click="pressDigit(9)"
       >
@@ -265,7 +269,7 @@ import Layout from "../layouts/Layout.astro";
 
       <button
         type="button"
-        class="btn btn-ghost bg-base-200/60 text-lg font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="neu-key text-lg font-bold text-warning h-12 sm:h-14 rounded-2xl min-h-[48px] flex items-center justify-center"
         :disabled="loading"
         @click="pressClear()"
         aria-label="Clear Amount"
@@ -274,7 +278,7 @@ import Layout from "../layouts/Layout.astro";
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200 text-2xl font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px]"
+        class="neu-key text-2xl font-semibold h-12 sm:h-14 rounded-2xl min-h-[48px] flex items-center justify-center"
         :disabled="loading"
         @click="pressDigit(0)"
       >
@@ -282,7 +286,7 @@ import Layout from "../layouts/Layout.astro";
       </button>
       <button
         type="button"
-        class="btn btn-ghost bg-base-200/60 text-lg font-semibold h-12 sm:h-14 rounded-2xl active:scale-95 transition-transform min-h-[48px] flex items-center justify-center"
+        class="neu-key text-lg font-semibold text-error/90 h-12 sm:h-14 rounded-2xl min-h-[48px] flex items-center justify-center"
         :disabled="loading"
         @click="pressBackspace()"
         aria-label="Backspace"
@@ -295,7 +299,7 @@ import Layout from "../layouts/Layout.astro";
     <footer class="pt-2 pb-1">
       <button
         type="button"
-        class="btn btn-primary w-full h-12 sm:h-14 rounded-2xl text-base font-semibold min-h-[48px]"
+        class="neu-convex neu-pressed w-full h-12 sm:h-14 rounded-2xl text-base font-bold text-primary min-h-[48px] flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         :disabled="loading || amountCents <= 0"
         @click="submitTransaction()"
       >
@@ -306,28 +310,28 @@ import Layout from "../layouts/Layout.astro";
 
     <!-- Settings Modal -->
     <dialog class="modal" :class="{ 'modal-open': isSettingsOpen }">
-      <div class="modal-box p-5 max-w-sm rounded-2xl max-h-[85vh] overflow-y-auto">
-        <h3 class="font-bold text-lg">Settings</h3>
-        <p class="text-xs text-base-content/70 mt-1">
+      <div class="modal-box p-5 max-w-sm rounded-2xl max-h-[85vh] overflow-y-auto neu-raised border border-base-content/10">
+        <h3 class="font-bold text-lg text-neu-text">Settings</h3>
+        <p class="text-xs text-neu-text-muted mt-1">
           Configure pre-shared API bearer token stored locally in browser storage.
         </p>
         <div class="form-control my-4">
           <label class="label py-1" for="api-token-input">
-            <span class="label-text font-medium text-xs">API Bearer Token</span>
+            <span class="label-text font-medium text-xs text-neu-text">API Bearer Token</span>
           </label>
           <input
             type="password"
             id="api-token-input"
-            class="input input-bordered input-sm w-full rounded-lg"
+            class="neu-inset w-full rounded-xl px-3 py-2 text-xs sm:text-sm text-neu-text focus:outline-none focus:ring-2 focus:ring-primary/40 mt-1"
             placeholder="Paste token here"
             x-model="settingsTokenInput"
           />
         </div>
         <div class="modal-action mt-4 flex justify-end gap-2">
-          <button type="button" class="btn btn-sm btn-ghost rounded-lg min-h-[44px]" @click="closeSettings()">
+          <button type="button" class="neu-raised-sm neu-pressed rounded-xl px-4 py-2 text-xs font-medium text-neu-text min-h-[44px]" @click="closeSettings()">
             Cancel
           </button>
-          <button type="button" class="btn btn-sm btn-primary rounded-lg min-h-[44px]" @click="saveToken()">
+          <button type="button" class="neu-convex neu-pressed rounded-xl px-4 py-2 text-xs font-bold text-primary min-h-[44px]" @click="saveToken()">
             Save Token
           </button>
         </div>
@@ -336,15 +340,15 @@ import Layout from "../layouts/Layout.astro";
 
     <!-- Recent Transactions Modal -->
     <dialog class="modal" :class="{ 'modal-open': isRecentOpen }">
-      <div class="modal-box p-5 max-w-sm rounded-2xl max-h-[85vh] flex flex-col">
-        <div class="flex items-center justify-between pb-3 border-b border-base-300">
-          <h3 class="font-bold text-lg flex items-center gap-2">
+      <div class="modal-box p-5 max-w-sm rounded-2xl max-h-[85vh] flex flex-col neu-raised border border-base-content/10">
+        <div class="flex items-center justify-between pb-3 border-b border-base-content/10">
+          <h3 class="font-bold text-lg flex items-center gap-2 text-neu-text">
             <IconHistory class="w-5 h-5 text-primary" />
             Recent Activity
           </h3>
           <button
             type="button"
-            class="btn btn-ghost btn-circle btn-sm min-h-[44px] min-w-[44px]"
+            class="w-8 h-8 rounded-full neu-raised-sm neu-pressed flex items-center justify-center text-neu-text min-h-[44px] min-w-[44px]"
             @click="toggleRecent()"
             aria-label="Close Recent Transactions"
           >
@@ -352,9 +356,9 @@ import Layout from "../layouts/Layout.astro";
           </button>
         </div>
 
-        <div class="overflow-y-auto flex-1 py-2 divide-y divide-base-200">
+        <div class="overflow-y-auto flex-1 py-2 divide-y divide-base-content/10">
           <template x-if="recentTransactions.length === 0">
-            <p class="text-sm text-base-content/60 text-center py-6">
+            <p class="text-sm text-neu-text-muted text-center py-6">
               No recent transactions recorded yet.
             </p>
           </template>
@@ -362,8 +366,8 @@ import Layout from "../layouts/Layout.astro";
           <template x-for="tx in recentTransactions" :key="tx.id">
             <div class="py-2.5 flex items-center justify-between">
               <div class="min-w-0 pr-2">
-                <div class="font-semibold text-sm truncate" x-text="tx.merchant"></div>
-                <div class="text-xs text-base-content/60 flex items-center gap-1.5 mt-0.5">
+                <div class="font-semibold text-sm truncate text-neu-text" x-text="tx.merchant"></div>
+                <div class="text-xs text-neu-text-muted flex items-center gap-1.5 mt-0.5">
                   <span x-text="tx.subcategory"></span>
                   <span>&bull;</span>
                   <span x-text="tx.card"></span>
@@ -371,17 +375,17 @@ import Layout from "../layouts/Layout.astro";
                   <span x-text="tx.date"></span>
                 </div>
               </div>
-              <div class="font-mono font-bold text-sm text-right whitespace-nowrap">
+              <div class="font-mono font-bold text-sm text-right whitespace-nowrap text-neu-text">
                 $<span x-text="Number(tx.net_spend).toFixed(2)"></span>
               </div>
             </div>
           </template>
         </div>
 
-        <div class="pt-2 border-t border-base-300">
+        <div class="pt-2 border-t border-base-content/10">
           <button
             type="button"
-            class="btn btn-sm btn-ghost w-full rounded-lg min-h-[44px]"
+            class="neu-raised-sm neu-pressed w-full rounded-xl py-2.5 text-xs font-semibold text-neu-text min-h-[44px]"
             @click="toggleRecent()"
           >
             Close

@@ -14,7 +14,7 @@ Logging transactions at checkout using full spreadsheet applications or heavy pe
 
 ## Tech Stack
 
-- **Frontend**: Astro (static output mode), DaisyUI, Tailwind CSS v4, Alpine.js (for reactive category filtering and state), Tabler Icons (`@tabler/icons-astro`), Web App Manifest (standalone PWA), Service Worker (offline shell caching).
+- **Frontend**: Astro (static output mode), DaisyUI, Tailwind CSS v4, Neumorphic design system, Alpine.js (for reactive category filtering and state), Tabler Icons (`@tabler/icons-astro`), Web App Manifest (standalone PWA), Service Worker (offline shell caching).
 - **Client Offline Storage**: IndexedDB via `idb-keyval` for queueing transactions offline.
 - **Compute / Routing**: Cloudflare Pages Functions running Hono (TypeScript).
 - **Database**: Cloudflare D1 (serverless SQLite at the edge).
@@ -42,13 +42,13 @@ snaptally/
 │   ├── layouts/
 │   │   └── Layout.astro      # Root HTML shell and Alpine.js bootstrap
 │   ├── pages/
-│   │   └── index.astro       # Intake UI page with DaisyUI and Tabler icons
+│   │   └── index.astro       # Intake UI page with Neumorphic keypad, chips, and Tabler icons
 │   ├── scripts/
 │   │   ├── app.ts            # Alpine.js registration and bootstrap
 │   │   ├── intake-form.ts    # Keypad state machine and API integration
 │   │   └── sw-register.ts    # Service worker registration helper
 │   └── styles/
-│       └── global.css        # Tailwind CSS and DaisyUI theme directives
+│       └── global.css        # Tailwind CSS, DaisyUI, and Neumorphic design tokens and utilities
 ├── package.json
 ├── README.md
 └── wrangler.jsonc            # Cloudflare Pages and D1 binding config
