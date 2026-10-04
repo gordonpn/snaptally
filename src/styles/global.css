@@ -25,7 +25,6 @@
 
 html,
 body {
-  touch-action: manipulation;
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
 }
@@ -51,12 +50,12 @@ input[type="search"] {
 
 :root,
 [data-theme="light"] {
-  /* DaisyUI theme overrides */
-  --color-primary: #2563eb;
+  /* DaisyUI theme overrides with WCAG AA compliance against #e0e5ec */
+  --color-primary: #1e40af;
   --color-primary-content: #ffffff;
-  --color-secondary: #059669;
+  --color-secondary: #065f46;
   --color-secondary-content: #ffffff;
-  --color-accent: #0d9488;
+  --color-accent: #115e59;
   --color-accent-content: #ffffff;
 
   /* Neumorphic surface and softened shadow tokens */
