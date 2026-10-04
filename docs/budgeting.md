@@ -130,3 +130,85 @@ With the dual-scope expansion into both intake and analysis, SnapTally computes 
    $$\text{Current Fund Reserve} = \text{Initial Balance} + \sum \text{Allocations} - \sum \text{Drawdowns}$$
 4. **Income Allocation Comparison:**
    Calculates actual spend percentages against the Conscious Spending Plan benchmarks (50-60% Fixed, 10%+ Investments, 5-10% Savings, 20-35% Guilt-Free).
+
+---
+
+## 6. Credit Card Multiplier and Payment Routing Matrix
+
+> **Target Architecture Note:** The 6-bucket model below (`Fixed Essentials`, `Variable Essentials`, `Guilt-Free Living`, `Debt Service`, `Sinking Funds`, `Long-Term Wealth`) represents the planned expansion specified in Issue #41, refining the baseline 4-bucket schema from Section 2.
+
+To maximize cash flow rewards without cognitive friction at the point of sale, categories map to target payment methods based on reward multipliers:
+
+| Category Bucket | Subcategory | Target Card / Payment Method | Reward Optimization |
+| :--- | :--- | :--- | :--- |
+| **Fixed Essentials** | Rent & Housing | Checking ACH | Zero fee |
+| | Core Utilities | Fidelity Rewards Visa | 2% cash back |
+| | Transit & Commute | Fidelity Rewards Visa | 2% cash back (reserve Amex Gold for 3x flights) |
+| | Phone & Internet (Net) | Fidelity Rewards Visa | 2% cash back after employer subsidy |
+| **Variable Essentials** | Groceries & Supermarkets | American Express Gold Card | 4x points (Star Market, H Mart, Trader Joe's) |
+| | Household & Personal Care | Fidelity Rewards Visa | 2% cash back |
+| **Guilt-Free Living** | Restaurants & Dining | American Express Gold Card | 4x points (sit-down dining, social outings) |
+| | Fast Casual & Takeout | American Express Gold Card | 4x points (DoorDash, Grubhub, pickup) |
+| | Cafes & Bakeries | American Express Gold Card | 4x points (espresso, bakeries, coffee beans) |
+| | Entertainment & Recreation | Capital One Savor | 3% to 4% cash back on eligible entertainment ticket purchases |
+| | Climbing & Fitness | Fidelity Rewards Visa | 2% cash back (gym dues and gear typically code as 1% on Savor) |
+| | Personal Hobbies & Tech | PayPal Cashback Mastercard | 3% cash back when paying via PayPal checkout |
+| **Debt Service** | CAD Family Loan Interest | Wise / Checking ACH | Low-fee FX remittance (monthly interest-only) |
+| **Sinking Funds** | Travel & Escapes | American Express Gold / Wealthsimple VIP | Point transfers, no foreign transaction fees |
+| | Annual Subscriptions | Fidelity Rewards Visa | 2% cash back |
+| **Long-Term Wealth** | Post-Tax Brokerage | Fidelity Brokerage | Direct index investing (VOO / VTI) |
+
+---
+
+## 7. Food Segregation and Basket Item Splitting
+
+Broad category logging creates blind spots in spending analysis. SnapTally adopts two principles for detailed category tracking:
+
+### 7.1 Food Segregation
+Food expenditures must not be lumped into a single generic "Food" bucket. Home groceries are strictly separated from dining out and convenience takeout:
+1. `Variable Essentials -> Groceries & Supermarkets`: Essential weekly home nutrition (Star Market, H Mart, Trader Joe's).
+2. `Guilt-Free Living -> Restaurants & Dining`: Sit-down dinners, social gatherings, bars.
+3. `Guilt-Free Living -> Fast Casual & Takeout`: Convenience delivery premiums and quick pickup.
+4. `Guilt-Free Living -> Cafes & Bakeries`: Daily coffee runs, bakeries, and casual drinks.
+
+This segregation clarifies whether a high food month was driven by grocery inflation or convenience delivery premiums.
+
+### 7.2 Basket Item Splitting (Multi-Category Retailers)
+Purchases at retailers like Amazon or Target often span multiple economic categories on a single receipt (for example, a $120 Amazon order containing $40 of household cleaning supplies and $80 of climbing or homelab gear). In accordance with Issue #62, purchases can be recorded as separate, unlinked entries sharing the same date and card:
+- Entry A: $40.00 -> `Variable Essentials -> Household & Personal Care`
+- Entry B: $80.00 -> `Guilt-Free Living -> Personal Hobbies & Tech`
+
+---
+
+## 8. Income Normalization and Pre-Tax Wealth Velocity
+
+### 8.1 Biweekly 2-Check Baseline and the 3rd Paycheck Windfall
+Biweekly payroll can produce 26 or 27 paychecks in a calendar year, depending on the employer payroll schedule (which can result in two or three 3-paycheck months):
+- **Baseline Budget**: All monthly targets are modeled against the standard **2-check baseline** net take-home pay.
+- **The 3rd Paycheck Rule**: Paychecks beyond the two-check monthly baseline are never absorbed into recurring monthly lifestyle spending. Treat them as automatic lump-sum allocations directly into sinking funds (e.g. Travel, Emergency Buffer) or post-tax brokerage, based on the employer calendar-year payroll schedule.
+- **Social Security Withholding Cap**: In late-year months when the Social Security tax cap is reached and net take-home rises due to the cessation of OASDI withholding, the surplus difference is routed into sinking funds rather than inflating monthly lifestyle budgets.
+
+### 8.2 Pre-Tax Wealth Velocity Banner
+Traditional budgeting applications look only at post-tax checking accounts, creating the false impression that wealth velocity is lagging. SnapTally tracks automated payroll deductions alongside liquid investments:
+- Traditional 401(k): Automated pre-tax retirement contributions.
+- Health Savings Account (HSA): Automated pre-tax healthcare savings.
+- Post-Tax Brokerage Surplus: Automated monthly taxable brokerage contributions.
+- **Durable Wealth Velocity**: Combining automated payroll investments with taxable brokerage yields steady balance sheet growth.
+- **Total Capital Allocations**: Sinking fund cash reserves (earmarked for deferred expenditures like travel and annual bills), combined with durable wealth velocity, reflect total non-lifestyle capital allocations.
+
+---
+
+## 9. Cross-Border Real Estate and CAD Debt Servicing
+
+SnapTally separates US domestic living cash flow from Canadian assets and debt servicing:
+
+### 9.1 Family Loan Liability
+- Principal: Fixed CAD principal balance.
+- Interest Rate: Fixed APR.
+- Monthly Interest-Only Payment: Calculated monthly interest payment (`principal * APR / 12`) remitted from US checking; principal is not amortized.
+- Servicing Channel: Wise remittance from US checking.
+
+### 9.2 Rental Property Cash Flow
+- Gross Rental Revenue: Multi-unit tenant rental revenue in CAD.
+- Operating Deductions: Municipal and school taxes, building insurance, CRA non-resident withholding, and maintenance reserves.
+- Currency Conversion: Planned behavior: use a deterministic exchange rate peg (0.702 USD per CAD) and persist the rate per transaction via an fx_rate column, in accordance with Issue #63.
