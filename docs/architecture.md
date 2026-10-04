@@ -50,7 +50,7 @@ flowchart TD
 ## Client Layer
 
 ### Touch-Friendly UI
-- **Fixed Viewport**: Locked to `h-dvh overflow-hidden select-none` to eliminate iOS bounce, address bar shifting, and page jumping.
+- **Responsive Viewport**: Sized to `min-h-dvh overflow-y-auto overscroll-none` with `viewport-fit=cover` to eliminate unwanted rubber-banding while ensuring full vertical accessibility across short screens and landscape orientations without disabling pinch zoom.
 - **Built-in On-Screen Keypad**: A custom 3x4 numeric keypad with ATM-style cents shifting (`$0.00` formatted amount display) ensures the native mobile virtual keyboard is never triggered for amount entry.
 - **Pill Chips**: Cards, merchants, and categories render as touch-friendly tap targets styled for thumb reachability (minimum 44x44px touch targets).
 - **Dynamic Dependent Chips**: Categories and subcategories are declared in `src/config/intake.ts`. Selecting a parent category (for example, Guilt-Free, Fixed Costs, or Savings) updates visible subcategories in Alpine.js client state instantly with zero network requests.

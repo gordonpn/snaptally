@@ -103,6 +103,7 @@ import Layout from "../layouts/Layout.astro";
               type="button"
               class="neu-pressed rounded-full px-3 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
               :class="merchant === m && !isCustomMerchant ? 'neu-inset-sm font-bold text-primary bg-primary/10 outline outline-1 outline-primary/60' : 'neu-raised-sm font-medium text-neu-text'"
+              :aria-pressed="merchant === m && !isCustomMerchant"
               @click="selectMerchant(m)"
               x-text="m"
             ></button>
@@ -111,6 +112,7 @@ import Layout from "../layouts/Layout.astro";
             type="button"
             class="neu-pressed rounded-full px-3 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
             :class="isCustomMerchant ? 'neu-inset-sm font-bold text-primary bg-primary/10 outline outline-1 outline-primary/60' : 'neu-raised-sm font-medium text-neu-text'"
+            :aria-pressed="isCustomMerchant"
             @click="toggleCustomMerchant()"
           >
             Other...
@@ -134,6 +136,7 @@ import Layout from "../layouts/Layout.astro";
             type="button"
             class="neu-pressed rounded-full px-3 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
             :class="parentBucket === b ? 'neu-inset-sm font-bold text-secondary bg-secondary/10 outline outline-1 outline-secondary/60' : 'neu-raised-sm font-medium text-neu-text'"
+            :aria-pressed="parentBucket === b"
             @click="selectBucket(b)"
             x-text="b"
           ></button>
@@ -147,6 +150,7 @@ import Layout from "../layouts/Layout.astro";
             type="button"
             class="neu-pressed rounded-full px-3 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
             :class="subcategory === s ? 'neu-inset-sm font-bold text-accent bg-accent/10 outline outline-1 outline-accent/60' : 'neu-raised-sm font-medium text-neu-text'"
+            :aria-pressed="subcategory === s"
             @click="selectSubcategory(s)"
             x-text="s"
           ></button>
@@ -161,6 +165,7 @@ import Layout from "../layouts/Layout.astro";
               type="button"
               class="neu-pressed rounded-full px-3 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
               :class="card === c && !isCustomCard ? 'neu-inset-sm font-bold text-primary bg-primary/10 outline outline-1 outline-primary/60' : 'neu-raised-sm font-medium text-neu-text'"
+              :aria-pressed="card === c && !isCustomCard"
               @click="selectCard(c)"
               x-text="c"
             ></button>
@@ -169,6 +174,7 @@ import Layout from "../layouts/Layout.astro";
             type="button"
             class="neu-pressed rounded-full px-3 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
             :class="isCustomCard ? 'neu-inset-sm font-bold text-primary bg-primary/10 outline outline-1 outline-primary/60' : 'neu-raised-sm font-medium text-neu-text'"
+            :aria-pressed="isCustomCard"
             @click="toggleCustomCard()"
           >
             Other...
