@@ -183,9 +183,9 @@ Purchases at retailers like Amazon or Target often span multiple economic catego
 ## 8. Income Normalization and Pre-Tax Wealth Velocity
 
 ### 8.1 Biweekly 2-Check Baseline and the 3rd Paycheck Windfall
-Because biweekly payroll produces 26 paychecks per year, 10 months have 2 paychecks and 2 months have 3 paychecks:
+Biweekly payroll can produce 26 or 27 paychecks in a calendar year, depending on the employer payroll schedule (which can result in two or three 3-paycheck months):
 - **Baseline Budget**: All monthly targets are modeled against the standard **2-check baseline** net take-home pay.
-- **The 3rd Paycheck Rule**: The two annual "3-check" windfall months (the additional paycheck received in 3-paycheck months) are never absorbed into recurring monthly lifestyle spending. They are treated as automatic lump-sum allocations directly into sinking funds (e.g. Travel, Emergency Buffer) or post-tax brokerage.
+- **The 3rd Paycheck Rule**: Paychecks beyond the two-check monthly baseline are never absorbed into recurring monthly lifestyle spending. Treat them as automatic lump-sum allocations directly into sinking funds (e.g. Travel, Emergency Buffer) or post-tax brokerage, based on the employer calendar-year payroll schedule.
 - **Social Security Withholding Cap**: In late-year months when the Social Security tax cap is reached and net take-home rises due to the cessation of OASDI withholding, the surplus difference is routed into sinking funds rather than inflating monthly lifestyle budgets.
 
 ### 8.2 Pre-Tax Wealth Velocity Banner
