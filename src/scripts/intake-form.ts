@@ -1,4 +1,12 @@
 import { BUCKET_SUBCATEGORIES, DEFAULT_FREQUENT_MERCHANTS } from "../config/intake.ts";
+import {
+  getOutboxCount,
+  type OutboxItem,
+  type SyncResult,
+  saveOutboxItem,
+  setupSyncListeners,
+  syncOutbox,
+} from "./outbox.ts";
 
 export interface RecentTransaction {
   id: string;
@@ -17,6 +25,7 @@ export { BUCKET_SUBCATEGORIES, DEFAULT_FREQUENT_MERCHANTS };
 export const CATEGORIES_BY_BUCKET = BUCKET_SUBCATEGORIES;
 export const TOKEN_STORAGE_KEY = "snaptally_api_token";
 export const CARDS_STORAGE_KEY = "snaptally_cards";
+export const MERCHANTS_STORAGE_KEY = "snaptally_merchants";
 
 /**
  * Returns today's date in local YYYY-MM-DD calendar format.
@@ -47,8 +56,9 @@ export function intakeForm() {
     parentBucket: "Guilt-Free",
     subcategory: BUCKET_SUBCATEGORIES["Guilt-Free"][0],
 
-    // Merchant selection
+    // Merchant selection and autocomplete cache
     frequentMerchants: [...DEFAULT_FREQUENT_MERCHANTS],
+    allMerchants: [...DEFAULT_FREQUENT_MERCHANTS],
     merchant: DEFAULT_FREQUENT_MERCHANTS[0],
     isCustomMerchant: false,
     customMerchantInput: "",
@@ -64,6 +74,10 @@ export function intakeForm() {
     // Recent transactions
     recentTransactions: [] as RecentTransaction[],
     isRecentOpen: false,
+
+    // Outbox & background sync state
+    outboxCount: 0,
+    isSyncing: false,
 
     // Form status
     loading: false,
@@ -201,6 +215,16 @@ export function intakeForm() {
       this.merchant = value;
     },
 
+    persistMerchants(): void {
+      try {
+        if (typeof localStorage !== "undefined" && this.allMerchants.length > 0) {
+          localStorage.setItem(MERCHANTS_STORAGE_KEY, JSON.stringify(this.allMerchants));
+        }
+      } catch {
+        // Storage restricted or unavailable
+      }
+    },
+
     // Date actions
     setDate(newDate: string): void {
       if (!newDate) {
@@ -241,6 +265,7 @@ export function intakeForm() {
       if (this.hasToken) {
         this.loadFrequentMerchants();
         this.loadRecentTransactions();
+        this.syncPendingOutbox();
       } else {
         this.frequentMerchants = [...DEFAULT_FREQUENT_MERCHANTS];
         this.recentTransactions = [];
@@ -273,12 +298,23 @@ export function intakeForm() {
           return;
         }
         if (data.merchants && data.merchants.length > 0) {
-          this.frequentMerchants = data.merchants;
+          this.frequentMerchants = data.merchants.slice(0, 8);
+
+          // Merge distinct merchants into autocomplete cache
+          const merged = [...this.allMerchants];
+          for (const m of data.merchants) {
+            if (!merged.includes(m)) {
+              merged.push(m);
+            }
+          }
+          this.allMerchants = merged;
+          this.persistMerchants();
+
           if (
             !this.isCustomMerchant &&
             (!this.merchant || !this.frequentMerchants.includes(this.merchant))
           ) {
-            this.merchant = data.merchants[0];
+            this.merchant = this.frequentMerchants[0];
           }
         }
       } catch {
@@ -340,6 +376,54 @@ export function intakeForm() {
       }
     },
 
+    // Background sync
+    async syncPendingOutbox(force = false): Promise<SyncResult> {
+      this.isSyncing = true;
+      try {
+        const result = await syncOutbox({
+          token: this.token,
+          force,
+          onItemSynced: (item) => {
+            // Prepend newly synced record to local recent feed
+            const newTx: RecentTransaction = {
+              id: item.id,
+              date: item.date,
+              card: item.card,
+              parent_bucket: item.parent_bucket,
+              subcategory: item.subcategory,
+              merchant: item.merchant,
+              gross_amount: item.gross_amount,
+              reimbursement: item.reimbursement,
+              net_spend: item.gross_amount - item.reimbursement,
+              created_at: item.created_at,
+            };
+            this.recentTransactions = [
+              newTx,
+              ...this.recentTransactions.filter((t) => t.id !== item.id),
+            ].slice(0, 5);
+          },
+          onStatusChange: (syncing, count) => {
+            this.isSyncing = syncing;
+            this.outboxCount = count;
+          },
+        });
+
+        this.outboxCount = await getOutboxCount();
+
+        if (result.lastError) {
+          this.isError = true;
+          this.statusMessage = `Error: ${result.lastError}`;
+        } else if (result.unauthorized) {
+          this.isError = true;
+          this.statusMessage = "Authentication failed: Check API Bearer Token";
+        }
+
+        return result;
+      } finally {
+        this.isSyncing = false;
+      }
+    },
+
     // Initialization lifecycle
     init(): void {
       this.resetDateToToday();
@@ -362,22 +446,53 @@ export function intakeForm() {
               }
             }
           }
+          const storedMerchants = localStorage.getItem(MERCHANTS_STORAGE_KEY);
+          if (storedMerchants) {
+            const parsed = JSON.parse(storedMerchants) as unknown;
+            if (
+              Array.isArray(parsed) &&
+              parsed.every((item): item is string => typeof item === "string")
+            ) {
+              const merged = [...parsed];
+              for (const def of DEFAULT_FREQUENT_MERCHANTS) {
+                if (!merged.includes(def)) {
+                  merged.push(def);
+                }
+              }
+              this.allMerchants = merged;
+            }
+          }
         }
       } catch {
         // Storage restricted or unavailable
       }
+
       if (this.cards.length === 0) {
         this.isCustomCard = true;
         this.autoCustomCard = true;
       }
+
+      getOutboxCount().then((count) => {
+        this.outboxCount = count;
+      });
+
+      setupSyncListeners((force) => {
+        this.syncPendingOutbox(force);
+      });
+
       if (this.hasToken) {
         this.loadFrequentMerchants();
         this.loadRecentTransactions();
+        this.syncPendingOutbox();
       }
     },
 
-    // Transaction submission
+    // Transaction submission with 0ms optimistic outbox write
     async submitTransaction(): Promise<boolean> {
+      if (this.loading) {
+        return false;
+      }
+
       if (this.amountCents <= 0) {
         this.isError = true;
         this.statusMessage = "Please enter an amount";
@@ -399,71 +514,66 @@ export function intakeForm() {
       }
 
       this.loading = true;
-      this.statusMessage = "Saving transaction...";
-      this.isError = false;
-
-      const submittedAmountCents = this.amountCents;
-      const payload = {
-        date: this.date,
-        card: trimmedCard,
-        parent_bucket: this.parentBucket,
-        subcategory: this.subcategory,
-        merchant: trimmedMerchant,
-        gross_amount: submittedAmountCents / 100,
-        reimbursement: 0.0,
-      };
-
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (this.token) {
-        headers.Authorization = `Bearer ${this.token}`;
-      }
-
       try {
-        const response = await fetch("/api/transactions", {
-          method: "POST",
-          headers,
-          body: JSON.stringify(payload),
-        });
+        const submittedAmountCents = this.amountCents;
+        const submittedGrossAmount = submittedAmountCents / 100;
+        const formatted = (submittedAmountCents / 100).toFixed(2);
 
-        const data = (await response.json().catch(() => null)) as {
-          ok?: boolean;
-          id?: string;
-          error?: string;
-        } | null;
+        const outboxItem: OutboxItem = {
+          id:
+            typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+              ? crypto.randomUUID()
+              : `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          date: this.date,
+          card: trimmedCard,
+          parent_bucket: this.parentBucket,
+          subcategory: this.subcategory,
+          merchant: trimmedMerchant,
+          gross_amount: submittedGrossAmount,
+          reimbursement: 0.0,
+          created_at: new Date().toISOString(),
+        };
 
-        if (response.status === 201 && data?.ok) {
-          this.statusMessage = `Saved $${(submittedAmountCents / 100).toFixed(2)} at ${trimmedMerchant}`;
-          this.amountCents = 0;
-          this.resetDateToToday();
-          if (this.isCustomMerchant) {
-            this.isCustomMerchant = false;
-            this.customMerchantInput = "";
-            this.merchant = this.frequentMerchants[0] || "";
-          }
-          if (this.isCustomCard) {
-            if (!this.cards.includes(trimmedCard)) {
-              this.cards.unshift(trimmedCard);
-              this.persistCards();
-            }
-            this.isCustomCard = false;
-            this.autoCustomCard = false;
-            this.customCardInput = "";
-            this.card = trimmedCard;
-          }
-          if (this.hasToken) {
-            this.loadRecentTransactions();
-            this.loadFrequentMerchants();
-          }
-          return true;
+        // 1. Optimistic write to IndexedDB outbox
+        await saveOutboxItem(outboxItem);
+        this.outboxCount = await getOutboxCount();
+
+        // 2. 0ms UI reset
+        this.statusMessage = `Saved $${formatted} at ${trimmedMerchant}`;
+        this.isError = false;
+        this.amountCents = 0;
+        this.resetDateToToday();
+
+        // Add merchant to local autocomplete cache
+        if (!this.allMerchants.includes(trimmedMerchant)) {
+          this.allMerchants.push(trimmedMerchant);
+          this.persistMerchants();
         }
 
-        this.isError = true;
-        this.statusMessage = `Error: ${data?.error || response.statusText || "Failed to save"}`;
-        return false;
-      } catch {
-        this.isError = true;
-        this.statusMessage = "Network error: Unable to reach endpoint";
-        return false;
+        if (this.isCustomMerchant) {
+          this.isCustomMerchant = false;
+          this.customMerchantInput = "";
+          this.merchant = this.frequentMerchants[0] || "";
+        }
+
+        if (this.isCustomCard) {
+          if (!this.cards.includes(trimmedCard)) {
+            this.cards.unshift(trimmedCard);
+            this.persistCards();
+          }
+          this.isCustomCard = false;
+          this.autoCustomCard = false;
+          this.customCardInput = "";
+          this.card = trimmedCard;
+        }
+
+        // 3. Trigger background sync
+        const syncResult = await this.syncPendingOutbox();
+        if (syncResult.lastError) {
+          return false;
+        }
+
+        return true;
       } finally {
         this.loading = false;
       }

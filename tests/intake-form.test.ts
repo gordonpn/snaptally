@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   CARDS_STORAGE_KEY,
   DEFAULT_FREQUENT_MERCHANTS,
@@ -7,6 +7,7 @@ import {
   intakeForm,
   TOKEN_STORAGE_KEY,
 } from "../src/scripts/intake-form.ts";
+import { clearOutbox, clearRetryTimer } from "../src/scripts/outbox.ts";
 
 class MockLocalStorage {
   private store: Map<string, string> = new Map();
@@ -27,6 +28,11 @@ class MockLocalStorage {
     this.store.clear();
   }
 }
+
+afterEach(async () => {
+  clearRetryTimer();
+  await clearOutbox();
+});
 
 describe("getTodayDate helper", () => {
   it("returns current local calendar date in YYYY-MM-DD format", () => {
@@ -846,7 +852,7 @@ describe("intakeForm Submission Validation and Error Handling", () => {
     }
   });
 
-  it("handles network failure gracefully", async () => {
+  it("handles network failure by optimistically queueing in outbox", async () => {
     const form = intakeForm();
     form.pressDigit(1);
     form.pressDigit(5);
@@ -861,9 +867,11 @@ describe("intakeForm Submission Validation and Error Handling", () => {
 
     try {
       const result = await form.submitTransaction();
-      assert.strictEqual(result, false);
-      assert.strictEqual(form.isError, true);
-      assert.strictEqual(form.statusMessage, "Network error: Unable to reach endpoint");
+      assert.strictEqual(result, true);
+      assert.strictEqual(form.isError, false);
+      assert.strictEqual(form.statusMessage, "Saved $1.50 at Trader Joe's");
+      assert.strictEqual(form.amountCents, 0);
+      assert.strictEqual(form.outboxCount, 1);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -893,6 +901,45 @@ describe("intakeForm Submission Validation and Error Handling", () => {
       assert.strictEqual(form.customMerchantInput, "");
       assert.strictEqual(form.merchant, DEFAULT_FREQUENT_MERCHANTS[0]);
       assert.strictEqual(form.statusMessage, "Saved $2.50 at Neighborhood Pharmacy");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("blocks submission when loading is already in progress", async () => {
+    const form = intakeForm();
+    form.amountCents = 1500;
+    form.card = "Amex Gold";
+    form.merchant = "Trader Joe's";
+    form.loading = true;
+
+    const result = await form.submitTransaction();
+    assert.strictEqual(result, false);
+    assert.strictEqual(form.outboxCount, 0);
+  });
+
+  it("blocks rapid concurrent submissions via synchronous loading guard", async () => {
+    const form = intakeForm();
+    form.amountCents = 1500;
+    form.card = "Amex Gold";
+    form.merchant = "Trader Joe's";
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(JSON.stringify({ ok: true, id: "tx-rapid" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const firstSubmit = form.submitTransaction();
+      const secondSubmit = form.submitTransaction();
+
+      const [res1, res2] = await Promise.all([firstSubmit, secondSubmit]);
+      assert.strictEqual(res1, true);
+      assert.strictEqual(res2, false);
+      assert.strictEqual(form.loading, false);
     } finally {
       globalThis.fetch = originalFetch;
     }
