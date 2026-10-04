@@ -174,7 +174,7 @@ Food expenditures must not be lumped into a single generic "Food" bucket. Home g
 This segregation clarifies whether a high food month was driven by grocery inflation or convenience delivery premiums.
 
 ### 7.2 Basket Item Splitting (Multi-Category Retailers)
-Purchases at retailers like Amazon or Target often span multiple economic categories on a single receipt (for example, a $120 Amazon order containing $40 of household cleaning supplies and $80 of climbing or homelab gear). In accordance with Issue #62, transactions can be split into linked sibling entries sharing the same date and card:
+Purchases at retailers like Amazon or Target often span multiple economic categories on a single receipt (for example, a $120 Amazon order containing $40 of household cleaning supplies and $80 of climbing or homelab gear). In accordance with Issue #62, purchases can be recorded as separate, unlinked entries sharing the same date and card:
 - Entry A: $40.00 -> `Variable Essentials -> Household & Personal Care`
 - Entry B: $80.00 -> `Guilt-Free Living -> Personal Hobbies & Tech`
 
@@ -211,4 +211,4 @@ SnapTally separates US domestic living cash flow from Canadian assets and debt s
 ### 9.2 Montreal Duplex Cash Flow
 - Gross Rental Revenue: Unit 2675 ($1,650 CAD) + Unit 2677 ($1,800 CAD) = **$3,450.00 CAD/month**.
 - Operating Deductions: Municipal and school taxes, building insurance, CRA non-resident withholding, and maintenance reserves.
-- Currency Conversion: Evaluated using a deterministic exchange rate peg (0.702 USD per CAD) persisted per transaction via the fx_rate column in accordance with Issue #63.
+- Currency Conversion: Planned behavior: use a deterministic exchange rate peg (0.702 USD per CAD) and persist the rate per transaction via an fx_rate column, in accordance with Issue #63.
