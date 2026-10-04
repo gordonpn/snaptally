@@ -275,7 +275,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         // Server error or unexpected status: apply exponential backoff (1s, 2s, 4s, capped at 60s)
         const retryCount = (item.retry_count ?? 0) + 1;
         item.retry_count = retryCount;
-        const backoffMs = Math.min(60000, 1000 * Math.pow(2, retryCount - 1));
+        const backoffMs = Math.min(60000, 1000 * 2 ** (retryCount - 1));
         item.next_retry_at = Date.now() + backoffMs;
         await saveOutboxItem(item);
         failedCount++;
@@ -285,7 +285,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         // Network error / offline: apply exponential backoff (1s, 2s, 4s, capped at 60s)
         const retryCount = (item.retry_count ?? 0) + 1;
         item.retry_count = retryCount;
-        const backoffMs = Math.min(60000, 1000 * Math.pow(2, retryCount - 1));
+        const backoffMs = Math.min(60000, 1000 * 2 ** (retryCount - 1));
         item.next_retry_at = Date.now() + backoffMs;
         await saveOutboxItem(item);
         failedCount++;
@@ -295,9 +295,13 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
     }
   } finally {
     isSyncInProgress = false;
-    const remainingCount = await getOutboxCount();
+    const remaining = await getOutbox();
+    const remainingCount = remaining.length;
     if (remainingCount === 0) {
       clearRetryTimer();
+    } else if (activeRetryTimer === undefined && !options.onScheduleRetry && !unauthorized) {
+      const nextDue = Math.min(...remaining.map((item) => item.next_retry_at ?? Date.now()));
+      scheduleDueRetry(Math.max(0, nextDue - Date.now()), options);
     }
     options.onStatusChange?.(false, remainingCount);
   }

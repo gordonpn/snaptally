@@ -387,6 +387,62 @@ describe("Background Sync Manager", () => {
     }
   });
 
+  it("reschedules earliest pending retry on finalization when items remain", async () => {
+    const item1: OutboxItem = {
+      id: "tx-pending-1",
+      date: "2026-10-02",
+      card: "Visa",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Pending Item",
+      gross_amount: 15,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+      next_retry_at: Date.now() + 5000,
+    };
+    const item2: OutboxItem = {
+      id: "tx-success-2",
+      date: "2026-10-02",
+      card: "Visa",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Success Item",
+      gross_amount: 20,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(item1);
+    await saveOutboxItem(item2);
+
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async () => {
+        return new Response(JSON.stringify({ ok: true, id: "tx-success-2" }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }) as typeof fetch;
+
+      let triggered = false;
+      const cleanup = setupSyncListeners(() => {
+        triggered = true;
+      });
+
+      await syncOutbox({ token: "test-token" });
+
+      const remaining = await getOutbox();
+      assert.strictEqual(remaining.length, 1);
+      assert.strictEqual(remaining[0].id, "tx-pending-1");
+
+      cleanup();
+      assert.strictEqual(triggered, false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      clearRetryTimer();
+    }
+  });
+
   it("prevents concurrent sync executions", async () => {
     const item: OutboxItem = {
       id: "tx-lock",
