@@ -144,7 +144,7 @@ To maximize cash flow rewards without cognitive friction at the point of sale, c
 | **Fixed Essentials** | Rent & Housing | Checking ACH | Zero fee |
 | | Core Utilities | Fidelity Rewards Visa | 2% cash back |
 | | Transit & Commute | Fidelity Rewards Visa | 2% cash back (reserve Amex Gold for 3x flights) |
-| | Phone & Internet (Net) | Fidelity Rewards Visa | 2% cash back after $50 subsidy |
+| | Phone & Internet (Net) | Fidelity Rewards Visa | 2% cash back after employer subsidy |
 | **Variable Essentials** | Groceries & Supermarkets | American Express Gold Card | 4x points (Star Market, H Mart, Trader Joe's) |
 | | Household & Personal Care | Fidelity Rewards Visa | 2% cash back |
 | **Guilt-Free Living** | Restaurants & Dining | American Express Gold Card | 4x points (sit-down dining, social outings) |
@@ -153,7 +153,7 @@ To maximize cash flow rewards without cognitive friction at the point of sale, c
 | | Entertainment & Recreation | Capital One Savor | 3% to 4% cash back on eligible entertainment ticket purchases |
 | | Climbing & Fitness | Fidelity Rewards Visa | 2% cash back (gym dues and gear typically code as 1% on Savor) |
 | | Personal Hobbies & Tech | PayPal Cashback Mastercard | 3% cash back when paying via PayPal checkout |
-| **Debt Service** | CAD Family Loan Interest | Wise / Checking ACH | Low-fee FX remittance ($529.25 CAD/month interest-only) |
+| **Debt Service** | CAD Family Loan Interest | Wise / Checking ACH | Low-fee FX remittance (monthly interest-only) |
 | **Sinking Funds** | Travel & Escapes | American Express Gold / Wealthsimple VIP | Point transfers, no foreign transaction fees |
 | | Annual Subscriptions | Fidelity Rewards Visa | 2% cash back |
 | **Long-Term Wealth** | Post-Tax Brokerage | Fidelity Brokerage | Direct index investing (VOO / VTI) |
@@ -184,17 +184,17 @@ Purchases at retailers like Amazon or Target often span multiple economic catego
 
 ### 8.1 Biweekly 2-Check Baseline and the 3rd Paycheck Windfall
 Because biweekly payroll produces 26 paychecks per year, 10 months have 2 paychecks and 2 months have 3 paychecks:
-- **Baseline Budget**: All monthly targets are modeled against the standard **2-check baseline** (~$7,700/month net take-home).
-- **The 3rd Paycheck Rule**: The two annual "3-check" windfall months (~$3,850 extra each) are never absorbed into recurring monthly lifestyle spending. They are treated as automatic lump-sum allocations directly into sinking funds (e.g. Travel, Emergency Buffer) or post-tax brokerage.
-- **Social Security Withholding Cap**: In late-year months when the Social Security tax cap is reached and net take-home rises from ~$7,700 to ~$8,480, the extra ~$780/month difference is routed into sinking funds rather than inflating monthly lifestyle budgets.
+- **Baseline Budget**: All monthly targets are modeled against the standard **2-check baseline** net take-home pay.
+- **The 3rd Paycheck Rule**: The two annual "3-check" windfall months (the additional paycheck received in 3-paycheck months) are never absorbed into recurring monthly lifestyle spending. They are treated as automatic lump-sum allocations directly into sinking funds (e.g. Travel, Emergency Buffer) or post-tax brokerage.
+- **Social Security Withholding Cap**: In late-year months when the Social Security tax cap is reached and net take-home rises due to the cessation of OASDI withholding, the surplus difference is routed into sinking funds rather than inflating monthly lifestyle budgets.
 
 ### 8.2 Pre-Tax Wealth Velocity Banner
 Traditional budgeting applications look only at post-tax checking accounts, creating the false impression that wealth velocity is lagging. SnapTally tracks automated payroll deductions alongside liquid investments:
-- Traditional 401(k): $1,857.92/month
-- Health Savings Account (HSA): $325.00/month
-- Post-Tax Brokerage Surplus: ~$1,140.00/month
-- **Durable Wealth Velocity**: Combining automated payroll investments with taxable brokerage yields **$3,322.92/month** in durable balance sheet growth.
-- **Total Capital Allocations**: Including ~$1,100/month in sinking fund cash reserves (earmarked for deferred expenditures like travel and annual bills), total monthly non-lifestyle capital allocations exceed **$4,400/month**.
+- Traditional 401(k): Automated pre-tax retirement contributions.
+- Health Savings Account (HSA): Automated pre-tax healthcare savings.
+- Post-Tax Brokerage Surplus: Automated monthly taxable brokerage contributions.
+- **Durable Wealth Velocity**: Combining automated payroll investments with taxable brokerage yields steady balance sheet growth.
+- **Total Capital Allocations**: Sinking fund cash reserves (earmarked for deferred expenditures like travel and annual bills), combined with durable wealth velocity, reflect total non-lifestyle capital allocations.
 
 ---
 
@@ -203,12 +203,12 @@ Traditional budgeting applications look only at post-tax checking accounts, crea
 SnapTally separates US domestic living cash flow from Canadian assets and debt servicing:
 
 ### 9.1 Family Loan Liability
-- Principal: $146,000.00 CAD
-- Interest Rate: 4.35% fixed APR
-- Monthly Interest-Only Payment: $146,000 * 0.0435 / 12 = **$529.25 CAD/month** (~$370 to $390 USD/month); principal is not amortized.
+- Principal: Fixed CAD principal balance.
+- Interest Rate: Fixed APR.
+- Monthly Interest-Only Payment: Calculated monthly interest payment (`principal * APR / 12`) remitted from US checking; principal is not amortized.
 - Servicing Channel: Wise remittance from US checking.
 
-### 9.2 Montreal Duplex Cash Flow
-- Gross Rental Revenue: Unit 2675 ($1,650 CAD) + Unit 2677 ($1,800 CAD) = **$3,450.00 CAD/month**.
+### 9.2 Rental Property Cash Flow
+- Gross Rental Revenue: Multi-unit tenant rental revenue in CAD.
 - Operating Deductions: Municipal and school taxes, building insurance, CRA non-resident withholding, and maintenance reserves.
 - Currency Conversion: Planned behavior: use a deterministic exchange rate peg (0.702 USD per CAD) and persist the rate per transaction via an fx_rate column, in accordance with Issue #63.
