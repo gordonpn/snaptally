@@ -294,4 +294,4 @@ When adding new migrations in `migrations/`:
 | `HTTP 401 Unauthorized` | Missing or mismatched Bearer token | Verify client token matches `API_BEARER_TOKEN` in Pages secret settings. |
 | `HTTP 500` on database calls | Missing `DB` binding | Ensure Cloudflare Pages Functions settings have `DB` bound to `budget-db`. |
 | Migration failed on `BEGIN` | Explicit transaction statements in D1 SQL | Remove manual `BEGIN TRANSACTION` and `COMMIT` statements; D1 manages batches automatically. |
-| Keypad layout bouncing on iOS | Missing viewport meta tags | Ensure `Layout.astro` contains `viewport-fit=cover` and viewport styling `h-dvh overflow-hidden select-none`. |
+| Keypad layout bouncing on iOS | Missing viewport meta tags | Ensure `Layout.astro` contains `viewport-fit=cover` and styling includes `overscroll-none`. |
