@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
 import { handleGet, onRequestGet } from "../functions/api/merchants.ts";
 import insertTransactionQuery from "../queries/insert_transaction.sql";
 import selectFrequentMerchantsQuery from "../queries/select_frequent_merchants.sql";
+import { createTestDatabase } from "./helpers/db.ts";
 
 describe("GET /api/merchants handleGet", () => {
   const validToken = "test-secret-token";
@@ -231,12 +229,7 @@ describe("GET /api/merchants onRequestGet", () => {
 
 describe("Merchants SQLite Query Integration", () => {
   it("orders merchants by occurrence count descending and breaks ties by recency", () => {
-    const initSql = readFileSync(resolve("migrations/0000_init.sql"), "utf-8");
-    const migrationSql = readFileSync(resolve("migrations/0001_expanded_schema.sql"), "utf-8");
-
-    const db = new DatabaseSync(":memory:");
-    db.exec(initSql);
-    db.exec(migrationSql);
+    const db = createTestDatabase();
 
     const insertStmt = db.prepare(insertTransactionQuery);
     insertStmt.run("t1", "2026-09-20", "Amex", "Food", "Groceries", "Trader Joe's", 20, 0);

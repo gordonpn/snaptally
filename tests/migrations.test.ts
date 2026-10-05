@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
+import { createTestDatabase } from "./helpers/db.ts";
 
 describe("Multi-tenant Schema Migrations", () => {
   const initSql = readFileSync(resolve("migrations/0000_init.sql"), "utf-8");
@@ -13,23 +14,8 @@ describe("Multi-tenant Schema Migrations", () => {
   );
   const insertTransactionQuery = readFileSync(resolve("queries/insert_transaction.sql"), "utf-8");
 
-  /**
-   * Creates an in-memory SQLite database instance with foreign keys enabled
-   * and all schema migrations applied sequentially.
-   *
-   * @returns An initialized DatabaseSync instance with the latest schema.
-   */
-  function createMigratedDatabase(): DatabaseSync {
-    const db = new DatabaseSync(":memory:");
-    db.exec("PRAGMA foreign_keys = ON;");
-    db.exec(initSql);
-    db.exec(expandedSchemaSql);
-    db.exec(multiTenantSchemaSql);
-    return db;
-  }
-
   it("applies migration 0002 cleanly and seeds default user (Scenario 1)", () => {
-    const db = createMigratedDatabase();
+    const db = createTestDatabase();
 
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%';")
@@ -100,7 +86,7 @@ describe("Multi-tenant Schema Migrations", () => {
   });
 
   it("enforces foreign key constraints on transactions (Scenario 2)", () => {
-    const db = createMigratedDatabase();
+    const db = createTestDatabase();
 
     assert.throws(
       () => {
@@ -125,7 +111,7 @@ describe("Multi-tenant Schema Migrations", () => {
   });
 
   it("enforces foreign key constraints on user_tokens", () => {
-    const db = createMigratedDatabase();
+    const db = createTestDatabase();
 
     assert.throws(
       () => {
@@ -147,7 +133,7 @@ describe("Multi-tenant Schema Migrations", () => {
   });
 
   it("prevents duplicate token hashes in user_tokens (Scenario 3)", () => {
-    const db = createMigratedDatabase();
+    const db = createTestDatabase();
 
     db.prepare(`
       INSERT INTO user_tokens (id, user_id, token_hash, label)
@@ -174,7 +160,7 @@ describe("Multi-tenant Schema Migrations", () => {
   });
 
   it("cascades deletion of user to transactions and tokens", () => {
-    const db = createMigratedDatabase();
+    const db = createTestDatabase();
 
     db.prepare(`
       INSERT INTO users (id, name)
@@ -210,7 +196,7 @@ describe("Multi-tenant Schema Migrations", () => {
   });
 
   it("defaults user_id to usr_default when omitted on transaction insert", () => {
-    const db = createMigratedDatabase();
+    const db = createTestDatabase();
 
     db.prepare(`
       INSERT INTO transactions (
@@ -233,7 +219,7 @@ describe("Multi-tenant Schema Migrations", () => {
   });
 
   it("supports existing insert_transaction query without user_id parameter", () => {
-    const db = createMigratedDatabase();
+    const db = createTestDatabase();
 
     const insertStmt = db.prepare(insertTransactionQuery);
     insertStmt.run(
