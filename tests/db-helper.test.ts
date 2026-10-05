@@ -128,4 +128,23 @@ describe("Test Database Helper", () => {
       },
     );
   });
+
+  it("cleans up database handle and rethrows when migration execution fails", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "migrations-fail-test-"));
+    try {
+      writeFileSync(join(tempDir, "0000_broken.sql"), "INVALID SQL SYNTAX STATEMENT;");
+
+      assert.throws(
+        () => {
+          createTestDatabase({ migrationsDir: tempDir });
+        },
+        (err: unknown) => {
+          const error = err as Error;
+          return error.message.includes("syntax error");
+        },
+      );
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });
