@@ -18,6 +18,7 @@ import {
 import insertTransactionQuery from "../queries/insert_transaction.sql";
 import selectDistinctMerchantsQuery from "../queries/select_distinct_merchants.sql";
 import selectRecentTransactionsQuery from "../queries/select_recent_transactions.sql";
+import { createTestDatabase } from "./helpers/db.ts";
 
 describe("isValidDate", () => {
   it("accepts valid ISO calendar date strings", () => {
@@ -1194,12 +1195,7 @@ describe("GET /api/transactions onRequestGet", () => {
 
 describe("Recent Transactions SQLite Query Integration", () => {
   it("orders transactions by date descending, then created_at descending", () => {
-    const initSql = readFileSync(resolve("migrations/0000_init.sql"), "utf-8");
-    const migrationSql = readFileSync(resolve("migrations/0001_expanded_schema.sql"), "utf-8");
-
-    const db = new DatabaseSync(":memory:");
-    db.exec(initSql);
-    db.exec(migrationSql);
+    const db = createTestDatabase();
 
     const insertStmt = db.prepare(insertTransactionQuery);
     insertStmt.run("tx-past", "2026-09-20", "Amex", "Food", "Groceries", "Trader Joe", 20, 0);
@@ -1220,12 +1216,7 @@ describe("Recent Transactions SQLite Query Integration", () => {
   });
 
   it("ignores duplicate id insertions via ON CONFLICT DO NOTHING", () => {
-    const initSql = readFileSync(resolve("migrations/0000_init.sql"), "utf-8");
-    const migrationSql = readFileSync(resolve("migrations/0001_expanded_schema.sql"), "utf-8");
-
-    const db = new DatabaseSync(":memory:");
-    db.exec(initSql);
-    db.exec(migrationSql);
+    const db = createTestDatabase();
 
     const insertStmt = db.prepare(insertTransactionQuery);
     insertStmt.run("tx-dup-1", "2026-09-20", "Amex", "Food", "Groceries", "Trader Joe", 20, 0);
