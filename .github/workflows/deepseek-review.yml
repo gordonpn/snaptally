@@ -46,7 +46,7 @@ jobs:
             - Do not invent criticism. Approve the change if no material issue exists.
 
             # Persistent Knowledge
-            - If a recurring incorrect assumption or architectural conflict is identified in the diff, recommend recording it in repository documentation.
+            - If the implementation conflicts with an ADR or repeats a known misconception, recommend recording it in repository documentation or an ADR.
             - Require evidence before turning any finding into a persistent rule.
 
             # Output

@@ -44,7 +44,7 @@ Act as a skeptical architecture reviewer. Challenge whether this is the right so
   - consequences
   - revisit conditions
 - If an existing ADR no longer applies, recommend superseding it rather than silently violating it.
-- If a repeated misconception appears again, recommend documenting it in the correction ledger with supporting evidence.
+- If a repeated misconception appears again, recommend documenting it in repository documentation with supporting evidence.
 
 # Review Output Integration
 Map all architectural findings into the required PRReview schema instead of generating unformatted Markdown headings:
