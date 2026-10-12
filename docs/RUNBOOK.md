@@ -156,7 +156,7 @@ To enable automated production deployments on merges to `main` and automated pre
 
 #### Required Repository Secrets
 In your GitHub repository settings under **Settings** > **Secrets and variables** > **Actions**, add:
-- `CLOUDFLARE_API_TOKEN`: Cloudflare API token with `Cloudflare Pages: Edit` and `D1: Edit` permissions.
+- `CLOUDFLARE_API_TOKEN`: Cloudflare API token with `Account > Cloudflare Pages: Edit`, `Account > D1: Edit`, and `User > Memberships: Read` permissions.
 - `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare Account ID.
 
 #### Workflow Definition (`.github/workflows/deploy.yml`)
