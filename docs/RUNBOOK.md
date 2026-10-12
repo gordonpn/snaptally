@@ -194,25 +194,48 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - name: Check Cloudflare credentials
+        id: check-credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+              echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required for production deployment"
+              exit 1
+            else
+              echo "::warning::Cloudflare credentials are not configured; skipping preview deployment"
+            fi
+          fi
+
       - name: Setup pnpm
+        if: steps.check-credentials.outputs.configured == 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 10
 
       - name: Setup Node.js
+        if: steps.check-credentials.outputs.configured == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
 
       - name: Install dependencies
+        if: steps.check-credentials.outputs.configured == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Build static assets
+        if: steps.check-credentials.outputs.configured == 'true'
         run: pnpm build
 
       - name: Deploy to Cloudflare Pages
         id: wrangler
+        if: steps.check-credentials.outputs.configured == 'true'
         uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -223,14 +246,14 @@ jobs:
   preview-comment:
     name: runner / preview-comment
     needs: deploy
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && (needs.deploy.outputs.deployment-url != '' || needs.deploy.outputs.alias-url != '')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       pull-requests: write
     steps:
       - name: Comment preview URL on pull request
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           ALIAS_URL: ${{ needs.deploy.outputs.alias-url }}
           DEPLOYMENT_URL: ${{ needs.deploy.outputs.deployment-url }}
