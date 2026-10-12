@@ -7,7 +7,7 @@
     {
       "binding": "DB",
       "database_name": "budget-db",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "5e8d75af-5302-4e30-8834-89fe60c79fed",
       "migrations_dir": "migrations"
     }
   ]
