@@ -51,12 +51,11 @@ jobs:
       - name: Deploy to Cloudflare Pages
         id: wrangler
         uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
-        env:
-          PAGES_BRANCH: ${{ github.head_ref || github.ref_name }}
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy ./dist --project-name=snaptally --branch="$PAGES_BRANCH"
+          command: pages deploy ./dist --project-name=snaptally --branch=${{ github.head_ref || github.ref_name }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
   preview-comment:
     name: runner / preview-comment
