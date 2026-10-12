@@ -168,19 +168,27 @@ on:
     branches:
       - main
 
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
 permissions:
   contents: read
   deployments: write
 
 jobs:
   deploy:
+    name: runner / deploy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
+        with:
+          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
