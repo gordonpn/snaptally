@@ -152,7 +152,7 @@ The output will provide the production deployment URL (e.g. `https://snaptally.p
 
 ### 5.2 Automated CI/CD Deployment via GitHub Actions
 
-To enable automated production deployments on merges to `main` and automated preview deployments with pull request comment links, configure a GitHub Actions deployment workflow.
+To enable automated production deployments on merges to `main` and automated preview deployments with pull request comment links (for same-repository, non-Dependabot pull requests), configure a GitHub Actions deployment workflow.
 
 #### Required Repository Secrets
 In your GitHub repository settings under **Settings** > **Secrets and variables** > **Actions**, add:
