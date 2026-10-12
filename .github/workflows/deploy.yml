@@ -11,21 +11,22 @@ concurrency:
   group: pages-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'production' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-permissions:
-  contents: read
-  deployments: write
-  pull-requests: write
-
 jobs:
   deploy:
     name: runner / deploy
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: write
     if: |
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
        github.actor != 'dependabot[bot]')
+    outputs:
+      alias-url: ${{ steps.wrangler.outputs.pages-deployment-alias-url }}
+      deployment-url: ${{ steps.wrangler.outputs.deployment-url }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -50,24 +51,33 @@ jobs:
       - name: Deploy to Cloudflare Pages
         id: wrangler
         uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        env:
+          PAGES_BRANCH: ${{ github.head_ref || github.ref_name }}
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy ./dist --project-name=snaptally --branch=${{ github.head_ref || github.ref_name }}
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          command: pages deploy ./dist --project-name=snaptally --branch="$PAGES_BRANCH"
 
+  preview-comment:
+    name: runner / preview-comment
+    needs: deploy
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
       - name: Comment preview URL on pull request
-        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         env:
-          ALIAS_URL: ${{ steps.wrangler.outputs.pages-deployment-alias-url }}
-          DEPLOYMENT_URL: ${{ steps.wrangler.outputs.deployment-url }}
+          ALIAS_URL: ${{ needs.deploy.outputs.alias-url }}
+          DEPLOYMENT_URL: ${{ needs.deploy.outputs.deployment-url }}
         with:
           script: |
             const marker = '<!-- cloudflare-pages-preview-deployment -->';
             const aliasUrl = process.env.ALIAS_URL || '';
             const deploymentUrl = process.env.DEPLOYMENT_URL || '';
-            const commitSha = context.sha.substring(0, 7);
+            const commitSha = context.payload.pull_request.head.sha.substring(0, 7);
             const headRef = context.payload.pull_request.head.ref;
 
             let body = `${marker}\n### Cloudflare Pages Preview Deployed\n\n`;
@@ -80,7 +90,7 @@ jobs:
             body += `- **Commit:** ${commitSha}\n`;
             body += `- **Branch:** ${headRef}\n`;
 
-            const { data: comments } = await github.rest.issues.listComments({
+            const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.payload.pull_request.number,
