@@ -12,11 +12,11 @@ import Layout from "../layouts/Layout.astro";
 
 <Layout title="SnapTally Intake">
   <div
-    class="flex flex-col min-h-dvh max-w-md mx-auto px-4 py-2 justify-between overflow-y-auto overscroll-none"
+    class="flex flex-col h-full min-h-screen max-w-md mx-auto pt-safe pl-safe pr-safe justify-between overflow-hidden overflow-x-hidden overscroll-none"
     x-data="intakeForm"
   >
     <!-- Header -->
-    <header class="flex items-center justify-between pb-1.5 border-b border-base-content/10">
+    <header class="flex-none flex items-center justify-between pb-1.5 border-b border-base-content/10">
       <div class="flex items-center gap-2">
         <div class="w-8 h-8 rounded-xl neu-raised-sm flex items-center justify-center text-primary">
           <IconReceipt2 class="w-5 h-5" />
@@ -49,7 +49,7 @@ import Layout from "../layouts/Layout.astro";
           type="button"
           x-show="outboxCount > 0"
           x-transition
-          class="badge badge-warning badge-sm gap-1 font-mono cursor-pointer min-h-[28px] px-2"
+          class="badge badge-warning gap-1 font-mono cursor-pointer min-h-[44px] min-w-[44px] px-2.5 neu-pressed"
           @click="syncPendingOutbox(true)"
           aria-label="Pending offline transactions"
           title="Pending offline transactions. Click to sync."
@@ -80,6 +80,9 @@ import Layout from "../layouts/Layout.astro";
       </div>
     </header>
 
+    <!-- Scrollable content area -->
+    <main class="flex-1 flex flex-col justify-between overflow-y-auto overflow-x-hidden w-full max-w-full no-scrollbar py-1">
+
     <!-- Status Message Alert -->
     <div
       x-show="statusMessage"
@@ -108,7 +111,7 @@ import Layout from "../layouts/Layout.astro";
     <section class="space-y-1.5 text-xs sm:text-sm">
       <!-- Merchant Chips -->
       <div class="space-y-1" role="group" aria-label="Merchant selection">
-        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right -mx-2.5 px-2.5 pr-8 py-1">
+        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right py-1 px-1">
           <template x-for="m in frequentMerchants" :key="m">
             <button
               type="button"
@@ -147,7 +150,7 @@ import Layout from "../layouts/Layout.astro";
       </div>
 
       <!-- Parent Bucket Chips -->
-      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right -mx-2.5 px-2.5 pr-8 py-1" role="group" aria-label="Parent bucket selection">
+      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right py-1 px-1" role="group" aria-label="Parent bucket selection">
         <template x-for="b in buckets" :key="b">
           <button
             type="button"
@@ -161,7 +164,7 @@ import Layout from "../layouts/Layout.astro";
       </div>
 
       <!-- Dynamic Subcategory Chips -->
-      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right -mx-2.5 px-2.5 pr-8 py-1" role="group" aria-label="Subcategory selection">
+      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right py-1 px-1" role="group" aria-label="Subcategory selection">
         <template x-for="s in subcategories" :key="s">
           <button
             type="button"
@@ -176,7 +179,7 @@ import Layout from "../layouts/Layout.astro";
 
       <!-- Card Selection Chips -->
       <div class="space-y-1" role="group" aria-label="Payment card selection">
-        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right -mx-2.5 px-2.5 pr-8 py-1">
+        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right py-1 px-1">
           <template x-for="c in cards" :key="c">
             <button
               type="button"
@@ -313,9 +316,10 @@ import Layout from "../layouts/Layout.astro";
         <IconBackspace class="w-5 h-5 sm:w-6 sm:h-6" />
       </button>
     </section>
+    </main>
 
     <!-- Action Button -->
-    <footer class="pt-1.5 pb-1">
+    <footer class="flex-none pt-1 pb-safe">
       <button
         type="button"
         class="neu-convex neu-pressed w-full h-11 sm:h-12 rounded-2xl text-base font-bold min-h-[44px] flex items-center justify-center transition-all disabled:cursor-not-allowed"

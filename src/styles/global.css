@@ -23,8 +23,25 @@
   mask-image: linear-gradient(to right, black 0%, black calc(100% - 32px), transparent 100%);
 }
 
+@utility pt-safe {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
+}
+
+@utility pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.75rem);
+}
+
+@utility pl-safe {
+  padding-left: max(env(safe-area-inset-left, 0px), 1rem);
+}
+
+@utility pr-safe {
+  padding-right: max(env(safe-area-inset-right, 0px), 1rem);
+}
+
 html,
 body {
+  height: 100%;
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
 }
