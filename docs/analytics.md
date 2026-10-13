@@ -1,6 +1,8 @@
 # SnapTally Modular Analytics and Intelligence Architecture
 
-This document specifies the architecture, data flow, statistical thresholds, deterministic calculation contracts, and structured LLM inference modules powering SnapTally's monthly analytics engine.
+> **Implementation Status Note:** The endpoints (e.g. `/api/analysis/*`), database schemas (`monthly_audits`), and automated background runners described in this document represent the planned Phase 4 analytics architecture. In Phases 2 and 3, SnapTally focuses on point-of-sale intake and offline outbox synchronization.
+
+This document specifies the architecture, data flow, statistical thresholds, deterministic calculation contracts, and structured LLM inference modules powering SnapTally's planned monthly analytics engine.
 
 ---
 
@@ -20,28 +22,28 @@ SnapTally enforces a strict separation between **deterministic computation** and
 
 ```mermaid
 flowchart TD
-    subgraph StorageLayer["Durable Storage (Cloudflare D1)"]
+    subgraph StorageLayer["Durable Storage (Cloudflare D1 - Planned Phase 4)"]
         RawTx[("Transactions Table")]
         Rules[("Card Multipliers & Category Rules")]
-        SinkingLedger[("Sinking Fund Allocations")]
-        AuditStore[("Monthly Audit History")]
+        SinkingLedger[("Sinking Fund Allocations & Drawdowns")]
+        AuditStore[("Monthly Audit History (monthly_audits)")]
     end
 
     subgraph DeterministicEngine["Deterministic Edge Engine (Cloudflare Workers / TypeScript)"]
         Aggregator["SQL Window Aggregator\n(Medians, MoM Deltas, Rolling Baselines)"]
-        SinkingReconciler["Sinking Fund Drawdown Reconciler\n(Suppresses planned annual charges)"]
+        SinkingReconciler["Sinking Fund Drawdown Reconciler\n(Reconciles planned charges against ledger)"]
         RewardsAuditor["Credit Card Rewards Leakage Auditor\n(Pure deterministic code; zero LLM calls)"]
         PayloadBuilder["Payload Builder & Token Guard (< 2,500 tokens)"]
     end
 
-    subgraph UI["Mobile & Desktop Web Client"]
+    subgraph UI["Mobile & Desktop Web Client (Planned Phase 4)"]
         DashboardUI["Dashboard Analytics View"]
         RewardsCard["Rewards Leakage UI Widget\n(Optimal card routing, missed cash back)"]
     end
 
     subgraph LLMInference["Inference Layer (Structured Outputs)"]
-        Mod1["Module 1: Anomaly & Subscription Auditor\n(Price hikes, cadence drift, velocity surges)"]
-        Mod3["Module 2: Strategic Cash Flow Synthesizer\n(Leverage matrix, behavioral guardrails)"]
+        InferenceMod1["Inference Module 1: Anomaly & Subscription Auditor\n(Price hikes, cadence drift, velocity surges)"]
+        InferenceMod2["Inference Module 2: Strategic Cash Flow Synthesizer\n(Leverage matrix, behavioral guardrails)"]
     end
 
     RawTx --> Aggregator
@@ -54,11 +56,11 @@ flowchart TD
     Aggregator --> SinkingReconciler
     SinkingReconciler --> PayloadBuilder
 
-    PayloadBuilder -->|"Structured payload 1"| Mod1
-    PayloadBuilder -->|"Structured payload 2"| Mod3
+    PayloadBuilder -->|"Structured payload 1"| InferenceMod1
+    PayloadBuilder -->|"Structured payload 2"| InferenceMod2
 
-    Mod1 --> AuditStore
-    Mod3 --> AuditStore
+    InferenceMod1 --> AuditStore
+    InferenceMod2 --> AuditStore
     AuditStore --> DashboardUI
 ```
 
@@ -80,22 +82,27 @@ flowchart TD
 Traditional anomaly detection relying on parametric $z$-scores ($\mu \pm 2\sigma$) fails on consumer personal finance data due to small sample sizes ($N \le 3$ to $12$ months) and heavy skew. A single irregular month distorts standard deviation, hiding subsequent surges.
 
 SnapTally replaces $z$-scores with **dual-gate non-parametric thresholds**:
-1. **Relative Gate**: Active month category spend exceeds $1.30 \times$ trailing 3-month median spend.
-2. **Absolute Dollar Gate**: Active month category spend minus trailing 3-month median spend exceeds $\$75.00$.
+1. **Relative Gate**: Active month category spend $\ge 1.30 \times$ trailing 3-month median spend.
+2. **Absolute Dollar Gate**: Active month category spend minus trailing 3-month median spend $\ge \$75.00$.
 
-Both gates must pass simultaneously before an anomaly flag is generated. This guarantees that small budget shifts (e.g. $\$12 \to \$18$ for cloud storage) never trigger velocity alarms, while genuine surges (e.g. $\$400 \to \$650$ for dining) are surfaced immediately.
+Both gates must pass simultaneously before an anomaly flag is generated:
+- **Inclusive Boundaries**: Comparisons are inclusive ($\ge$) to align with stated hurdle definitions.
+- **Zero-Baseline Rule**: If trailing 3-month median spend is $\$0.00$ (e.g. a newly active category), the relative gate is treated as passed if the absolute gate is satisfied (spend $\ge \$75.00$). In the prompt payload, `relative_ratio` is serialized as `null` with a boolean flag `"is_new_category": true`.
+
+This guarantees that small budget shifts (e.g. $\$12 \to \$18$ for cloud storage) never trigger velocity alarms, while genuine surges (e.g. $\$400 \to \$650$ for dining) are surfaced immediately.
 
 ### 3.2 Sinking Fund Drawdown Reconciliation
 A common failure mode in personal budgeting systems is flagging large planned annual expenses (car insurance premiums, annual software subscriptions, holiday travel) as "lifestyle creep."
 
-Before packaging anomaly payloads, the pre-computation engine checks transactions against the user's sinking fund allocations:
-- If a recurring charge matches a merchant tagged under `Savings -> Annual Subscriptions` or `Savings -> Annual Bills`, it is labeled as a planned drawdown.
-- Planned drawdowns are reconciled against the accumulated sinking fund balance.
-- Reconciled drawdowns are excluded from the anomaly alert payload passed to the language model.
+Before packaging anomaly payloads, the pre-computation engine reconciles transactions against user-configured sinking fund reserves:
+1. **User-Selectable Sinking Categories**: Reconciles against active categories declared in `src/config/intake.ts` under parent bucket `Savings` (`Travel Fund`, `Emergency Fund`, `Annual Bills`, `Home Maintenance`, `Special Events`).
+2. **Reserve Ledger Balance Contract**: Sinking fund reserves are computed via D1 aggregation queries:
+   $$\text{Current Fund Reserve} = \text{Initial Balance} + \sum \text{Allocations} - \sum \text{Drawdowns}$$
+3. **Reconciliation Suppression**: If a large or annual charge belongs to a sinking fund category or matches a recurring merchant linked to an active sinking fund allocation, and $\text{Current Fund Reserve} \ge 0$, the charge is treated as a funded planned drawdown and excluded from the anomaly alert payload passed to the language model.
 
 ---
 
-## 4. Module 1: Deterministic Credit Card Rewards Leakage Auditor (Zero LLM)
+## 4. Deterministic Credit Card Rewards Leakage Auditor (Zero LLM)
 
 ### 4.1 Specification and Rationale
 Credit card rewards optimization is an exact mathematical problem based on deterministic category multipliers. Outsourcing this calculation to an LLM produces rounding errors, hallucinated multiplier values, and non-deterministic scoring.
@@ -103,29 +110,41 @@ Credit card rewards optimization is an exact mathematical problem based on deter
 In SnapTally, rewards leakage is computed **entirely in deterministic TypeScript and SQL**, bypassing the LLM completely.
 
 ### 4.2 Mathematical Contract
-For each transaction $t$ with net spend $S_t$, category $C_t$, and card used $K_{\text{used}}$:
+Rewards accrue on the **gross card charge** ($G_t = \text{gross\_amount}$), not net out-of-pocket spend, because issuers award points on the total transaction amount prior to third-party reimbursements.
 
-1. **Achieved Multiplier**: $M_{\text{actual}} = \text{lookup}(K_{\text{used}}, C_t)$
-2. **Optimal Card and Multiplier**:
-   $$K_{\text{optimal}} = \arg\max_{k \in \text{Wallet}} \text{lookup}(k, C_t)$$
-   $$M_{\text{optimal}} = \max_{k \in \text{Wallet}} \text{lookup}(k, C_t)$$
-3. **Points Foregone**:
-   $$P_{\text{lost}} = \sum_{t} S_t \times \max(0, M_{\text{optimal}} - M_{\text{actual}})$$
-4. **Estimated Cash Value Lost**:
-   $$V_{\text{lost}} = P_{\text{lost}} \times \text{valuation}(C_t)$$
-   *(where valuation defaults to 1.0 cent per point for cash back or conservative transferable points valuation).*
-5. **Wallet Efficiency Score**:
-   $$\text{Efficiency} = \left( \frac{\sum_t S_t \times M_{\text{actual}}}{\sum_t S_t \times M_{\text{optimal}}} \right) \times 100$$
+Let transaction $t$ have gross amount $G_t$, category $C_t$, and card used $K_{\text{used}}$.
+Let the wallet contain active cards $k \in \text{Wallet}$, where each card awards currency $\text{curr}(k)$ (e.g., cash back, Amex MR points) with multiplier $M(k, C_t)$ and a conservative valuation $V_{\text{rate}}(k)$ expressed in **dollars per reward unit** (e.g., $\$0.010$ per dollar for 1% cash back, $\$0.015$ per point for transferable travel points).
 
-### 4.3 UI Presentation Contract
-The output of this calculation renders directly in the SnapTally UI as a dedicated card without latency or external API cost:
+1. **Earned Value per Card on Transaction $t$**:
+   $$E(t, k) = G_t \times M(k, C_t) \times V_{\text{rate}}(k)$$
+2. **Actual Value Earned**:
+   $$E_{\text{actual}, t} = E(t, K_{\text{used}})$$
+3. **Optimal Card Selection**:
+   $$K_{\text{optimal}, t} = \arg\max_{k \in \text{Wallet}} E(t, k)$$
+   $$E_{\text{optimal}, t} = \max_{k \in \text{Wallet}} E(t, k)$$
+4. **Estimated Dollar Value Lost per Transaction**:
+   $$V_{\text{lost}, t} = \max(0, E_{\text{optimal}, t} - E_{\text{actual}, t})$$
+5. **Total Value Lost Across Period**:
+   $$V_{\text{lost}} = \sum_{t} V_{\text{lost}, t}$$
+6. **Points Foregone by Program**:
+   For each distinct reward currency $curr$, total unearned points are aggregated:
+   $$P_{\text{lost}, curr} = \sum_{t: \text{curr}(K_{\text{optimal}, t}) = curr} G_t \times \max(0, M(K_{\text{optimal}, t}, C_t) - M(K_{\text{used}}, C_t))$$
+7. **Wallet Efficiency Score**:
+   $$\text{Efficiency} = \begin{cases} 100.0\%, & \text{if } \sum_t E_{\text{optimal}, t} = 0 \\ \left( \frac{\sum_t E_{\text{actual}, t}}{\sum_t E_{\text{optimal}, t}} \right) \times 100, & \text{otherwise} \end{cases}$$
+
+### 4.3 Data Source and Fallback Rules
+- **Rule Source**: Card multipliers and valuations are stored in persistent TypeScript configuration (`src/config/rewards.ts`) and extensible via D1 table `card_rewards`.
+- **Fallback Behavior**: For unmapped card names or unclassified categories, the engine falls back to a base earning rate of $1.0\times$ at $\$0.010$ per unit (1% baseline).
+
+### 4.4 UI Presentation Contract
+The output renders directly in the SnapTally UI as a dedicated card without latency or external model cost:
 - **Efficiency Metric**: Clean visual percentage (e.g., 94% optimal).
-- **Leakage Summary**: Total missed points and cash equivalent (e.g., 1,420 points / $14.20 foregone).
+- **Leakage Summary**: Total missed cash equivalent in dollars (e.g., $14.20 foregone) and breakdown of points foregone by program.
 - **Misrouted Categories**: Tabular breakdown of the top routing errors with clear corrective rules (e.g., "Use American Express Gold for Groceries rather than 2% Visa").
 
 ---
 
-## 5. Module 2: Anomaly and Subscription Creep Auditor (LLM-Assisted)
+## 5. Inference Module 1: Anomaly and Subscription Creep Auditor (LLM-Assisted)
 
 ### 5.1 Objective
 Audits recurring transactions and un-reconciled category velocity surges to detect silent price hikes, irregular frequency shifts, and unexpected lifestyle drift.
@@ -154,6 +173,8 @@ Rules:
       "merchant": "Streaming Service A",
       "current_amount": 22.99,
       "previous_amount": 19.99,
+      "last_billed_date": "2026-10-04",
+      "previous_billed_date": "2026-09-04",
       "cadence": "monthly",
       "flag": "amount_increased"
     },
@@ -161,6 +182,8 @@ Rules:
       "merchant": "Cloud Storage",
       "current_amount": 9.99,
       "previous_amount": 9.99,
+      "last_billed_date": "2026-10-01",
+      "previous_billed_date": "2026-09-01",
       "cadence": "monthly",
       "flag": "stable"
     }
@@ -172,6 +195,7 @@ Rules:
       "trailing_3mo_median": 510.00,
       "relative_ratio": 1.65,
       "dollar_delta": 330.00,
+      "is_new_category": false,
       "top_contributors": ["DoorDash ($210.00)", "Local Bistro ($185.00)"]
     }
   ],
@@ -182,7 +206,7 @@ Rules:
 }
 ```
 
-### 5.4 Output Schema Contract (JSON Schema)
+### 5.4 Output Schema Contract (Strict JSON Schema)
 
 ```json
 {
@@ -191,19 +215,29 @@ Rules:
     "subscription_alerts": {
       "type": "array",
       "items": {
-        "merchant": { "type": "string" },
-        "severity": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
-        "reason": { "type": "string" },
-        "recommended_action": { "type": "string" }
+        "type": "object",
+        "properties": {
+          "merchant": { "type": "string" },
+          "severity": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+          "reason": { "type": "string" },
+          "recommended_action": { "type": "string" }
+        },
+        "required": ["merchant", "severity", "reason", "recommended_action"],
+        "additionalProperties": false
       }
     },
     "velocity_anomalies": {
       "type": "array",
       "items": {
-        "category": { "type": "string" },
-        "root_cause": { "type": "string" },
-        "is_one_off": { "type": "boolean" },
-        "actionable_leverage_point": { "type": "string" }
+        "type": "object",
+        "properties": {
+          "category": { "type": "string" },
+          "root_cause": { "type": "string" },
+          "is_one_off": { "type": "boolean" },
+          "actionable_leverage_point": { "type": "string" }
+        },
+        "required": ["category", "root_cause", "is_one_off", "actionable_leverage_point"],
+        "additionalProperties": false
       }
     }
   },
@@ -214,7 +248,7 @@ Rules:
 
 ---
 
-## 6. Module 3: Strategic Cash Flow and Habit Synthesizer (LLM-Assisted)
+## 6. Inference Module 2: Strategic Cash Flow and Habit Synthesizer (LLM-Assisted)
 
 ### 6.1 Objective
 Synthesizes high-level capital allocations against Conscious Spending Plan benchmarks (Fixed Costs, Investments, Savings Goals, Guilt-Free Spending) to provide executive-level behavioral guardrails and structural interventions.
@@ -262,7 +296,7 @@ Rules:
 }
 ```
 
-### 6.4 Output Schema Contract (JSON Schema)
+### 6.4 Output Schema Contract (Strict JSON Schema)
 
 ```json
 {
@@ -275,11 +309,24 @@ Rules:
     "high_leverage_interventions": {
       "type": "array",
       "items": {
-        "domain": { "type": "string" },
-        "friction": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
-        "monthly_run_rate_savings": { "type": "number" },
-        "specific_tactic": { "type": "string" },
-        "behavioral_guardrail": { "type": "string" }
+        "type": "object",
+        "properties": {
+          "domain": { "type": "string" },
+          "friction": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+          "monthly_run_rate_savings": { "type": "number" },
+          "psychological_sustainability": { "type": "integer", "minimum": 1, "maximum": 5 },
+          "specific_tactic": { "type": "string" },
+          "behavioral_guardrail": { "type": "string" }
+        },
+        "required": [
+          "domain",
+          "friction",
+          "monthly_run_rate_savings",
+          "psychological_sustainability",
+          "specific_tactic",
+          "behavioral_guardrail"
+        ],
+        "additionalProperties": false
       }
     },
     "macro_observation": { "type": "string" }
@@ -297,7 +344,7 @@ Rules:
 
 ## 7. Execution Architecture and Workflows
 
-### 7.1 On-Demand Dashboard Trigger
+### 7.1 On-Demand Dashboard Trigger (Planned Phase 4)
 ```
 User navigates to Dashboard -> Taps "Run Monthly Audit"
   │
@@ -305,39 +352,48 @@ User navigates to Dashboard -> Taps "Run Monthly Audit"
   │      └──> Immediate render of Rewards Efficiency Card
   │
   └──> POST /api/analysis/audit (Triggers modular inference)
-         ├──> Checks D1 cache for current month's audit
-         ├──> If stale:
+         ├──> Computes source data version (hash of latest transaction id and timestamp in month)
+         ├──> Checks D1 cache for current month's audit matching transaction version
+         ├──> If cache hit and valid:
+         │      └──> Returns cached audit immediately
+         ├──> If stale or uncomputed:
+         │      ├──> Atomically claims audit execution in D1 (prevents concurrent duplicate runs)
          │      ├──> Executes SQL window queries for trailing 90 days
          │      ├──> Compiles compact payloads (< 2,000 tokens)
-         │      ├──> Parallel calls to Module 1 and Module 2
-         │      └──> Persists structured results to D1 audit table
-         └──> Returns unified JSON payload for Alpine.js dashboard display
+         │      ├──> Executes parallel calls to Inference Module 1 and Inference Module 2
+         │      ├──> Persists structured results to D1 `monthly_audits` table
+         │      └──> Returns unified JSON payload for Alpine.js dashboard display
 ```
 
-### 7.2 Scheduled Monthly Cron Trigger
+### 7.2 Scheduled Monthly Cron Trigger (Planned Phase 4)
 ```
 Cloudflare Cron Trigger fires (e.g. 0 8 1 * *)
   │
   ├──> Worker invokes runMonthlyScheduledAudit(month)
+  ├──> Atomically claims audit for the target month
   ├──> Executes deterministic SQL aggregations
-  ├──> Runs Module 1 and Module 2 inference with Structured Outputs
-  ├──> Persists audit results to D1 `monthly_audits` table
-  └──> Formats markdown digest and posts to configured webhook (Discord / Telegram)
+  ├──> Runs Inference Module 1 and Inference Module 2 with Structured Outputs
+  ├──> Persists audit results and sets digest_status = 'pending' in D1 `monthly_audits`
+  ├──> Dispatches markdown digest to configured webhook (Discord / Telegram)
+  └──> Updates digest_status = 'delivered' upon successful HTTP 200 response
 ```
 
 ---
 
 ## 8. Failure Modes, Edge Cases, and Mitigations
 
-1. **Merchant Normalization Inconsistencies**:
-   - Problem: Varied merchant billing strings (`AMZN Mktp US`, `Amazon.com`, `AMAZON PAY`) obscure recurring cadences.
-   - Mitigation: Leverages SnapTally's canonical merchant resolution pipeline (`toAlphanumericKey` and canonical table lookup in `queries/select_distinct_merchants.sql`) to unify descriptors prior to aggregation.
+1. **Merchant Normalization Inconsistencies and Descriptor Drift**:
+   - Problem: Varied merchant billing strings (`AMZN Mktp US`, `Amazon.com`, `AMAZON PAY`) differ semantically rather than just in punctuation or casing, causing `toAlphanumericKey` to split recurring cadences.
+   - Mitigation: Leverages an explicit alias mapping table (`merchant_aliases` in D1 and configurable mappings in `src/config/merchants.ts`) to resolve semantic variations to canonical entities prior to recurring-charge cadence evaluation.
 2. **Context Window Expansion**:
    - Problem: High monthly transaction volume (150+ transactions) risks token bloat and context drift.
    - Mitigation: Never passes raw transaction rows. Payloads strictly contain aggregated cluster totals, count metrics, top 3 merchant items by dollar volume, and pre-computed statistical deltas.
 3. **LLM Schema Non-Compliance**:
    - Problem: Free-form markdown formatting or missing JSON fields breaks dashboard parsers.
-   - Mitigation: Enforces API-level **Structured Outputs** (`response_format: { type: "json_schema", json_schema: { strict: true, ... } }`).
+   - Mitigation: Enforces API-level **Structured Outputs** (`response_format: { type: "json_schema", json_schema: { strict: true } }`), with all array `items` explicitly typed as objects with `additionalProperties: false`.
 4. **External API Outage or Network Timeout**:
    - Problem: DeepSeek or Gemini API experiences high latency (> 5000ms) or 5xx outages.
    - Mitigation: The dashboard immediately displays the deterministic metrics (CSP allocations and Credit Card Rewards Leakage). If the LLM call times out, the system generates fallback deterministic cards based directly on the raw anomaly flags without breaking the user experience.
+5. **Concurrent Audit Execution and Webhook Delivery**:
+   - Problem: Concurrent user clicks or overlapping cron triggers could duplicate LLM inferences and write conflicting results; network drops could cause silent webhook delivery loss.
+   - Mitigation: Enforces atomic month claiming on `monthly_audits` (`PRIMARY KEY (user_id, month)`). Delivery state is tracked durably (`digest_status: 'pending' | 'delivered' | 'failed'`), allowing automatic background retry for failed webhook dispatches.
