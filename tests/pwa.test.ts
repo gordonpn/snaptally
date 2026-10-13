@@ -256,6 +256,7 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
     const cssPath = path.join(ROOT_DIR, "src", "styles", "global.css");
     const indexContent = fs.readFileSync(indexPath, "utf-8");
     const cssContent = fs.readFileSync(cssPath, "utf-8");
+    const layoutContent = fs.readFileSync(LAYOUT_PATH, "utf-8");
 
     assert.match(cssContent, /safe-area-inset-top/, "global.css must declare safe-area-inset-top");
     assert.match(
@@ -284,6 +285,26 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
       indexContent,
       /<footer[^>]+flex-none/,
       "footer must be flex-none to avoid home bar overlap",
+    );
+    assert.match(
+      indexContent,
+      /h-full\s+min-h-screen/,
+      "index.astro must use h-full min-h-screen to avoid WebKit standalone dvh chin gap",
+    );
+    assert.match(
+      cssContent,
+      /height:\s*100%/,
+      "global.css must declare height: 100% on html, body",
+    );
+    assert.match(
+      layoutContent,
+      /<html[^>]+class="[^"]*h-full/,
+      "Layout.astro must declare h-full on html",
+    );
+    assert.match(
+      layoutContent,
+      /<body[^>]+class="[^"]*h-full/,
+      "Layout.astro must declare h-full on body",
     );
   });
 });

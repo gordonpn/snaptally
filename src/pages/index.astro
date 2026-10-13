@@ -12,7 +12,7 @@ import Layout from "../layouts/Layout.astro";
 
 <Layout title="SnapTally Intake">
   <div
-    class="flex flex-col h-dvh max-w-md mx-auto pt-safe pl-safe pr-safe justify-between overflow-hidden overflow-x-hidden overscroll-none"
+    class="flex flex-col h-full min-h-screen max-w-md mx-auto pt-safe pl-safe pr-safe justify-between overflow-hidden overflow-x-hidden overscroll-none"
     x-data="intakeForm"
   >
     <!-- Header -->
@@ -111,7 +111,7 @@ import Layout from "../layouts/Layout.astro";
     <section class="space-y-1.5 text-xs sm:text-sm">
       <!-- Merchant Chips -->
       <div class="space-y-1" role="group" aria-label="Merchant selection">
-        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right py-1">
+        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right py-1 px-1">
           <template x-for="m in frequentMerchants" :key="m">
             <button
               type="button"
@@ -150,7 +150,7 @@ import Layout from "../layouts/Layout.astro";
       </div>
 
       <!-- Parent Bucket Chips -->
-      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right py-1" role="group" aria-label="Parent bucket selection">
+      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right py-1 px-1" role="group" aria-label="Parent bucket selection">
         <template x-for="b in buckets" :key="b">
           <button
             type="button"
@@ -164,7 +164,7 @@ import Layout from "../layouts/Layout.astro";
       </div>
 
       <!-- Dynamic Subcategory Chips -->
-      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right py-1" role="group" aria-label="Subcategory selection">
+      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right py-1 px-1" role="group" aria-label="Subcategory selection">
         <template x-for="s in subcategories" :key="s">
           <button
             type="button"
@@ -179,7 +179,7 @@ import Layout from "../layouts/Layout.astro";
 
       <!-- Card Selection Chips -->
       <div class="space-y-1" role="group" aria-label="Payment card selection">
-        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right py-1">
+        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right py-1 px-1">
           <template x-for="c in cards" :key="c">
             <button
               type="button"
