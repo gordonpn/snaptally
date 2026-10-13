@@ -288,8 +288,18 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
     );
     assert.match(
       indexContent,
-      /h-full\s+min-h-screen/,
-      "index.astro must use h-full min-h-screen to avoid WebKit standalone dvh chin gap",
+      /app-viewport/,
+      "index.astro must use app-viewport class to adapt between PWA standalone and browser mode",
+    );
+    assert.match(
+      cssContent,
+      /\.app-viewport\s*\{[^}]*height:\s*100dvh/,
+      "global.css must constrain app-viewport to 100dvh in browser mode to prevent toolbar scrolling",
+    );
+    assert.match(
+      cssContent,
+      /@media\s+all\s+and\s+\(display-mode:\s*standalone\)\s*\{[^}]*height:\s*100%/,
+      "global.css must expand app-viewport to 100% in standalone PWA mode",
     );
     assert.match(
       cssContent,
@@ -297,14 +307,19 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
       "global.css must declare height: 100% on html, body",
     );
     assert.match(
-      layoutContent,
-      /<html[^>]+class="[^"]*h-full/,
-      "Layout.astro must declare h-full on html",
+      cssContent,
+      /overflow:\s*hidden/,
+      "global.css must lock document overflow to prevent browser rubber-banding",
     );
     assert.match(
       layoutContent,
-      /<body[^>]+class="[^"]*h-full/,
-      "Layout.astro must declare h-full on body",
+      /<html[^>]+class="[^"]*h-full[^"]*overflow-hidden/,
+      "Layout.astro must declare h-full and overflow-hidden on html",
+    );
+    assert.match(
+      layoutContent,
+      /<body[^>]+class="[^"]*h-full[^"]*overflow-hidden/,
+      "Layout.astro must declare h-full and overflow-hidden on body",
     );
   });
 });
