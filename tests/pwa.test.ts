@@ -306,5 +306,10 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
       /<body[^>]+class="[^"]*h-full/,
       "Layout.astro must declare h-full on body",
     );
+    assert.match(
+      indexContent,
+      /min-h-\[44px\]\s+min-w-\[44px\][^>]*@click="syncPendingOutbox/,
+      "pending outbox button must satisfy 44x44px touch target requirement",
+    );
   });
 });
