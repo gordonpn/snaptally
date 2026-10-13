@@ -144,6 +144,79 @@ pnpm wrangler pages secret put API_BEARER_TOKEN --project-name snaptally
 ```
 When prompted, enter a secure, randomly generated alphanumeric token (minimum 32 characters).
 
+### 4.4 Custom Subdomain Configuration (tally.gordon-pn.com)
+
+SnapTally is served in production on the custom subdomain `https://tally.gordon-pn.com`.
+
+#### 1. Add Custom Domain to Cloudflare Pages Project
+
+The recommended method is via the Cloudflare Dashboard to avoid storing credentials in shell history or process arguments:
+
+1. Navigate to **Workers & Pages** > **snaptally** > **Custom domains**.
+2. Click **Set up a custom domain**.
+3. Enter `tally.gordon-pn.com` and click **Continue**.
+
+Alternatively, when provisioning via the Cloudflare API, supply the API token through standard input to curl config rather than command-line arguments to prevent credential exposure in shell history or process tables:
+
+```bash
+printf "header = \"Authorization: Bearer %s\"\n" "$CLOUDFLARE_API_TOKEN" | curl --config - \
+  --request POST \
+  "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/snaptally/domains" \
+  --header "Content-Type: application/json" \
+  --data '{"name": "tally.gordon-pn.com"}'
+```
+
+#### 2. Configure DNS CNAME Record
+
+In the `gordon-pn.com` Cloudflare DNS zone, establish a proxied CNAME record pointing to the Pages project:
+
+- **Type**: `CNAME`
+- **Name**: `tally`
+- **Target**: `snaptally-5wq.pages.dev`
+- **Proxy Status**: Proxied (Orange cloud enabled)
+- **TTL**: Auto
+
+#### 3. SSL/TLS Provisioning and Always Use HTTPS Configuration
+
+Cloudflare provisions an edge SSL/TLS certificate (Google Trust Services / Cloudflare Universal SSL) supporting TLS 1.3.
+
+To prevent cleartext transmission of API bearer tokens over HTTP, explicitly enable **Always Use HTTPS** in Cloudflare zone settings:
+
+1. In the Cloudflare Dashboard, open the `gordon-pn.com` zone.
+2. Navigate to **SSL/TLS** > **Edge Certificates**.
+3. Toggle **Always Use HTTPS** to **On**.
+
+Alternatively, enable the setting via the Cloudflare API:
+
+```bash
+printf "header = \"Authorization: Bearer %s\"\n" "$CLOUDFLARE_API_TOKEN" | curl --config - \
+  --request PATCH \
+  "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/settings/always_use_https" \
+  --header "Content-Type: application/json" \
+  --data '{"value": "on"}'
+```
+
+Verify domain resolution, certificate negotiation, and HTTPS redirection:
+
+```bash
+# Verify DNS CNAME resolution to Cloudflare edge IPs
+dig tally.gordon-pn.com +short
+
+# Verify TLS negotiation and HTTP/2 response
+curl -svo /dev/null https://tally.gordon-pn.com 2>&1 | grep -E "SSL connection|HTTP/"
+
+# Verify HTTP to HTTPS redirect
+curl -sI http://tally.gordon-pn.com | grep -E "HTTP/|location:"
+```
+
+#### 4. Client Origin Isolation and Migration Considerations
+
+Browser storage mechanisms (`localStorage`, `IndexedDB`, and Service Worker cache) are strictly isolated by origin (`scheme://host:port`):
+
+- **Offline Outbox**: Transactions queued in IndexedDB on the previous Pages origin (`https://snaptally-5wq.pages.dev`) cannot be accessed by `https://tally.gordon-pn.com`. Operators and users should ensure the app is online on the previous origin so all queued transactions synchronize before migrating.
+- **Client Authentication**: The `API_BEARER_TOKEN` stored in `localStorage` does not transfer across origins. When accessing `https://tally.gordon-pn.com` for the first time, open **Settings** (gear icon) and configure the API bearer token.
+- **Old Origin Access**: If unsynced offline records remain on `https://snaptally-5wq.pages.dev`, users can navigate back to that origin to sync them.
+
 ---
 
 ## 5. Deployment Procedures
@@ -160,7 +233,7 @@ pnpm build
 pnpm wrangler pages deploy ./dist --project-name snaptally
 ```
 
-The output will provide the production deployment URL (e.g. `https://snaptally.pages.dev`).
+The output will provide the production deployment URL (e.g. `https://snaptally-5wq.pages.dev`).
 
 ### 5.2 Automated CI/CD Deployment via GitHub Actions
 
@@ -287,29 +360,34 @@ SnapTally uses Codecov to host visual coverage breakdowns and post line-by-line 
 
 ## 6. Post-Deployment Smoke Tests
 
-Execute the following checks against your live production domain (`https://snaptally.pages.dev`):
+Execute the following checks against your live production domain (`https://tally.gordon-pn.com`):
 
 ### 6.1 Unauthorized Request Rejection
 ```bash
-curl -i https://snaptally.pages.dev/api/transactions
+curl -i --http2 https://tally.gordon-pn.com/api/transactions
 ```
-- **Expected Status**: `HTTP/1.1 401 Unauthorized`
+- **Expected Status**: `HTTP/2 401 Unauthorized` (or `HTTP/1.1 401 Unauthorized`)
 - **Expected Payload**: `{"error":"Unauthorized"}`
 
 ### 6.2 Authenticated Query Verification
+Verify that an authenticated read request succeeds:
 ```bash
-curl -i -H "Authorization: Bearer <YOUR_SECRET_TOKEN>" \
-  https://snaptally.pages.dev/api/transactions?limit=1
+curl -i --http2 -H "Authorization: Bearer <YOUR_SECRET_TOKEN>" \
+  https://tally.gordon-pn.com/api/transactions?limit=1
 ```
-- **Expected Status**: `HTTP/1.1 200 OK`
-- **Expected Payload**: `{"transactions":[]}`
+- **Expected Status**: `HTTP/2 200 OK` (or `HTTP/1.1 200 OK`)
+- **Expected Payload**: `{"transactions":[...]}` (empty array `[]` on an empty database or array of recent transaction objects)
 
-### 6.3 Authenticated Transaction Insertion
+### 6.3 Authenticated Transaction Insertion and Cleanup
+Use an explicit identifier (`id: "smoke-test-tx-01"`) so repeated runs do not accumulate unindexed records, and remove the test record afterward to avoid polluting production data:
+
 ```bash
-curl -i -X POST https://snaptally.pages.dev/api/transactions \
+# 1. Insert synthetic smoke test record
+curl -i --http2 -X POST https://tally.gordon-pn.com/api/transactions \
   -H "Authorization: Bearer <YOUR_SECRET_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
+    "id": "smoke-test-tx-01",
     "date": "2026-10-01",
     "card": "Amex Gold",
     "parent_bucket": "Guilt-Free",
@@ -319,15 +397,21 @@ curl -i -X POST https://snaptally.pages.dev/api/transactions \
     "reimbursement": 0.00
   }'
 ```
-- **Expected Status**: `HTTP/1.1 201 Created`
-- **Expected Payload**: `{"ok":true,"id":"<UUID>"}`
+- **Expected Status**: `HTTP/2 201 Created` (or `HTTP/1.1 201 Created`)
+- **Expected Payload**: `{"ok":true,"id":"smoke-test-tx-01"}`
+
+```bash
+# 2. Clean up synthetic record from production database
+pnpm wrangler d1 execute budget-db --remote \
+  --command "DELETE FROM transactions WHERE id = 'smoke-test-tx-01';"
+```
 
 ### 6.4 Client PWA Verification
-1. Open `https://snaptally.pages.dev` in Safari on iOS or Chrome on Android.
+1. Open `https://tally.gordon-pn.com` in Safari on iOS or Chrome on Android.
 2. In Safari, tap Share > **Add to Home Screen**.
 3. Launch SnapTally from the home screen (verify standalone full-screen presentation without browser URL bars).
 4. Tap the **Settings** gear icon in the header.
-5. Paste your configured `API_BEARER_TOKEN` and save.
+5. Paste your configured `API_BEARER_TOKEN` and save (required due to origin isolation when migrating from `snaptally-5wq.pages.dev`).
 6. Verify the status indicator turns green.
 7. Enter a test transaction using the ATM keypad and tap **Save Expense**.
 8. Open the **Recent Transactions** feed to confirm the record was persisted.
@@ -365,3 +449,4 @@ When adding new migrations in `migrations/`:
 | `HTTP 500` on database calls | Missing `DB` binding | Ensure Cloudflare Pages Functions settings have `DB` bound to `budget-db`. |
 | Migration failed on `BEGIN` | Explicit transaction statements in D1 SQL | Remove manual `BEGIN TRANSACTION` and `COMMIT` statements; D1 manages batches automatically. |
 | Keypad layout bouncing on iOS | Missing viewport meta tags | Ensure `Layout.astro` contains `viewport-fit=cover` and styling includes `overscroll-none`. |
+| Custom domain returns HTTP 403 or CNAME error | CNAME target mismatch or missing DNS record | Ensure DNS CNAME for `tally.gordon-pn.com` points to `snaptally-5wq.pages.dev` with proxy enabled. |
