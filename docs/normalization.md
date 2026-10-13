@@ -46,9 +46,9 @@ Bank descriptors frequently include leading authorization tags, transaction chan
 
 ```typescript
 const NOISE_PREFIXES: RegExp[] = [
-  /^(?:PURCHASE AUTHORIZED ON \d{2}\/\d{2}(?:\/\d{2,4})? )/i,
-  /^(?:POS DEBIT|DEBIT CARD PURCHASE|CHECKCARD|RECURRING PAYMENT) -?\s*/i,
-  /^(?:CHECKCARD|PURCHASE|WITHDRAWAL)\s+\d{2}\/\d{2}\s*/i,
+  /^(?:PURCHASE AUTHORIZED ON \d{2}\/\d{2}(?:\/\d{2,4})?\s*)/i,
+  /^(?:CHECKCARD|PURCHASE|WITHDRAWAL|POS DEBIT|DEBIT CARD PURCHASE|RECURRING PAYMENT)(?:\s+\d{2}\/\d{2}(?:\/\d{2,4})?)?\s*-?\s*/i,
+  /^\d{2}\/\d{2}(?:\/\d{2,4})?\s*/,
   /^(?:PAYMENT TO|DIRECT DEBIT|ACH DEBIT)\s*/i
 ];
 ```
@@ -58,13 +58,13 @@ Intermediary payment gateways mask the true underlying merchant while embedding 
 
 | Payment Rail | Matching Regular Expression | Heuristic Signal |
 | :--- | :--- | :--- |
-| **Toast** | `^(?:TST\*|TOAST\*|TOAST POS\s*-\s*)` | Food & Beverage (>95% dining probability) |
-| **Square** | `^(?:SQ\s*\*|SQR\*|SQUARE\s*\*|SQC\*)` | Mixed retail, dining, services |
-| **PayPal** | `^(?:PAYPAL\s*\*|PP\*\s*)` | Online retail, digital subscriptions |
-| **Stripe** | `^(?:STRIPE\*|SP\*\s*)` | SaaS, e-commerce, digital products |
-| **Shopify** | `^(?:SP\s+|SHOPIFY\*)` | Direct-to-consumer e-commerce |
-| **Venmo** | `^(?:VENMO\s*\*|VENMO PAYMENT\s*)` | Peer-to-peer, informal dining splits |
-| **Apple Pay** | `^(?:APL\*|APPLE\.COM\/BILL\s*)` | Digital media, subscriptions, apps |
+| **Toast** | `^(?:TST\*\|TOAST\*\|TOAST POS\s*-\s*)` | Food & Beverage (>95% dining probability) |
+| **Square** | `^(?:SQ\s*\*\|SQR\*\|SQUARE\s*\*\|SQC\*)` | Mixed retail, dining, services |
+| **PayPal** | `^(?:PAYPAL\s*\*\|PP\*\s*)` | Online retail, digital subscriptions |
+| **Stripe** | `^(?:STRIPE\*\|SP\*\s*)` | SaaS, e-commerce, digital products |
+| **Shopify** | `^(?:SHOPIFY\*\|SP\s+)` | Direct-to-consumer e-commerce |
+| **Venmo** | `^(?:VENMO\s*\*\|VENMO PAYMENT\s*)` | Peer-to-peer, informal dining splits |
+| **Apple Pay** | `^(?:APL\*\|APPLE\.COM\/BILL\s*)` | Digital media, subscriptions, apps |
 
 ### 2.3 Step 3: Trailing Metadata and Geo Artifact Cleansing
 Descriptors often append physical store identifiers, terminals, phone numbers, state abbreviations, and zip codes. These are excised to produce a clean alphanumeric search token:
@@ -74,27 +74,28 @@ const TRAILING_NOISE_PATTERNS: RegExp[] = [
   /\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b/g,               // Telephone numbers: 800-555-0199
   /\bSTORE\s*#?\s*\d+\b/gi,                         // Store identifiers: STORE 0482
   /\bLOC(?:ATION)?\s*#?\s*\d+\b/gi,                 // Location identifiers: LOC 129
-  /\b#\s*[\w\d-]+\b/g,                              // Store tags: #1024, #B-12
+  /(?:^|\s)#\s*[\w\d-]+\b/g,                        // Store tags: #1024, #B-12
   /\bT-\d+\b/gi,                                    // Retail register formats: T-0921
-  /\s+\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/g,            // State + Zip code: MA 02138
-  /\s+\b[A-Z]{2}\b$/g,                              // Trailing state abbreviation: BOSTON MA
   /\.COM(?:\/[A-Z0-9]+)?/gi,                        // Web domains: NETFLIX.COM
-  /\b\d{4,}\b$/g                                    // Trailing numeric sequences (>= 4 digits)
+  /\s+\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/gi,           // State + Zip code: MA 02138
+  /\s+\b(?:CAMBRIDGE|BOSTON|SOMERVILLE|SEATTLE|SAN JOSE|NEW YORK|SAN FRANCISCO)\b(?=\s+[A-Z]{2}\b|\s*$)/gi, // Trailing city tokens
+  /\s+\b[A-Z]{2}\b$/g,                              // Trailing state abbreviation: BOSTON MA
+  /\s+\b\d{4,}\b$/g                                 // Trailing numeric sequences (>= 4 digits)
 ];
 ```
 
-*Note on Number Preservation:* Standalone numeric removal is restricted to trailing positions (`\b\d{4,}\b$`) or anchored patterns (`STORE`, `#`) to protect legitimate merchant names containing numbers (e.g. 7-Eleven, Studio 54).
+*Note on Number Preservation:* Standalone numeric removal is restricted to trailing positions (`\b\d{4,}\b$`) or anchored patterns (`STORE`, `#`) to protect legitimate merchant names containing numbers (e.g. 7-Eleven, Studio 54). Unanchored city name removal is strictly anchored to trailing positions or preceding state abbreviations to avoid truncating brands like Boston Market.
 
 ---
 
 ## 3. Taxonomy Mapping: Conscious Spending Plan
 
-Unlike legacy budgeting platforms that use uncoordinated category tags, SnapTally normalizes all transactions directly into Ramit Sethi's **Conscious Spending Plan (CSP)** four-bucket taxonomy, as defined in `docs/budgeting.md`:
+SnapTally normalizes all transactions directly into Ramit Sethi's **Conscious Spending Plan (CSP)** taxonomy, using the canonical bucket keys established in `src/config/intake.ts` and `docs/budgeting.md`:
 
 ```typescript
 export interface NormalizedClassification {
   canonical_name: string;
-  parent_bucket: "Fixed Costs" | "Investments" | "Savings" | "Guilt-Free Spending";
+  parent_bucket: "Fixed Costs" | "Investments" | "Savings" | "Guilt-Free";
   subcategory: string;
   reward_multiplier_category: "Dining" | "Groceries" | "Travel" | "Gas" | "Entertainment" | "Drugstores" | "Wholesale" | "Other";
 }
@@ -109,17 +110,20 @@ export interface NormalizedClassification {
 | `TRADER JOE` | Trader Joe's | Fixed Costs | Groceries | Groceries |
 | `TRDR JOE` | Trader Joe's | Fixed Costs | Groceries | Groceries |
 | `COSTCO WHS` | Costco Wholesale | Fixed Costs | Groceries | Wholesale |
-| `STARBUCKS` | Starbucks | Guilt-Free Spending | Coffee & Snacks | Dining |
-| `TATTE BAKERY` | Tatte Bakery & Cafe | Guilt-Free Spending | Dining Out | Dining |
-| `BLUE BOTTLE` | Blue Bottle Coffee | Guilt-Free Spending | Coffee & Snacks | Dining |
-| `SWEETGREEN` | Sweetgreen | Guilt-Free Spending | Dining Out | Dining |
+| `BOSTON MARKET` | Boston Market | Guilt-Free | Dining | Dining |
+| `STARBUCKS` | Starbucks | Guilt-Free | Coffee | Dining |
+| `TATTE BAKERY` | Tatte Bakery & Cafe | Guilt-Free | Dining | Dining |
+| `BLUE BOTTLE` | Blue Bottle Coffee | Guilt-Free | Coffee | Dining |
+| `SWEETGREEN` | Sweetgreen | Guilt-Free | Dining | Dining |
+| `CHIPOTLE` | Chipotle Mexican Grill | Guilt-Free | Dining | Dining |
 | `NETFLIX` | Netflix | Fixed Costs | Subscriptions | Entertainment |
 | `SPOTIFY` | Spotify | Fixed Costs | Subscriptions | Entertainment |
 | `AMAZON PRIME` | Amazon Prime | Fixed Costs | Subscriptions | Other |
-| `AMZN MKTP` | Amazon Marketplace | Guilt-Free Spending | Personal Hobbies & Tech | Other |
-| `UBER TRIP` | Uber | Fixed Costs | Transportation | Travel |
-| `UBER EATS` | Uber Eats | Guilt-Free Spending | Dining Out | Dining |
-| `CHEVRON` | Chevron | Fixed Costs | Transportation | Gas |
+| `AMAZON` | Amazon | Guilt-Free | Shopping | Other |
+| `AMZN MKTP` | Amazon Marketplace | Guilt-Free | Shopping | Other |
+| `UBER TRIP` | Uber | Fixed Costs | Transit | Travel |
+| `UBER EATS` | Uber Eats | Guilt-Free | Dining | Dining |
+| `CHEVRON` | Chevron | Fixed Costs | Transit | Gas |
 | `DELTA AIR` | Delta Air Lines | Savings | Travel Fund | Travel |
 | `CONEDISON` | ConEdison | Fixed Costs | Utilities | Other |
 
@@ -168,6 +172,7 @@ CREATE TABLE IF NOT EXISTS merchant_aliases (
   parent_bucket TEXT NOT NULL,
   subcategory TEXT NOT NULL,
   default_card TEXT,
+  reward_multiplier_category TEXT,
   source TEXT NOT NULL CHECK(source IN ('user_override', 'exact_rule', 'llm_inference')),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -180,9 +185,9 @@ ON merchant_aliases(user_id, normalized_key);
 ### 5.2 Resolution Lifecycle
 1. When a transaction is submitted or imported, the normalizer produces a normalized alphanumeric key (`toAlphanumericKey(cleaned)`).
 2. The engine queries `merchant_aliases` for `(user_id, normalized_key)`.
-3. If present, the stored classification is applied with `confidence = 0.99`.
+3. If present, the stored classification and `reward_multiplier_category` are applied with `confidence = 0.99`.
 4. If absent, the engine walks exact rules, regex heuristics, and aggregator defaults.
-5. If an LLM call is required (confidence < 0.80), the successful response is immediately upserted into `merchant_aliases` with `source = 'llm_inference'`.
+5. If an LLM call is required (confidence < 0.80), the successful response is immediately upserted into `merchant_aliases` (persisting `reward_multiplier_category` alongside bucket and subcategory) with `source = 'llm_inference'`.
 6. If the user edits the category or card in the UI, an upsert is executed with `source = 'user_override'`.
 
 ---
@@ -229,7 +234,7 @@ To ensure compatibility with DeepSeek and OpenAI strict Structured Outputs (`res
           "canonical_name": { "type": "string" },
           "parent_bucket": {
             "type": "string",
-            "enum": ["Fixed Costs", "Investments", "Savings", "Guilt-Free Spending"]
+            "enum": ["Fixed Costs", "Investments", "Savings", "Guilt-Free"]
           },
           "subcategory": { "type": "string" },
           "reward_multiplier_category": {
@@ -286,4 +291,4 @@ SnapTally operates across two execution environments:
    - Mitigation: Never assign a default category purely based on Square or Stripe. Only Toast retains a high-confidence dining heuristic.
 3. **External Model Outage or Latency**:
    - Problem: DeepSeek or Gemini API experiences an outage or elevated response latency.
-   - Mitigation: The edge intake pipeline never fails a user transaction on LLM timeouts. It falls back to title-casing the cleaned string, assigning `parent_bucket = 'Guilt-Free Spending'` and `subcategory = 'Uncategorized'`, and queuing the transaction ID for background re-classification.
+   - Mitigation: The edge intake pipeline never fails a user transaction on LLM timeouts. It falls back to title-casing the cleaned string, assigning `parent_bucket = 'Guilt-Free'` and `subcategory = 'Dining'`, and queuing the transaction ID for background re-classification.

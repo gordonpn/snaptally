@@ -38,22 +38,35 @@ describe("Merchant Normalizer", () => {
       assert.strictEqual(studio54.cleaned, "STUDIO 54 CAFE");
     });
 
+    it("preserves non-trailing city names in merchant brand names like Boston Market", () => {
+      const result = cleanRawDescriptor("BOSTON MARKET STORE #12");
+      assert.strictEqual(result.cleaned, "BOSTON MARKET");
+    });
+
     it("isolates PayPal payment rail", () => {
       const result = cleanRawDescriptor("PAYPAL *GITHUB SAN JOSE CA");
       assert.strictEqual(result.rail, "PayPal");
       assert.strictEqual(result.cleaned, "GITHUB");
     });
 
-    it("isolates Stripe payment rail", () => {
-      const result = cleanRawDescriptor("STRIPE *VERCEL INC SAN FRANCISCO CA");
-      assert.strictEqual(result.rail, "Stripe");
-      assert.strictEqual(result.cleaned, "VERCEL INC");
+    it("isolates Stripe payment rail for STRIPE* and SP* shorthand", () => {
+      const stripeFull = cleanRawDescriptor("STRIPE *VERCEL INC SAN FRANCISCO CA");
+      assert.strictEqual(stripeFull.rail, "Stripe");
+      assert.strictEqual(stripeFull.cleaned, "VERCEL INC");
+
+      const stripeShort = cleanRawDescriptor("SP*OPENAI SAN FRANCISCO CA");
+      assert.strictEqual(stripeShort.rail, "Stripe");
+      assert.strictEqual(stripeShort.cleaned, "OPENAI");
     });
 
-    it("isolates Shopify payment rail", () => {
-      const result = cleanRawDescriptor("SP * ALLBIRDS BOSTON MA");
-      assert.strictEqual(result.rail, "Shopify");
-      assert.strictEqual(result.cleaned, "ALLBIRDS");
+    it("isolates Shopify payment rail for SHOPIFY* and SP space prefix", () => {
+      const shopifyFull = cleanRawDescriptor("SHOPIFY * ALLBIRDS BOSTON MA");
+      assert.strictEqual(shopifyFull.rail, "Shopify");
+      assert.strictEqual(shopifyFull.cleaned, "ALLBIRDS");
+
+      const shopifyShort = cleanRawDescriptor("SP ALLBIRDS BOSTON MA");
+      assert.strictEqual(shopifyShort.rail, "Shopify");
+      assert.strictEqual(shopifyShort.cleaned, "ALLBIRDS");
     });
 
     it("isolates Venmo payment rail", () => {
@@ -85,26 +98,26 @@ describe("Merchant Normalizer", () => {
   });
 
   describe("normalizeMerchant", () => {
-    it("Scenario 1: evaluates Toast Blue Bottle Coffee into Guilt-Free Spending", () => {
+    it("Scenario 1: evaluates Toast Blue Bottle Coffee into Guilt-Free Coffee", () => {
       const result = normalizeMerchant("TST* BLUE BOTTLE COFFEE BOSTON MA");
       assert.strictEqual(result.paymentRail, "Toast");
       assert.strictEqual(result.cleanedDescription, "BLUE BOTTLE COFFEE");
       assert.strictEqual(result.canonicalMerchant, "Blue Bottle Coffee");
-      assert.strictEqual(result.parentBucket, "Guilt-Free Spending");
-      assert.strictEqual(result.subcategory, "Coffee & Snacks");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Coffee");
       assert.strictEqual(result.rewardCategory, "Dining");
       assert.strictEqual(result.matchStrategy, "exact_rule");
       assert.strictEqual(result.requiresLLM, false);
       assert.strictEqual(result.confidence, 0.98);
     });
 
-    it("Scenario 2: evaluates Square Tatte Bakery into Guilt-Free Spending Dining Out", () => {
+    it("Scenario 2: evaluates Square Tatte Bakery into Guilt-Free Dining", () => {
       const result = normalizeMerchant("SQ *TATTE BAKERY & CAFE #14 CAMBRIDGE MA 02138");
       assert.strictEqual(result.paymentRail, "Square");
       assert.strictEqual(result.cleanedDescription, "TATTE BAKERY & CAFE");
       assert.strictEqual(result.canonicalMerchant, "Tatte Bakery & Cafe");
-      assert.strictEqual(result.parentBucket, "Guilt-Free Spending");
-      assert.strictEqual(result.subcategory, "Dining Out");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Dining");
       assert.strictEqual(result.rewardCategory, "Dining");
       assert.strictEqual(result.matchStrategy, "exact_rule");
       assert.strictEqual(result.requiresLLM, false);
@@ -121,10 +134,19 @@ describe("Merchant Normalizer", () => {
 
       const genericAmazon = normalizeMerchant("AMAZON 800-555-0199 WA");
       assert.strictEqual(genericAmazon.canonicalMerchant, "Amazon");
-      assert.strictEqual(genericAmazon.parentBucket, "Guilt-Free Spending");
+      assert.strictEqual(genericAmazon.parentBucket, "Guilt-Free");
       assert.strictEqual(genericAmazon.subcategory, "Shopping");
       assert.strictEqual(genericAmazon.matchStrategy, "exact_rule");
       assert.strictEqual(genericAmazon.requiresLLM, false);
+    });
+
+    it("correctly classifies Boston Market as Guilt-Free Dining", () => {
+      const result = normalizeMerchant("BOSTON MARKET STORE #014");
+      assert.strictEqual(result.canonicalMerchant, "Boston Market");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Dining");
+      assert.strictEqual(result.matchStrategy, "exact_rule");
+      assert.strictEqual(result.requiresLLM, false);
     });
 
     it("matches bank abbreviation WHOLEFDS to Whole Foods Market", () => {
@@ -140,8 +162,8 @@ describe("Merchant Normalizer", () => {
     it("matches contextual regex rules for unmapped cafe", () => {
       const result = normalizeMerchant("TST* CORNER ARTISAN ROASTERY SOMERVILLE MA");
       assert.strictEqual(result.matchStrategy, "regex_heuristic");
-      assert.strictEqual(result.parentBucket, "Guilt-Free Spending");
-      assert.strictEqual(result.subcategory, "Coffee & Snacks");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Coffee");
       assert.strictEqual(result.requiresLLM, false);
       assert.strictEqual(result.confidence, 0.88);
     });
@@ -150,7 +172,7 @@ describe("Merchant Normalizer", () => {
       const result = normalizeMerchant("LOCAL CORNER DRUGS PHARMACY");
       assert.strictEqual(result.matchStrategy, "regex_heuristic");
       assert.strictEqual(result.parentBucket, "Fixed Costs");
-      assert.strictEqual(result.subcategory, "Health & Wellness");
+      assert.strictEqual(result.subcategory, "Groceries");
       assert.strictEqual(result.rewardCategory, "Drugstores");
       assert.strictEqual(result.requiresLLM, false);
     });
@@ -168,8 +190,8 @@ describe("Merchant Normalizer", () => {
       const result = normalizeMerchant("TST* UNMAPPED LOCAL MYSTERY ENTITY");
       assert.strictEqual(result.paymentRail, "Toast");
       assert.strictEqual(result.matchStrategy, "aggregator_heuristic");
-      assert.strictEqual(result.parentBucket, "Guilt-Free Spending");
-      assert.strictEqual(result.subcategory, "Dining Out");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Dining");
       assert.strictEqual(result.rewardCategory, "Dining");
       assert.strictEqual(result.requiresLLM, false);
       assert.strictEqual(result.confidence, 0.82);
