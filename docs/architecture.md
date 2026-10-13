@@ -139,6 +139,7 @@ SnapTally plans a decoupled Phase 4 analytics architecture separating determinis
 
 See [docs/analytics.md](analytics.md) for full architectural specifications, mathematical contracts, and output schemas.
 See [docs/budgeting.md](budgeting.md) for complete details on the category taxonomy, sinking fund accounting, and reimbursement handling.
+See [docs/normalization.md](normalization.md) for merchant normalizer specifications, payment rail extraction, and language model fallback contracts.
 
 ## Downstream Reconciliation & Google Sheets Integration
 
