@@ -131,11 +131,11 @@ To support in-app budget tracking alongside rapid intake in Phase 4, SnapTally s
 ### Edge SQL Aggregation Strategy
 All analytics queries will run directly against D1 using indexed aggregation queries (`SUM(net_spend) ... GROUP BY parent_bucket, subcategory`) once the expanded schema migration is applied, avoiding the overhead of transferring raw transaction logs to the client for processing. In the initial baseline schema, transactions are stored with `amount` and `category`.
 
-### Modular Analytics and Intelligence Pipeline
-SnapTally implements a decoupled analytics architecture separating deterministic SQL compute from structured LLM synthesis:
+### Modular Analytics and Intelligence Pipeline (Planned Phase 4)
+SnapTally plans a decoupled Phase 4 analytics architecture separating deterministic SQL compute from structured LLM synthesis:
 - **Deterministic Rewards Leakage**: Calculates credit card category routing efficiency and foregone points directly in TypeScript and D1 SQL with zero LLM dependency.
 - **Structured Semantic Audits**: Dispatches pre-aggregated JSON payloads (< 2,500 tokens) with dual-gate velocity hurdles to specialized LLM targets for subscription creep and strategic cash flow habits.
-- **Dual Execution**: Supports on-demand execution via `POST /api/analysis/audit` and scheduled monthly evaluation via Cloudflare Cron Triggers.
+- **Dual Execution**: Planned support for on-demand execution via `POST /api/analysis/audit` and scheduled monthly evaluation via Cloudflare Cron Triggers.
 
 See [docs/analytics.md](analytics.md) for full architectural specifications, mathematical contracts, and output schemas.
 See [docs/budgeting.md](budgeting.md) for complete details on the category taxonomy, sinking fund accounting, and reimbursement handling.
