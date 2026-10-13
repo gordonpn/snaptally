@@ -130,6 +130,8 @@ With the dual-scope expansion into both intake and analysis, SnapTally computes 
    $$\text{Current Fund Reserve} = \text{Initial Balance} + \sum \text{Allocations} - \sum \text{Drawdowns}$$
 4. **Income Allocation Comparison:**
    Calculates actual spend percentages against the Conscious Spending Plan benchmarks (50-60% Fixed, 10%+ Investments, 5-10% Savings, 20-35% Guilt-Free).
+5. **Rewards Leakage and Modular Intelligence:**
+   Calculates credit card multiplier routing efficiency in deterministic code, and dispatches structured anomaly summaries to the modular intelligence engine. See [docs/analytics.md](analytics.md) for complete mathematical contracts and inference schemas.
 
 ---
 
