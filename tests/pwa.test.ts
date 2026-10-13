@@ -251,7 +251,7 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
     assert.match(layoutContent, /viewport-fit=cover/);
   });
 
-  it("index.astro and global.css enforce iOS safe area insets and docked header/footer", () => {
+  it("index.astro and global.css enforce iOS safe area insets, no horizontal overflow, and docked header/footer", () => {
     const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
     const cssPath = path.join(ROOT_DIR, "src", "styles", "global.css");
     const indexContent = fs.readFileSync(indexPath, "utf-8");
@@ -263,8 +263,18 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
       /safe-area-inset-bottom/,
       "global.css must declare safe-area-inset-bottom",
     );
+    assert.match(
+      cssContent,
+      /calc\(env\(safe-area-inset-top,\s*0px\)\s*\+\s*0\.75rem\)/,
+      "global.css pt-safe must provide clearance below notch/Dynamic Island",
+    );
     assert.match(indexContent, /pt-safe/, "index.astro must use pt-safe");
     assert.match(indexContent, /pb-safe/, "index.astro must use pb-safe");
+    assert.match(
+      indexContent,
+      /overflow-x-hidden/,
+      "index.astro must restrict horizontal overflow",
+    );
     assert.match(
       indexContent,
       /<header[^>]+flex-none/,

@@ -24,11 +24,11 @@
 }
 
 @utility pt-safe {
-  padding-top: max(env(safe-area-inset-top, 0px), 0.5rem);
+  padding-top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
 }
 
 @utility pb-safe {
-  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.75rem);
 }
 
 @utility pl-safe {
