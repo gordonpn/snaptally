@@ -69,7 +69,19 @@ Copy the returned `database_id` into [wrangler.jsonc](../wrangler.jsonc), replac
       "database_id": "YOUR_ACTUAL_DATABASE_ID_HERE",
       "migrations_dir": "migrations"
     }
-  ]
+  ],
+  "env": {
+    "preview": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "budget-db-preview",
+          "database_id": "YOUR_PREVIEW_DATABASE_ID_HERE",
+          "migrations_dir": "migrations"
+        }
+      ]
+    }
+  }
 }
 ```
 
@@ -171,8 +183,8 @@ on:
     types: [opened, synchronize, reopened]
 
 concurrency:
-  group: pages-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'production' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: pages-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -281,7 +293,12 @@ jobs:
               issue_number: context.payload.pull_request.number,
             });
 
-            const existing = comments.find(c => c.body && c.body.includes(marker));
+            const existing = comments.find(c =>
+              c.user?.type === 'Bot' &&
+              (c.user?.login === 'github-actions[bot]' || c.user?.login === 'github-actions') &&
+              c.body &&
+              c.body.includes(marker)
+            );
             if (existing) {
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
