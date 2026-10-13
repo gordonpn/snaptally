@@ -38,18 +38,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-              echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required for production deployment"
-              exit 1
-            else
-              echo "::warning::Cloudflare credentials are not configured; skipping preview deployment"
-            fi
-          fi
+        run: ./.github/scripts/check-cloudflare-credentials.sh
 
       - name: Setup pnpm
         if: steps.check-credentials.outputs.configured == 'true'
@@ -89,8 +78,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      contents: read
       pull-requests: write
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
       - name: Comment preview URL on pull request
         uses: actions/github-script@v8
         env:
@@ -98,46 +93,5 @@ jobs:
           DEPLOYMENT_URL: ${{ needs.deploy.outputs.deployment-url }}
         with:
           script: |
-            const marker = '<!-- cloudflare-pages-preview-deployment -->';
-            const aliasUrl = process.env.ALIAS_URL || '';
-            const deploymentUrl = process.env.DEPLOYMENT_URL || '';
-            const commitSha = context.payload.pull_request.head.sha.substring(0, 7);
-            const headRef = context.payload.pull_request.head.ref;
-
-            let body = `${marker}\n### Cloudflare Pages Preview Deployed\n\n`;
-            if (aliasUrl) {
-              body += `- **Preview URL:** [${aliasUrl}](${aliasUrl})\n`;
-            }
-            if (deploymentUrl && deploymentUrl !== aliasUrl) {
-              body += `- **Deployment URL:** [${deploymentUrl}](${deploymentUrl})\n`;
-            }
-            body += `- **Commit:** ${commitSha}\n`;
-            body += `- **Branch:** ${headRef}\n`;
-
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-            });
-
-            const existing = comments.find(c =>
-              c.user?.type === 'Bot' &&
-              (c.user?.login === 'github-actions[bot]' || c.user?.login === 'github-actions') &&
-              c.body &&
-              c.body.includes(marker)
-            );
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                body,
-              });
-            }
+            const { default: commentPreview } = await import('${{ github.workspace }}/.github/scripts/comment-preview.js');
+            await commentPreview({ github, context });
