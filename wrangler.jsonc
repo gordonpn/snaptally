@@ -7,8 +7,20 @@
     {
       "binding": "DB",
       "database_name": "budget-db",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "5e8d75af-5302-4e30-8834-89fe60c79fed",
       "migrations_dir": "migrations"
     }
-  ]
+  ],
+  "env": {
+    "preview": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "budget-db-preview",
+          "database_id": "c6d1302f-9afe-45a3-856f-c84ae45cc1e3",
+          "migrations_dir": "migrations"
+        }
+      ]
+    }
+  }
 }

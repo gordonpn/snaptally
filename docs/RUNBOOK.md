@@ -69,7 +69,19 @@ Copy the returned `database_id` into [wrangler.jsonc](../wrangler.jsonc), replac
       "database_id": "YOUR_ACTUAL_DATABASE_ID_HERE",
       "migrations_dir": "migrations"
     }
-  ]
+  ],
+  "env": {
+    "preview": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "budget-db-preview",
+          "database_id": "YOUR_PREVIEW_DATABASE_ID_HERE",
+          "migrations_dir": "migrations"
+        }
+      ]
+    }
+  }
 }
 ```
 
@@ -152,11 +164,11 @@ The output will provide the production deployment URL (e.g. `https://snaptally.p
 
 ### 5.2 Automated CI/CD Deployment via GitHub Actions
 
-To enable automated deployment on every commit merged into `main`, configure a GitHub Actions deployment workflow.
+To enable automated production deployments on merges to `main` and automated preview deployments with pull request comment links (for same-repository, non-Dependabot pull requests), configure a GitHub Actions deployment workflow.
 
 #### Required Repository Secrets
 In your GitHub repository settings under **Settings** > **Secrets and variables** > **Actions**, add:
-- `CLOUDFLARE_API_TOKEN`: Cloudflare API token with `Cloudflare Pages: Edit` and `D1: Edit` permissions.
+- `CLOUDFLARE_API_TOKEN`: Cloudflare API token with `Account > Cloudflare Pages: Edit`, `Account > D1: Edit`, and `User > Memberships: Read` permissions.
 - `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare Account ID.
 
 #### Workflow Definition (`.github/workflows/deploy.yml`)
@@ -167,39 +179,97 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    types: [opened, synchronize, reopened]
 
-permissions:
-  contents: read
-  deployments: write
+concurrency:
+  group: pages-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    name: runner / deploy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: write
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.actor != 'dependabot[bot]')
+    outputs:
+      alias-url: ${{ steps.wrangler.outputs.pages-deployment-alias-url }}
+      deployment-url: ${{ steps.wrangler.outputs.deployment-url }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check Cloudflare credentials
+        id: check-credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: ./.github/scripts/check-cloudflare-credentials.sh
 
       - name: Setup pnpm
+        if: steps.check-credentials.outputs.configured == 'true'
         uses: pnpm/action-setup@v4
+        with:
+          version: 10
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        if: steps.check-credentials.outputs.configured == 'true'
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
 
       - name: Install dependencies
+        if: steps.check-credentials.outputs.configured == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Build static assets
+        if: steps.check-credentials.outputs.configured == 'true'
         run: pnpm build
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
+        id: wrangler
+        if: steps.check-credentials.outputs.configured == 'true'
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy ./dist --project-name=snaptally
+          command: pages deploy ./dist --project-name=snaptally --branch=${{ github.head_ref || github.ref_name }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+  preview-comment:
+    name: runner / preview-comment
+    needs: deploy
+    if: github.event_name == 'pull_request' && (needs.deploy.outputs.deployment-url != '' || needs.deploy.outputs.alias-url != '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Comment preview URL on pull request
+        uses: actions/github-script@v8
+        env:
+          ALIAS_URL: ${{ needs.deploy.outputs.alias-url }}
+          DEPLOYMENT_URL: ${{ needs.deploy.outputs.deployment-url }}
+        with:
+          script: |
+            const { default: commentPreview } = await import('${{ github.workspace }}/.github/scripts/comment-preview.js');
+            await commentPreview({ github, context });
 ```
 
 ### 5.3 Continuous Integration and Code Coverage
