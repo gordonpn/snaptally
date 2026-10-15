@@ -54,9 +54,8 @@ Allocations toward future known expenses or emergency protection:
 ### 2.4. Guilt-Free Spending (Parent Bucket: `Guilt-Free`)
 Discretionary lifestyle purchases that can be spent freely without anxiety once the other three buckets are funded:
 
-- `Dining`: Sit-down restaurants, social dinners, and full-service meals.
-- `Takeout`: Fast casual, takeout pickup, and food delivery apps (Chipotle, Shake Shack, McDonald's, Uber Eats).
-- `Coffee & Snacks`: Coffee shops, cafes, bakeries, ice cream (Berryline), bubble tea, and quick snacks.
+- `Dining`: Restaurants, takeout, food delivery, and casual meals out.
+- `Coffee`: Cafes, espresso, and daily beverage runs.
 - `Bars`: Drinks, pubs, lounges, and nightlife.
 - `Entertainment`: Concerts, movies, sporting events, and recreational activities.
 - `Shopping`: Clothing, electronics, gear, home decor, and personal items.
@@ -168,11 +167,11 @@ To maximize cash flow rewards without cognitive friction at the point of sale, c
 Broad category logging creates blind spots in spending analysis. SnapTally adopts two principles for detailed category tracking:
 
 ### 7.1 Food Segregation
-Food expenditures must not be lumped into a single generic "Food" bucket. Home groceries are strictly separated from dining out, convenience takeout, and cafes:
-1. `Fixed Costs -> Groceries`: Essential weekly home nutrition (Star Market, H Mart, Trader Joe's).
-2. `Guilt-Free -> Dining`: Sit-down dinners, social gatherings, and full-service meals.
-3. `Guilt-Free -> Takeout`: Fast casual, delivery apps (Uber Eats, DoorDash), convenience delivery premiums, and quick pickup.
-4. `Guilt-Free -> Coffee & Snacks`: Daily coffee runs, bakeries, cafes, ice cream, bubble tea, and casual treats.
+Food expenditures must not be lumped into a single generic "Food" bucket. Home groceries are strictly separated from dining out and convenience takeout:
+1. `Variable Essentials -> Groceries & Supermarkets`: Essential weekly home nutrition (Star Market, H Mart, Trader Joe's).
+2. `Guilt-Free Living -> Restaurants & Dining`: Sit-down dinners, social gatherings, bars.
+3. `Guilt-Free Living -> Fast Casual & Takeout`: Convenience delivery premiums and quick pickup.
+4. `Guilt-Free Living -> Cafes & Bakeries`: Daily coffee runs, bakeries, and casual drinks.
 
 This segregation clarifies whether a high food month was driven by grocery inflation or convenience delivery premiums.
 

@@ -170,8 +170,7 @@ describe("intakeForm Dynamic Subcategory Switching (Scenario 2)", () => {
     assert.strictEqual(form.subcategory, "Dining");
     assert.deepStrictEqual(form.subcategories, [
       "Dining",
-      "Takeout",
-      "Coffee & Snacks",
+      "Coffee",
       "Bars",
       "Shopping",
       "Entertainment",
@@ -201,11 +200,8 @@ describe("intakeForm Dynamic Subcategory Switching (Scenario 2)", () => {
   it("allows selecting a specific subcategory within the active bucket", () => {
     const form = intakeForm();
     form.selectBucket("Guilt-Free");
-    form.selectSubcategory("Takeout");
-    assert.strictEqual(form.subcategory, "Takeout");
-
-    form.selectSubcategory("Coffee & Snacks");
-    assert.strictEqual(form.subcategory, "Coffee & Snacks");
+    form.selectSubcategory("Coffee");
+    assert.strictEqual(form.subcategory, "Coffee");
   });
 });
 
