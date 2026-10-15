@@ -85,15 +85,34 @@ describe("isValidPayload", () => {
     assert.strictEqual(isValidPayload({ ...validPayload, date: 20260925 }), false);
   });
 
-  it("rejects non-positive or non-finite gross_amount", () => {
+  it("accepts a valid refund payload with negative gross_amount and zero or omitted reimbursement", () => {
+    assert.strictEqual(
+      isValidPayload({ ...validPayload, gross_amount: -25.5, reimbursement: 0 }),
+      true,
+    );
+    const { reimbursement, ...omittedReimbursement } = validPayload;
+    assert.strictEqual(isValidPayload({ ...omittedReimbursement, gross_amount: -25.5 }), true);
+  });
+
+  it("rejects non-finite or zero gross_amount", () => {
     assert.strictEqual(isValidPayload({ ...validPayload, gross_amount: 0 }), false);
-    assert.strictEqual(isValidPayload({ ...validPayload, gross_amount: -5 }), false);
     assert.strictEqual(isValidPayload({ ...validPayload, gross_amount: Number.NaN }), false);
     assert.strictEqual(
       isValidPayload({ ...validPayload, gross_amount: Number.POSITIVE_INFINITY }),
       false,
     );
+    assert.strictEqual(
+      isValidPayload({ ...validPayload, gross_amount: Number.NEGATIVE_INFINITY }),
+      false,
+    );
     assert.strictEqual(isValidPayload({ ...validPayload, gross_amount: "18.50" }), false);
+  });
+
+  it("rejects refunds with non-zero reimbursement", () => {
+    assert.strictEqual(
+      isValidPayload({ ...validPayload, gross_amount: -25.5, reimbursement: 5 }),
+      false,
+    );
   });
 
   it("rejects negative or non-finite reimbursement", () => {
@@ -450,6 +469,67 @@ describe("handlePost", () => {
       "George Howell",
       25.5,
       5.0,
+    ]);
+  });
+
+  it("inserts valid refund transaction with negative gross_amount and zero reimbursement", async () => {
+    let executed = false;
+    let boundArgs: unknown[] = [];
+
+    const mockDb = {
+      prepare(query: string) {
+        if (query === selectDistinctMerchantsQuery) {
+          return {
+            async all() {
+              return { results: [{ merchant: "Uniqlo" }] };
+            },
+          };
+        }
+        return {
+          bind(...args: unknown[]) {
+            boundArgs = args;
+            return {
+              async run() {
+                executed = true;
+                return { success: true };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${validToken}`,
+      },
+      body: JSON.stringify({
+        date: "2026-09-25",
+        card: "Amex Gold",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Shopping",
+        merchant: "Uniqlo",
+        gross_amount: -35.0,
+      }),
+    });
+
+    const response = await handlePost(request, mockDb, dummyQuery, validToken);
+    assert.strictEqual(response.status, 201);
+
+    const data = (await response.json()) as { ok: boolean; id: string };
+    assert.strictEqual(data.ok, true);
+    assert.strictEqual(executed, true);
+    assert.deepStrictEqual(boundArgs, [
+      data.id,
+      "2026-09-25",
+      "Amex Gold",
+      "Guilt-Free",
+      "Shopping",
+      "Uniqlo",
+      -35.0,
+      0.0,
     ]);
   });
 

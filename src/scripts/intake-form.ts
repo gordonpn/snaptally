@@ -44,6 +44,13 @@ export function intakeForm() {
     amountCents: 0,
     maxCents: 10000000,
 
+    // Refund and split reimbursement state
+    isRefund: false,
+    isSplit: false,
+    splitType: "50%",
+    reimbursementCents: 0,
+    customReimbursementInput: "",
+
     // Card selection (dynamically populated from recent transactions with Other... fallback)
     cards: [] as string[],
     card: "",
@@ -90,7 +97,39 @@ export function intakeForm() {
     },
 
     get grossAmount(): number {
-      return this.amountCents / 100;
+      const gross = this.amountCents / 100;
+      return this.isRefund ? -gross : gross;
+    },
+
+    get reimbursementAmount(): number {
+      if (this.isRefund || !this.isSplit) {
+        return 0;
+      }
+      return this.reimbursementCents / 100;
+    },
+
+    get netAmountCents(): number {
+      if (this.isRefund) {
+        return -this.amountCents;
+      }
+      if (!this.isSplit) {
+        return this.amountCents;
+      }
+      return Math.max(0, this.amountCents - this.reimbursementCents);
+    },
+
+    get formattedNet(): string {
+      return `$${(this.netAmountCents / 100).toFixed(2)}`;
+    },
+
+    get submitButtonLabel(): string {
+      if (this.isRefund) {
+        return "Save Refund";
+      }
+      if (this.isSplit) {
+        return `Save Transaction (Net ${this.formattedNet})`;
+      }
+      return "Save Transaction";
     },
 
     get subcategories(): string[] {
@@ -124,6 +163,7 @@ export function intakeForm() {
         return;
       }
       this.amountCents = nextAmount;
+      this.recalculateSplit();
     },
 
     pressBackspace(): void {
@@ -135,6 +175,7 @@ export function intakeForm() {
         this.isError = false;
       }
       this.amountCents = Math.floor(this.amountCents / 10);
+      this.recalculateSplit();
     },
 
     pressClear(): void {
@@ -146,6 +187,67 @@ export function intakeForm() {
         this.isError = false;
       }
       this.amountCents = 0;
+      this.recalculateSplit();
+    },
+
+    // Transaction Mode & Split Actions
+    setExpenseMode(): void {
+      this.isRefund = false;
+      this.recalculateSplit();
+    },
+
+    setRefundMode(): void {
+      this.isRefund = true;
+      this.isSplit = false;
+      this.reimbursementCents = 0;
+      this.customReimbursementInput = "";
+    },
+
+    toggleSplit(): void {
+      if (this.isRefund) {
+        return;
+      }
+      this.isSplit = !this.isSplit;
+      if (this.isSplit) {
+        this.recalculateSplit();
+      } else {
+        this.reimbursementCents = 0;
+        this.customReimbursementInput = "";
+      }
+    },
+
+    setSplitRatio(ratio: "50%" | "100%" | "custom"): void {
+      this.splitType = ratio;
+      this.recalculateSplit();
+    },
+
+    updateCustomReimbursement(value: string): void {
+      this.customReimbursementInput = value;
+      const parsed = parseFloat(value);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        const cents = Math.round(parsed * 100);
+        this.reimbursementCents = Math.min(cents, this.amountCents);
+      } else {
+        this.reimbursementCents = 0;
+      }
+    },
+
+    recalculateSplit(): void {
+      if (!this.isSplit || this.isRefund) {
+        return;
+      }
+      if (this.splitType === "50%") {
+        this.reimbursementCents = Math.round(this.amountCents / 2);
+      } else if (this.splitType === "100%") {
+        this.reimbursementCents = this.amountCents;
+      } else if (this.splitType === "custom") {
+        const parsed = parseFloat(this.customReimbursementInput);
+        if (Number.isFinite(parsed) && parsed >= 0) {
+          this.reimbursementCents = Math.min(Math.round(parsed * 100), this.amountCents);
+        } else {
+          this.reimbursementCents = 0;
+        }
+      }
     },
 
     // Selectors
@@ -516,8 +618,13 @@ export function intakeForm() {
       this.loading = true;
       try {
         const submittedAmountCents = this.amountCents;
-        const submittedGrossAmount = submittedAmountCents / 100;
-        const formatted = (submittedAmountCents / 100).toFixed(2);
+        const submittedGrossAmount = this.isRefund
+          ? -(submittedAmountCents / 100)
+          : submittedAmountCents / 100;
+        const submittedReimbursement =
+          this.isRefund || !this.isSplit ? 0.0 : this.reimbursementCents / 100;
+        const formattedGross = (submittedAmountCents / 100).toFixed(2);
+        const formattedNet = Math.abs(submittedGrossAmount - submittedReimbursement).toFixed(2);
 
         const outboxItem: OutboxItem = {
           id:
@@ -530,7 +637,7 @@ export function intakeForm() {
           subcategory: this.subcategory,
           merchant: trimmedMerchant,
           gross_amount: submittedGrossAmount,
-          reimbursement: 0.0,
+          reimbursement: submittedReimbursement,
           created_at: new Date().toISOString(),
         };
 
@@ -539,9 +646,20 @@ export function intakeForm() {
         this.outboxCount = await getOutboxCount();
 
         // 2. 0ms UI reset
-        this.statusMessage = `Saved $${formatted} at ${trimmedMerchant}`;
+        if (this.isRefund) {
+          this.statusMessage = `Saved refund of $${formattedGross} at ${trimmedMerchant}`;
+        } else if (this.isSplit) {
+          this.statusMessage = `Saved $${formattedGross} (Net $${formattedNet}) at ${trimmedMerchant}`;
+        } else {
+          this.statusMessage = `Saved $${formattedGross} at ${trimmedMerchant}`;
+        }
         this.isError = false;
         this.amountCents = 0;
+        this.reimbursementCents = 0;
+        this.customReimbursementInput = "";
+        this.isRefund = false;
+        this.isSplit = false;
+        this.splitType = "50%";
         this.resetDateToToday();
 
         // Add merchant to local autocomplete cache
