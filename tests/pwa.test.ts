@@ -311,5 +311,15 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
       /min-h-\[44px\]\s+min-w-\[44px\][^>]*@click="syncPendingOutbox/,
       "pending outbox button must satisfy 44x44px touch target requirement",
     );
+    assert.match(
+      indexContent,
+      /min-h-\[44px\][^>]*@click="setRefundMode/,
+      "refund mode button must satisfy 44px touch target requirement",
+    );
+    assert.match(
+      indexContent,
+      /min-h-\[44px\][^>]*@click="toggleSplit/,
+      "split mode button must satisfy 44px touch target requirement",
+    );
   });
 });
