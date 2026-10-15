@@ -47,7 +47,7 @@ export function intakeForm() {
     // Refund and split reimbursement state
     isRefund: false,
     isSplit: false,
-    splitType: "50%",
+    splitType: "50%" as "50%" | "100%" | "custom",
     reimbursementCents: 0,
     customReimbursementInput: "",
 
@@ -223,7 +223,11 @@ export function intakeForm() {
 
     updateCustomReimbursement(value: string): void {
       this.customReimbursementInput = value;
-      const parsed = parseFloat(value);
+      this.parseCustomReimbursement();
+    },
+
+    parseCustomReimbursement(): void {
+      const parsed = parseFloat(this.customReimbursementInput);
       if (Number.isFinite(parsed) && parsed >= 0) {
         const cents = Math.round(parsed * 100);
         this.reimbursementCents = Math.min(cents, this.amountCents);
@@ -241,12 +245,7 @@ export function intakeForm() {
       } else if (this.splitType === "100%") {
         this.reimbursementCents = this.amountCents;
       } else if (this.splitType === "custom") {
-        const parsed = parseFloat(this.customReimbursementInput);
-        if (Number.isFinite(parsed) && parsed >= 0) {
-          this.reimbursementCents = Math.min(Math.round(parsed * 100), this.amountCents);
-        } else {
-          this.reimbursementCents = 0;
-        }
+        this.parseCustomReimbursement();
       }
     },
 

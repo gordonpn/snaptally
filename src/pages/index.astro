@@ -102,6 +102,7 @@ import Layout from "../layouts/Layout.astro";
           type="button"
           class="neu-pressed rounded-full px-3.5 py-1.5 min-h-[44px] text-xs font-semibold transition-all flex items-center justify-center"
           :class="!isRefund ? 'neu-inset-sm font-bold text-primary bg-primary/10 outline outline-1 outline-primary/60' : 'neu-raised-sm text-neu-text-muted'"
+          :aria-pressed="!isRefund"
           @click="setExpenseMode()"
         >
           Expense
@@ -110,6 +111,7 @@ import Layout from "../layouts/Layout.astro";
           type="button"
           class="neu-pressed rounded-full px-3.5 py-1.5 min-h-[44px] text-xs font-semibold transition-all flex items-center justify-center"
           :class="isRefund ? 'neu-inset-sm font-bold text-secondary bg-secondary/10 outline outline-1 outline-secondary/60' : 'neu-raised-sm text-neu-text-muted'"
+          :aria-pressed="isRefund"
           @click="setRefundMode()"
         >
           Refund
@@ -118,6 +120,7 @@ import Layout from "../layouts/Layout.astro";
           type="button"
           class="neu-pressed rounded-full px-3.5 py-1.5 min-h-[44px] text-xs font-semibold transition-all flex items-center justify-center"
           :class="isSplit && !isRefund ? 'neu-inset-sm font-bold text-accent bg-accent/10 outline outline-1 outline-accent/60' : 'neu-raised-sm text-neu-text-muted'"
+          :aria-pressed="isSplit && !isRefund"
           :disabled="isRefund"
           @click="toggleSplit()"
         >
@@ -166,6 +169,7 @@ import Layout from "../layouts/Layout.astro";
             type="button"
             class="neu-pressed rounded-full px-3 py-1.5 min-h-[44px] text-xs transition-all"
             :class="splitType === '50%' ? 'neu-inset-sm font-bold text-accent bg-accent/10 outline outline-1 outline-accent/60' : 'neu-raised-sm font-medium text-neu-text'"
+            :aria-pressed="splitType === '50%'"
             @click="setSplitRatio('50%')"
           >
             50% Split
@@ -174,6 +178,7 @@ import Layout from "../layouts/Layout.astro";
             type="button"
             class="neu-pressed rounded-full px-3 py-1.5 min-h-[44px] text-xs transition-all"
             :class="splitType === '100%' ? 'neu-inset-sm font-bold text-accent bg-accent/10 outline outline-1 outline-accent/60' : 'neu-raised-sm font-medium text-neu-text'"
+            :aria-pressed="splitType === '100%'"
             @click="setSplitRatio('100%')"
           >
             100% (Work)
@@ -182,6 +187,7 @@ import Layout from "../layouts/Layout.astro";
             type="button"
             class="neu-pressed rounded-full px-3 py-1.5 min-h-[44px] text-xs transition-all"
             :class="splitType === 'custom' ? 'neu-inset-sm font-bold text-accent bg-accent/10 outline outline-1 outline-accent/60' : 'neu-raised-sm font-medium text-neu-text'"
+            :aria-pressed="splitType === 'custom'"
             @click="setSplitRatio('custom')"
           >
             Custom
@@ -194,6 +200,7 @@ import Layout from "../layouts/Layout.astro";
             step="0.01"
             min="0"
             :max="amountCents / 100"
+            aria-label="Reimbursement amount"
             placeholder="0.00"
             class="neu-inset w-32 rounded-xl px-3 py-2 text-sm font-mono text-neu-text focus:outline-none focus:ring-2 focus:ring-accent/40"
             x-model="customReimbursementInput"
@@ -486,13 +493,13 @@ import Layout from "../layouts/Layout.astro";
           <template x-for="tx in recentTransactions" :key="tx.id">
             <div class="py-2.5 flex items-center justify-between">
               <div class="min-w-0 pr-2">
-                <div class="font-semibold text-sm truncate text-neu-text flex items-center gap-1.5">
-                  <span x-text="tx.merchant"></span>
+                <div class="font-semibold text-sm text-neu-text flex items-center gap-1.5 min-w-0">
+                  <span class="truncate" x-text="tx.merchant"></span>
                   <template x-if="Number(tx.gross_amount) < 0">
-                    <span class="badge badge-secondary badge-xs">Refund</span>
+                    <span class="badge badge-secondary badge-xs shrink-0">Refund</span>
                   </template>
                   <template x-if="Number(tx.reimbursement) > 0">
-                    <span class="badge badge-accent badge-xs">Split</span>
+                    <span class="badge badge-accent badge-xs shrink-0">Split</span>
                   </template>
                 </div>
                 <div class="text-xs text-neu-text-muted flex items-center gap-1.5 mt-0.5">
