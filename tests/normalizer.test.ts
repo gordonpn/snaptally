@@ -198,13 +198,18 @@ describe("Merchant Normalizer", () => {
       assert.strictEqual(result.confidence, 0.88);
     });
 
-    it("matches contextual regex rules for unmapped fast food and delivery", () => {
+    it("matches contextual regex rules for unmapped fast food and food delivery", () => {
       const result = normalizeMerchant("EXPRESS FAST FOOD DELIVERY");
       assert.strictEqual(result.matchStrategy, "regex_heuristic");
       assert.strictEqual(result.parentBucket, "Guilt-Free");
       assert.strictEqual(result.subcategory, "Takeout");
       assert.strictEqual(result.requiresLLM, false);
       assert.strictEqual(result.confidence, 0.88);
+    });
+
+    it("does not classify non-food delivery as Takeout", () => {
+      const result = normalizeMerchant("FEDEX PARCEL DELIVERY EXPRESS");
+      assert.notStrictEqual(result.subcategory, "Takeout");
     });
 
     it("matches contextual regex rules for pharmacy", () => {

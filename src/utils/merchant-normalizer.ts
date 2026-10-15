@@ -261,7 +261,7 @@ export const CONTEXTUAL_REGEX_RULES: readonly {
     rewardMultiplierCategory: "Dining",
   },
   {
-    pattern: /\b(?:TAKEOUT|DELIVERY|FAST FOOD)\b/i,
+    pattern: /\b(?:TAKEOUT|FAST FOOD|FOOD DELIVERY)\b/i,
     canonicalName: "Takeout & Delivery",
     parentBucket: "Guilt-Free",
     subcategory: "Takeout",
