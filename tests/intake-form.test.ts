@@ -1056,3 +1056,176 @@ describe("intakeForm Card Lifecycle and Storage", () => {
     }
   });
 });
+
+describe("intakeForm Refund and Reimbursement Workflows (Issue #89)", () => {
+  it("initializes in standard expense mode with isRefund=false and isSplit=false", () => {
+    const form = intakeForm();
+    assert.strictEqual(form.isRefund, false);
+    assert.strictEqual(form.isSplit, false);
+    assert.strictEqual(form.reimbursementCents, 0);
+    assert.strictEqual(form.reimbursementAmount, 0);
+    assert.strictEqual(form.submitButtonLabel, "Save Transaction");
+  });
+
+  it("toggles refund mode, updates display with negative sign, and sets negative gross amount", () => {
+    const form = intakeForm();
+    form.pressDigit(3);
+    form.pressDigit(5);
+    form.pressDigit(0);
+    form.pressDigit(0);
+    assert.strictEqual(form.formattedAmount, "$35.00");
+    assert.strictEqual(form.grossAmount, 35.0);
+
+    form.setRefundMode();
+    assert.strictEqual(form.isRefund, true);
+    assert.strictEqual(form.isSplit, false);
+    assert.strictEqual(form.grossAmount, -35.0);
+    assert.strictEqual(form.submitButtonLabel, "Save Refund");
+
+    form.setExpenseMode();
+    assert.strictEqual(form.isRefund, false);
+    assert.strictEqual(form.grossAmount, 35.0);
+    assert.strictEqual(form.submitButtonLabel, "Save Transaction");
+  });
+
+  it("submits refund transaction with negative gross_amount and zero reimbursement", async () => {
+    const form = intakeForm();
+    form.pressDigit(2);
+    form.pressDigit(5);
+    form.pressDigit(0);
+    form.pressDigit(0);
+    form.card = "Amex Gold";
+    form.merchant = "Uniqlo";
+    form.setRefundMode();
+
+    const originalFetch = globalThis.fetch;
+    let submittedPayload: unknown;
+    globalThis.fetch = (async (_url: unknown, options: { body?: string }) => {
+      if (options?.body) {
+        submittedPayload = JSON.parse(options.body);
+      }
+      return new Response(JSON.stringify({ ok: true, id: "tx-refund-1" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await form.submitTransaction();
+      assert.strictEqual(result, true);
+      assert.strictEqual(form.statusMessage, "Saved refund of $25.00 at Uniqlo");
+      assert.strictEqual(form.isRefund, false);
+      assert.strictEqual(form.amountCents, 0);
+
+      const payload = submittedPayload as Record<string, unknown>;
+      assert.strictEqual(payload.gross_amount, -25.0);
+      assert.strictEqual(payload.reimbursement, 0.0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("toggles split mode, calculates 50% split, and updates dynamically with keypad inputs", () => {
+    const form = intakeForm();
+    form.pressDigit(1);
+    form.pressDigit(0);
+    form.pressDigit(0);
+    form.pressDigit(0); // $10.00
+    assert.strictEqual(form.amountCents, 1000);
+
+    form.toggleSplit();
+    assert.strictEqual(form.isSplit, true);
+    assert.strictEqual(form.splitType, "50%");
+    assert.strictEqual(form.reimbursementCents, 500);
+    assert.strictEqual(form.netAmountCents, 500);
+    assert.strictEqual(form.formattedNet, "$5.00");
+    assert.strictEqual(form.submitButtonLabel, "Save Transaction (Net $5.00)");
+
+    // Type 0 to make it $100.00
+    form.pressDigit(0);
+    assert.strictEqual(form.amountCents, 10000);
+    assert.strictEqual(form.reimbursementCents, 5000);
+    assert.strictEqual(form.netAmountCents, 5000);
+    assert.strictEqual(form.formattedNet, "$50.00");
+  });
+
+  it("supports 100% reimbursable corporate work expense mode", async () => {
+    const form = intakeForm();
+    form.pressDigit(4);
+    form.pressDigit(5);
+    form.pressDigit(0);
+    form.pressDigit(0);
+    form.pressDigit(0); // $450.00
+    form.card = "Amex Gold";
+    form.merchant = "Delta Air Lines";
+
+    form.toggleSplit();
+    form.setSplitRatio("100%");
+    assert.strictEqual(form.splitType, "100%");
+    assert.strictEqual(form.reimbursementCents, 45000);
+    assert.strictEqual(form.netAmountCents, 0);
+    assert.strictEqual(form.formattedNet, "$0.00");
+    assert.strictEqual(form.submitButtonLabel, "Save Transaction (Net $0.00)");
+
+    const originalFetch = globalThis.fetch;
+    let submittedPayload: unknown;
+    globalThis.fetch = (async (_url: unknown, options: { body?: string }) => {
+      if (options?.body) {
+        submittedPayload = JSON.parse(options.body);
+      }
+      return new Response(JSON.stringify({ ok: true, id: "tx-work-1" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await form.submitTransaction();
+      assert.strictEqual(result, true);
+      assert.strictEqual(form.statusMessage, "Saved $450.00 (Net $0.00) at Delta Air Lines");
+
+      const payload = submittedPayload as Record<string, unknown>;
+      assert.strictEqual(payload.gross_amount, 450.0);
+      assert.strictEqual(payload.reimbursement, 450.0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("supports custom reimbursement dollar amount input capped at gross amount", () => {
+    const form = intakeForm();
+    form.pressDigit(8);
+    form.pressDigit(0);
+    form.pressDigit(0);
+    form.pressDigit(0); // $80.00
+
+    form.toggleSplit();
+    form.setSplitRatio("custom");
+    assert.strictEqual(form.splitType, "custom");
+
+    form.updateCustomReimbursement("30.00");
+    assert.strictEqual(form.reimbursementCents, 3000);
+    assert.strictEqual(form.netAmountCents, 5000);
+    assert.strictEqual(form.formattedNet, "$50.00");
+
+    // Attempting to exceed gross amount clamps to gross amount
+    form.updateCustomReimbursement("150.00");
+    assert.strictEqual(form.reimbursementCents, 8000);
+    assert.strictEqual(form.netAmountCents, 0);
+
+    // Invalid input falls back to zero reimbursement
+    form.updateCustomReimbursement("invalid");
+    assert.strictEqual(form.reimbursementCents, 0);
+    assert.strictEqual(form.netAmountCents, 8000);
+  });
+
+  it("disallows split mode when in refund mode", () => {
+    const form = intakeForm();
+    form.setRefundMode();
+    assert.strictEqual(form.isRefund, true);
+
+    form.toggleSplit();
+    assert.strictEqual(form.isSplit, false);
+    assert.strictEqual(form.reimbursementCents, 0);
+  });
+});

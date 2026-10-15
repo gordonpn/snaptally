@@ -94,15 +94,118 @@ import Layout from "../layouts/Layout.astro";
       x-text="statusMessage"
     ></div>
 
-    <!-- Amount Display (Debossed / Inset container) -->
-    <section class="w-full py-0.5 sm:py-1 select-none">
-      <div class="neu-inset rounded-2xl py-2 sm:py-2.5 px-4 flex flex-col items-center justify-center transition-all duration-75">
-        <div
-          class="text-4xl sm:text-5xl font-mono font-bold tracking-tight text-neu-text"
-          x-text="formattedAmount"
-          aria-live="off"
+    <!-- Amount Display & Transaction Mode (Expense / Refund / Split) -->
+    <section class="w-full py-0.5 sm:py-1 select-none space-y-1.5">
+      <!-- Mode & Split Toggles -->
+      <div class="flex items-center justify-center gap-2" role="group" aria-label="Transaction mode">
+        <button
+          type="button"
+          class="neu-pressed rounded-full px-3.5 py-1.5 min-h-[44px] text-xs font-semibold transition-all flex items-center justify-center"
+          :class="!isRefund ? 'neu-inset-sm font-bold text-primary bg-primary/10 outline outline-1 outline-primary/60' : 'neu-raised-sm text-neu-text-muted'"
+          :aria-pressed="!isRefund"
+          @click="setExpenseMode()"
         >
-          $0.00
+          Expense
+        </button>
+        <button
+          type="button"
+          class="neu-pressed rounded-full px-3.5 py-1.5 min-h-[44px] text-xs font-semibold transition-all flex items-center justify-center"
+          :class="isRefund ? 'neu-inset-sm font-bold text-secondary bg-secondary/10 outline outline-1 outline-secondary/60' : 'neu-raised-sm text-neu-text-muted'"
+          :aria-pressed="isRefund"
+          @click="setRefundMode()"
+        >
+          Refund
+        </button>
+        <button
+          type="button"
+          class="neu-pressed rounded-full px-3.5 py-1.5 min-h-[44px] text-xs font-semibold transition-all flex items-center justify-center"
+          :class="isSplit && !isRefund ? 'neu-inset-sm font-bold text-accent bg-accent/10 outline outline-1 outline-accent/60' : 'neu-raised-sm text-neu-text-muted'"
+          :aria-pressed="isSplit && !isRefund"
+          :disabled="isRefund"
+          @click="toggleSplit()"
+        >
+          Split
+        </button>
+      </div>
+
+      <!-- Debossed Amount Readout Well -->
+      <div class="neu-inset rounded-2xl py-2 sm:py-2.5 px-4 flex flex-col items-center justify-center transition-all duration-75 min-h-[72px]">
+        <div x-show="!isRefund && !isSplit">
+          <div
+            class="text-4xl sm:text-5xl font-mono font-bold tracking-tight text-neu-text text-center"
+            x-text="formattedAmount"
+            aria-live="off"
+          >
+            $0.00
+          </div>
+        </div>
+
+        <div x-show="isRefund" class="flex flex-col items-center">
+          <div
+            class="text-4xl sm:text-5xl font-mono font-bold tracking-tight text-secondary text-center"
+            x-text="'-' + formattedAmount"
+            aria-live="off"
+          >
+            -$0.00
+          </div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-secondary mt-0.5">Refund / Credit</span>
+        </div>
+
+        <div x-show="isSplit && !isRefund" class="flex flex-col items-center">
+          <div class="text-3xl sm:text-4xl font-mono font-bold tracking-tight text-neu-text text-center">
+            <span class="text-xs text-neu-text-muted font-sans font-normal uppercase tracking-wider mr-1">Net:</span>
+            <span x-text="formattedNet">$0.00</span>
+          </div>
+          <div class="text-xs text-neu-text-muted font-mono mt-0.5 text-center">
+            Gross: <span x-text="formattedAmount"></span> &bull; Reimbursed: $<span x-text="(reimbursementCents / 100).toFixed(2)"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Split Ratio Options (Visible when Split is active) -->
+      <div x-show="isSplit && !isRefund" x-transition class="pt-0.5 space-y-1.5">
+        <div class="flex items-center justify-center gap-2" role="group" aria-label="Split ratio selection">
+          <button
+            type="button"
+            class="neu-pressed rounded-full px-3 py-1.5 min-h-[44px] text-xs transition-all"
+            :class="splitType === '50%' ? 'neu-inset-sm font-bold text-accent bg-accent/10 outline outline-1 outline-accent/60' : 'neu-raised-sm font-medium text-neu-text'"
+            :aria-pressed="splitType === '50%'"
+            @click="setSplitRatio('50%')"
+          >
+            50% Split
+          </button>
+          <button
+            type="button"
+            class="neu-pressed rounded-full px-3 py-1.5 min-h-[44px] text-xs transition-all"
+            :class="splitType === '100%' ? 'neu-inset-sm font-bold text-accent bg-accent/10 outline outline-1 outline-accent/60' : 'neu-raised-sm font-medium text-neu-text'"
+            :aria-pressed="splitType === '100%'"
+            @click="setSplitRatio('100%')"
+          >
+            100% (Work)
+          </button>
+          <button
+            type="button"
+            class="neu-pressed rounded-full px-3 py-1.5 min-h-[44px] text-xs transition-all"
+            :class="splitType === 'custom' ? 'neu-inset-sm font-bold text-accent bg-accent/10 outline outline-1 outline-accent/60' : 'neu-raised-sm font-medium text-neu-text'"
+            :aria-pressed="splitType === 'custom'"
+            @click="setSplitRatio('custom')"
+          >
+            Custom
+          </button>
+        </div>
+        <div x-show="splitType === 'custom'" x-transition class="flex items-center justify-center gap-2">
+          <span class="text-xs font-semibold text-neu-text-muted">Reimbursement: $</span>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            :max="amountCents / 100"
+            aria-label="Reimbursement amount"
+            placeholder="0.00"
+            class="neu-inset w-32 rounded-xl px-3 py-2 text-sm font-mono text-neu-text focus:outline-none focus:ring-2 focus:ring-accent/40"
+            x-model="customReimbursementInput"
+            @input="updateCustomReimbursement($event.target.value)"
+          />
         </div>
       </div>
     </section>
@@ -323,11 +426,11 @@ import Layout from "../layouts/Layout.astro";
       <button
         type="button"
         class="neu-convex neu-pressed w-full h-11 sm:h-12 rounded-2xl text-base font-bold min-h-[44px] flex items-center justify-center transition-all disabled:cursor-not-allowed"
-        :class="amountCents > 0 ? 'text-primary' : 'text-neu-text-muted/60'"
+        :class="amountCents > 0 ? (isRefund ? 'text-secondary' : 'text-primary') : 'text-neu-text-muted/60'"
         :disabled="loading || amountCents <= 0"
         @click="submitTransaction()"
       >
-        <span x-show="!loading">Save Transaction</span>
+        <span x-show="!loading" x-text="submitButtonLabel">Save Transaction</span>
         <span x-show="loading" class="loading loading-spinner loading-sm"></span>
       </button>
     </footer>
@@ -390,7 +493,15 @@ import Layout from "../layouts/Layout.astro";
           <template x-for="tx in recentTransactions" :key="tx.id">
             <div class="py-2.5 flex items-center justify-between">
               <div class="min-w-0 pr-2">
-                <div class="font-semibold text-sm truncate text-neu-text" x-text="tx.merchant"></div>
+                <div class="font-semibold text-sm text-neu-text flex items-center gap-1.5 min-w-0">
+                  <span class="truncate" x-text="tx.merchant"></span>
+                  <template x-if="Number(tx.gross_amount) < 0">
+                    <span class="badge badge-secondary badge-xs shrink-0">Refund</span>
+                  </template>
+                  <template x-if="Number(tx.reimbursement) > 0">
+                    <span class="badge badge-accent badge-xs shrink-0">Split</span>
+                  </template>
+                </div>
                 <div class="text-xs text-neu-text-muted flex items-center gap-1.5 mt-0.5">
                   <span x-text="tx.subcategory"></span>
                   <span>&bull;</span>
@@ -399,8 +510,18 @@ import Layout from "../layouts/Layout.astro";
                   <span x-text="tx.date"></span>
                 </div>
               </div>
-              <div class="font-mono font-bold text-sm text-right whitespace-nowrap text-neu-text">
-                $<span x-text="Number(tx.net_spend).toFixed(2)"></span>
+              <div class="text-right whitespace-nowrap">
+                <div
+                  class="font-mono font-bold text-sm"
+                  :class="Number(tx.net_spend) < 0 ? 'text-secondary' : 'text-neu-text'"
+                >
+                  <span x-text="Number(tx.net_spend) < 0 ? '-$' + Math.abs(Number(tx.net_spend)).toFixed(2) : '$' + Number(tx.net_spend).toFixed(2)"></span>
+                </div>
+                <template x-if="Number(tx.reimbursement) > 0">
+                  <div class="text-[11px] font-mono text-neu-text-muted">
+                    Gross: $<span x-text="Number(tx.gross_amount).toFixed(2)"></span>
+                  </div>
+                </template>
               </div>
             </div>
           </template>
