@@ -275,7 +275,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
             await saveOutboxItem(item);
             failedCount++;
             scheduleDueRetry(backoffMs, options);
-            break;
+            continue;
           }
 
           // Permanently invalid payload; remove from outbox to prevent blocking the queue

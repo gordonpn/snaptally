@@ -1054,4 +1054,64 @@ describe("Sync Listeners (Scenario 2)", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("continues syncing subsequent valid transactions when an older API rejects a credit", async () => {
+    await clearOutbox();
+    const creditItem: OutboxItem = {
+      id: "tx-credit-item",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Venmo Reimbursement",
+      gross_amount: -60.0,
+      reimbursement: 0,
+      created_at: new Date(Date.now() - 2000).toISOString(),
+    };
+    const validExpense: OutboxItem = {
+      id: "tx-expense-item",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Tacos",
+      gross_amount: 25.0,
+      reimbursement: 0,
+      created_at: new Date(Date.now() - 1000).toISOString(),
+    };
+
+    await saveOutboxItem(creditItem);
+    await saveOutboxItem(validExpense);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { gross_amount: number };
+      if (body.gross_amount < 0) {
+        return new Response(
+          JSON.stringify({ error: "Validation failed: gross_amount must be positive" }),
+          {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+      return new Response(JSON.stringify({ id: "tx-expense-item", message: "Created" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token" });
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(result.syncedCount, 1);
+
+      const items = await getOutbox();
+      assert.strictEqual(items.length, 1);
+      assert.strictEqual(items[0].id, "tx-credit-item");
+      assert.strictEqual(items[0].retry_count, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
