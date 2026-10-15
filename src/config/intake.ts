@@ -1,5 +1,5 @@
 export const BUCKET_SUBCATEGORIES: Record<string, readonly string[]> = {
-  "Guilt-Free": ["Dining", "Coffee", "Bars", "Shopping", "Entertainment"],
+  "Guilt-Free": ["Dining", "Takeout", "Coffee & Snacks", "Bars", "Shopping", "Entertainment"],
   "Fixed Costs": ["Rent", "Utilities", "Groceries", "Subscriptions", "Transit"],
   Savings: ["Emergency Fund", "Investments", "Travel Fund"],
 };
