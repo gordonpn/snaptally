@@ -111,18 +111,21 @@ export interface NormalizedClassification {
 | `TRDR JOE` | Trader Joe's | Fixed Costs | Groceries | Groceries |
 | `COSTCO WHS` | Costco Wholesale | Fixed Costs | Groceries | Wholesale |
 | `BOSTON MARKET` | Boston Market | Guilt-Free | Dining | Dining |
-| `STARBUCKS` | Starbucks | Guilt-Free | Coffee | Dining |
-| `TATTE BAKERY` | Tatte Bakery & Cafe | Guilt-Free | Dining | Dining |
-| `BLUE BOTTLE` | Blue Bottle Coffee | Guilt-Free | Coffee | Dining |
-| `SWEETGREEN` | Sweetgreen | Guilt-Free | Dining | Dining |
-| `CHIPOTLE` | Chipotle Mexican Grill | Guilt-Free | Dining | Dining |
+| `STARBUCKS` | Starbucks | Guilt-Free | Coffee & Snacks | Dining |
+| `TATTE BAKERY` | Tatte Bakery & Cafe | Guilt-Free | Coffee & Snacks | Dining |
+| `BLUE BOTTLE` | Blue Bottle Coffee | Guilt-Free | Coffee & Snacks | Dining |
+| `BERRYLINE` | Berryline | Guilt-Free | Coffee & Snacks | Dining |
+| `SWEETGREEN` | Sweetgreen | Guilt-Free | Takeout | Dining |
+| `CHIPOTLE` | Chipotle Mexican Grill | Guilt-Free | Takeout | Dining |
+| `SHAKE SHACK` | Shake Shack | Guilt-Free | Takeout | Dining |
 | `NETFLIX` | Netflix | Fixed Costs | Subscriptions | Entertainment |
 | `SPOTIFY` | Spotify | Fixed Costs | Subscriptions | Entertainment |
 | `AMAZON PRIME` | Amazon Prime | Fixed Costs | Subscriptions | Other |
 | `AMAZON` | Amazon | Guilt-Free | Shopping | Other |
 | `AMZN MKTP` | Amazon Marketplace | Guilt-Free | Shopping | Other |
 | `UBER TRIP` | Uber | Fixed Costs | Transit | Travel |
-| `UBER EATS` | Uber Eats | Guilt-Free | Dining | Dining |
+| `UBER EATS` | Uber Eats | Guilt-Free | Takeout | Dining |
+| `DOORDASH` | DoorDash | Guilt-Free | Takeout | Dining |
 | `CHEVRON` | Chevron | Fixed Costs | Transit | Gas |
 | `DELTA AIR` | Delta Air Lines | Savings | Travel Fund | Travel |
 | `CONEDISON` | ConEdison | Fixed Costs | Utilities | Other |

@@ -316,5 +316,10 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
       /min-h-\[44px\]\s+min-w-\[44px\][^>]*@click="toggleNegative/,
       "credit toggle button must satisfy 44x44px touch target requirement",
     );
+    assert.match(
+      indexContent,
+      /min-h-\[44px\][^>]*@click="selectSubcategory\(s\)"/,
+      "subcategory chips must satisfy 44px touch target requirement",
+    );
   });
 });
