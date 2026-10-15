@@ -248,6 +248,36 @@ describe("Merchant Normalizer", () => {
       assert.strictEqual(result.subcategory, "Groceries");
     });
 
+    it("preserves restaurant classification when descriptors contain MARKET", () => {
+      const result = normalizeMerchant("THE MARKET RESTAURANT");
+      assert.strictEqual(result.matchStrategy, "regex_heuristic");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Dining");
+      assert.strictEqual(result.rewardCategory, "Dining");
+    });
+
+    it("does not classify non-transit merchants with METRO or PATH as transit", () => {
+      const metroDiner = normalizeMerchant("METRO DINER");
+      assert.strictEqual(metroDiner.matchStrategy, "regex_heuristic");
+      assert.strictEqual(metroDiner.parentBucket, "Guilt-Free");
+      assert.strictEqual(metroDiner.subcategory, "Dining");
+
+      const metroMobile = normalizeMerchant("METRO BY T-MOBILE");
+      assert.strictEqual(metroMobile.matchStrategy, "unresolved");
+      assert.strictEqual(metroMobile.requiresLLM, true);
+      assert.strictEqual(metroMobile.parentBucket, null);
+
+      const pathSoftware = normalizeMerchant("CRITICAL PATH SOFTWARE");
+      assert.strictEqual(pathSoftware.matchStrategy, "unresolved");
+      assert.strictEqual(pathSoftware.requiresLLM, true);
+      assert.strictEqual(pathSoftware.parentBucket, null);
+
+      const pathTrain = normalizeMerchant("PATH TRAIN");
+      assert.strictEqual(pathTrain.matchStrategy, "regex_heuristic");
+      assert.strictEqual(pathTrain.parentBucket, "Fixed Costs");
+      assert.strictEqual(pathTrain.subcategory, "Transit");
+    });
+
     it("classifies transit subway descriptors as Transit under Fixed Costs", () => {
       const mtaResult = normalizeMerchant("MTA SUBWAY FARE");
       assert.strictEqual(mtaResult.matchStrategy, "regex_heuristic");
