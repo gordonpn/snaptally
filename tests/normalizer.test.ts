@@ -207,6 +207,40 @@ describe("Merchant Normalizer", () => {
       assert.strictEqual(result.confidence, 0.88);
     });
 
+    it("evaluates McDonald's descriptors deterministically into Guilt-Free Takeout", () => {
+      const result = normalizeMerchant("MCDONALDS #102 BOSTON MA");
+      assert.strictEqual(result.canonicalMerchant, "McDonald's");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Takeout");
+      assert.strictEqual(result.rewardCategory, "Dining");
+      assert.strictEqual(result.confidence, 0.98);
+
+      const apostropheVariant = normalizeMerchant("MCDONALD'S 4821 SOMERVILLE MA");
+      assert.strictEqual(apostropheVariant.canonicalMerchant, "McDonald's");
+      assert.strictEqual(apostropheVariant.parentBucket, "Guilt-Free");
+      assert.strictEqual(apostropheVariant.subcategory, "Takeout");
+    });
+
+    it("does not classify non-food merchants containing standalone TEA as Coffee & Snacks", () => {
+      const result = normalizeMerchant("TEA COLLECTION KIDS CLOTHING");
+      assert.strictEqual(result.matchStrategy, "unresolved");
+      assert.strictEqual(result.requiresLLM, true);
+      assert.strictEqual(result.parentBucket, null);
+      assert.strictEqual(result.subcategory, null);
+    });
+
+    it("matches beverage tea phrases as Cafe & Bakery under Coffee & Snacks", () => {
+      const bobaResult = normalizeMerchant("HAPPY LEMON BOBA TEA");
+      assert.strictEqual(bobaResult.matchStrategy, "regex_heuristic");
+      assert.strictEqual(bobaResult.parentBucket, "Guilt-Free");
+      assert.strictEqual(bobaResult.subcategory, "Coffee & Snacks");
+
+      const teaShopResult = normalizeMerchant("ARTISAN LEAF TEA SHOP BOSTON MA");
+      assert.strictEqual(teaShopResult.matchStrategy, "regex_heuristic");
+      assert.strictEqual(teaShopResult.parentBucket, "Guilt-Free");
+      assert.strictEqual(teaShopResult.subcategory, "Coffee & Snacks");
+    });
+
     it("does not classify non-food delivery as Takeout", () => {
       const result = normalizeMerchant("FEDEX PARCEL DELIVERY EXPRESS");
       assert.notStrictEqual(result.subcategory, "Takeout");
