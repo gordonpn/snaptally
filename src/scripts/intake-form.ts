@@ -168,6 +168,9 @@ export function intakeForm() {
     },
 
     toggleNegative(): void {
+      if (this.loading) {
+        return;
+      }
       this.isNegative = !this.isNegative;
     },
 
@@ -538,8 +541,9 @@ export function intakeForm() {
 
       this.loading = true;
       try {
+        const isCredit = this.isNegative;
         const submittedAmountCents = this.amountCents;
-        const submittedGrossAmount = this.isNegative
+        const submittedGrossAmount = isCredit
           ? -(submittedAmountCents / 100)
           : submittedAmountCents / 100;
         const submittedReimbursement = 0.0;
@@ -565,7 +569,7 @@ export function intakeForm() {
         this.outboxCount = await getOutboxCount();
 
         // 2. 0ms UI reset
-        if (this.isNegative) {
+        if (isCredit) {
           this.statusMessage = `Saved credit of $${formattedGross} at ${trimmedMerchant}`;
         } else {
           this.statusMessage = `Saved $${formattedGross} at ${trimmedMerchant}`;

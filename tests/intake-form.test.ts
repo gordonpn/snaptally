@@ -1087,6 +1087,12 @@ describe("intakeForm Credit and Reimbursement Workflows (Issue #89)", () => {
     assert.strictEqual(form.grossAmount, 35.0);
     assert.strictEqual(form.netAmountCents, 3500);
     assert.strictEqual(form.submitButtonLabel, "Save Transaction");
+
+    // Guard against mode changes while form is loading
+    form.loading = true;
+    form.toggleNegative();
+    assert.strictEqual(form.isNegative, false);
+    form.loading = false;
   });
 
   it("submits credit transaction with negative gross_amount and zero reimbursement", async () => {

@@ -112,6 +112,10 @@ Reimbursements and refunds are recorded as negative inflows (`gross_amount < 0`)
    - When your employer pays you back, log the -$450.00 credit to `Fixed Costs -> Transit`.
    - **Net Impact:** Neutral ($0.00 impact on monthly budget metrics).
 
+3. **Rewards Optimization and Auditing Treatment:**
+   - Negative gross transactions (`gross_amount < 0`) represent returns or cash reimbursements. They are excluded from forward-looking payment routing optimization, which evaluates only positive outgoing expenditures.
+   - For retrospective rewards auditing, returns and credits reverse points previously earned on the transaction payment method rather than applying negative multipliers to card routing scores.
+
 ---
 
 ## 5. Analysis Metrics and Calculations

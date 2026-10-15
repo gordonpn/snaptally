@@ -1013,4 +1013,45 @@ describe("Sync Listeners (Scenario 2)", () => {
       });
     }
   });
+
+  it("retains queued credit items with backoff when receiving HTTP 400 from older API version", async () => {
+    const creditItem: OutboxItem = {
+      id: "tx-credit-retain",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Venmo Reimbursement",
+      gross_amount: -60.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(creditItem);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({ error: "Validation failed: gross_amount must be positive" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token" });
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(result.syncedCount, 0);
+
+      const items = await getOutbox();
+      assert.strictEqual(items.length, 1);
+      assert.strictEqual(items[0].id, "tx-credit-retain");
+      assert.strictEqual(items[0].retry_count, 1);
+      assert.ok(items[0].next_retry_at && items[0].next_retry_at > Date.now());
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
