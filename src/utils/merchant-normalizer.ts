@@ -268,27 +268,12 @@ export const CONTEXTUAL_REGEX_RULES: readonly {
   rewardMultiplierCategory: string;
 }[] = [
   {
-    pattern: /\b(?:MARKET|GROCERY|PRODUCE|BODEGA|SUPERMARKET)\b/i,
-    canonicalName: "Grocery Store",
-    parentBucket: "Fixed Costs",
-    subcategory: "Groceries",
-    rewardMultiplierCategory: "Groceries",
-  },
-  {
     pattern:
-      /\b(?:MTA|MBTA|BART|WMATA|SEPTA|PATH|TRANSIT|METRO(?:CARD)?|OMNY|CLIPPER|VENTRA|SMARTRIP|CHARLIE\s*CARD|COMMUTER RAIL|CALTRAIN|AMTRAK|(?:METRO|SUBWAY|BUS|TRAIN)\s+(?:FARE|PASS|TICKET|TRANSIT|RIDE|STATION))\b/i,
+      /\b(?:MTA|MBTA|BART|WMATA|SEPTA|OMNY|METROCARD|CLIPPER|VENTRA|SMARTRIP|CHARLIE\s*CARD|COMMUTER RAIL|CALTRAIN|AMTRAK|PUBLIC TRANSIT|PANYNJ|(?:METRO|PATH|SUBWAY|BUS|TRAIN)\s+(?:FARE|PASS|TICKET|TRANSIT|RIDE|STATION|TRAIN|RAIL)|(?:NYC|NYCT|MTA|MBTA)\s+(?:SUBWAY|TRANSIT))\b/i,
     canonicalName: "Public Transit",
     parentBucket: "Fixed Costs",
     subcategory: "Transit",
     rewardMultiplierCategory: "Travel",
-  },
-  {
-    pattern:
-      /\b(?:CAFE|COFFEE|ROASTERY|BAKERY|ESPRESSO|ICE CREAM|FROZEN YOGURT|BOBA|BUBBLE TEA|MILK TEA|TEA HOUSE|TEA ROOM|TEA SHOP)\b/i,
-    canonicalName: "Cafe & Bakery",
-    parentBucket: "Guilt-Free",
-    subcategory: "Coffee & Snacks",
-    rewardMultiplierCategory: "Dining",
   },
   {
     pattern:
@@ -303,6 +288,21 @@ export const CONTEXTUAL_REGEX_RULES: readonly {
     canonicalName: "Dining & Restaurant",
     parentBucket: "Guilt-Free",
     subcategory: "Dining",
+    rewardMultiplierCategory: "Dining",
+  },
+  {
+    pattern: /\b(?:MARKET|GROCERY|PRODUCE|BODEGA|SUPERMARKET)\b/i,
+    canonicalName: "Grocery Store",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  {
+    pattern:
+      /\b(?:CAFE|COFFEE|ROASTERY|BAKERY|ESPRESSO|ICE CREAM|FROZEN YOGURT|BOBA|BUBBLE TEA|MILK TEA|TEA HOUSE|TEA ROOM|TEA SHOP)\b/i,
+    canonicalName: "Cafe & Bakery",
+    parentBucket: "Guilt-Free",
+    subcategory: "Coffee & Snacks",
     rewardMultiplierCategory: "Dining",
   },
   {
