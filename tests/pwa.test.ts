@@ -321,5 +321,10 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
       /min-h-\[44px\][^>]*@click="toggleSplit/,
       "split mode button must satisfy 44px touch target requirement",
     );
+    assert.match(
+      indexContent,
+      /min-h-\[44px\][^>]*@click="selectSubcategory\(s\)"/,
+      "subcategory chips must satisfy 44px touch target requirement",
+    );
   });
 });
