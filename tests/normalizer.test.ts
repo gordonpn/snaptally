@@ -248,6 +248,46 @@ describe("Merchant Normalizer", () => {
       assert.strictEqual(result.subcategory, "Groceries");
     });
 
+    it("classifies transit subway descriptors as Transit under Fixed Costs", () => {
+      const mtaResult = normalizeMerchant("MTA SUBWAY FARE");
+      assert.strictEqual(mtaResult.matchStrategy, "regex_heuristic");
+      assert.strictEqual(mtaResult.parentBucket, "Fixed Costs");
+      assert.strictEqual(mtaResult.subcategory, "Transit");
+      assert.strictEqual(mtaResult.rewardCategory, "Travel");
+      assert.strictEqual(mtaResult.requiresLLM, false);
+
+      const subwayFareResult = normalizeMerchant("SUBWAY FARE BOSTON MA");
+      assert.strictEqual(subwayFareResult.matchStrategy, "regex_heuristic");
+      assert.strictEqual(subwayFareResult.parentBucket, "Fixed Costs");
+      assert.strictEqual(subwayFareResult.subcategory, "Transit");
+
+      const omnyResult = normalizeMerchant("OMNY NYCT PAYGO");
+      assert.strictEqual(omnyResult.matchStrategy, "regex_heuristic");
+      assert.strictEqual(omnyResult.parentBucket, "Fixed Costs");
+      assert.strictEqual(omnyResult.subcategory, "Transit");
+    });
+
+    it("classifies subway restaurant descriptors with food or store context as Takeout", () => {
+      const sandwichResult = normalizeMerchant("SUBWAY SANDWICHES BOSTON MA");
+      assert.strictEqual(sandwichResult.matchStrategy, "regex_heuristic");
+      assert.strictEqual(sandwichResult.parentBucket, "Guilt-Free");
+      assert.strictEqual(sandwichResult.subcategory, "Takeout");
+      assert.strictEqual(sandwichResult.rewardCategory, "Dining");
+
+      const restaurantResult = normalizeMerchant("SUBWAY RESTAURANT #12345 CAMBRIDGE MA");
+      assert.strictEqual(restaurantResult.matchStrategy, "regex_heuristic");
+      assert.strictEqual(restaurantResult.parentBucket, "Guilt-Free");
+      assert.strictEqual(restaurantResult.subcategory, "Takeout");
+    });
+
+    it("leaves ambiguous bare SUBWAY without food or transit context for LLM fallback", () => {
+      const bareResult = normalizeMerchant("SUBWAY");
+      assert.strictEqual(bareResult.matchStrategy, "unresolved");
+      assert.strictEqual(bareResult.requiresLLM, true);
+      assert.strictEqual(bareResult.parentBucket, null);
+      assert.strictEqual(bareResult.subcategory, null);
+    });
+
     it("does not classify non-food delivery as Takeout", () => {
       const result = normalizeMerchant("FEDEX PARCEL DELIVERY EXPRESS");
       assert.notStrictEqual(result.subcategory, "Takeout");
