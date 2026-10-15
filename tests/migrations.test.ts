@@ -444,3 +444,50 @@ describe("Refund Reimbursement Invariant Migration (0003_enforce_refund_reimburs
     db.close();
   });
 });
+
+describe("Taxonomy Migrations (0004_taxonomy_coffee_and_snacks.sql)", () => {
+  const initSql = readFileSync(resolve("migrations/0000_init.sql"), "utf-8");
+  const expandedSchemaSql = readFileSync(resolve("migrations/0001_expanded_schema.sql"), "utf-8");
+  const multiTenantSchemaSql = readFileSync(
+    resolve("migrations/0002_multi_tenant_schema.sql"),
+    "utf-8",
+  );
+  const taxonomyMigrationSql = readFileSync(
+    resolve("migrations/0004_taxonomy_coffee_and_snacks.sql"),
+    "utf-8",
+  );
+
+  it("migrates existing Guilt-Free / Coffee rows to Coffee & Snacks while leaving other categories intact", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(initSql);
+    db.exec(expandedSchemaSql);
+    db.exec(multiTenantSchemaSql);
+
+    db.exec(`
+      INSERT INTO transactions (id, user_id, date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement)
+      VALUES
+        ('tx-coffee-1', 'usr_default', '2026-09-15', 'Amex Gold', 'Guilt-Free', 'Coffee', 'Blue Bottle', 5.50, 0.0),
+        ('tx-dining-1', 'usr_default', '2026-09-15', 'Amex Gold', 'Guilt-Free', 'Dining', 'Posto', 45.00, 0.0),
+        ('tx-fixed-coffee', 'usr_default', '2026-09-15', 'Fidelity Visa', 'Fixed Costs', 'Coffee', 'Office Supplies', 25.00, 0.0);
+    `);
+
+    db.exec(taxonomyMigrationSql);
+
+    const coffeeRow = db
+      .prepare("SELECT * FROM transactions WHERE id = ?")
+      .get("tx-coffee-1") as Record<string, unknown>;
+    assert.strictEqual(coffeeRow.subcategory, "Coffee & Snacks");
+
+    const diningRow = db
+      .prepare("SELECT * FROM transactions WHERE id = ?")
+      .get("tx-dining-1") as Record<string, unknown>;
+    assert.strictEqual(diningRow.subcategory, "Dining");
+
+    const fixedRow = db
+      .prepare("SELECT * FROM transactions WHERE id = ?")
+      .get("tx-fixed-coffee") as Record<string, unknown>;
+    assert.strictEqual(fixedRow.subcategory, "Coffee");
+
+    db.close();
+  });
+});

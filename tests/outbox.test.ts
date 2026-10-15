@@ -1560,3 +1560,67 @@ describe("Sync Listeners (Scenario 2)", () => {
     }
   });
 });
+
+describe("Outbox Legacy Taxonomy Normalization", () => {
+  beforeEach(async () => {
+    await clearOutbox();
+  });
+
+  it("normalizes legacy Guilt-Free Coffee subcategory to Coffee & Snacks on save and retrieval", async () => {
+    const legacyItem: OutboxItem = {
+      id: "tx-legacy-coffee",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Coffee",
+      merchant: "Blue Bottle",
+      gross_amount: 6.5,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(legacyItem);
+
+    const items = await getOutbox();
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].parent_bucket, "Guilt-Free");
+    assert.strictEqual(items[0].subcategory, "Coffee & Snacks");
+  });
+
+  it("syncs legacy subcategory using normalized Coffee & Snacks payload", async () => {
+    const legacyItem: OutboxItem = {
+      id: "tx-legacy-sync",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Coffee",
+      merchant: "Tatte Bakery",
+      gross_amount: 5.75,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(legacyItem);
+
+    let postedPayload: Record<string, unknown> | null = null;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: unknown, options: { body?: string }) => {
+      if (options?.body) {
+        postedPayload = JSON.parse(options.body) as Record<string, unknown>;
+      }
+      return new Response(JSON.stringify({ ok: true, id: "tx-legacy-sync" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token" });
+      assert.strictEqual(result.syncedCount, 1);
+      assert.ok(postedPayload);
+      assert.strictEqual(postedPayload.subcategory, "Coffee & Snacks");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});

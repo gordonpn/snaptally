@@ -154,6 +154,18 @@ export const DEFAULT_CANONICAL_RULES: Readonly<Record<string, CategoryRule>> = {
     subcategory: "Takeout",
     rewardMultiplierCategory: "Dining",
   },
+  MCDONALDS: {
+    canonicalName: "McDonald's",
+    parentBucket: "Guilt-Free",
+    subcategory: "Takeout",
+    rewardMultiplierCategory: "Dining",
+  },
+  "MCDONALD'S": {
+    canonicalName: "McDonald's",
+    parentBucket: "Guilt-Free",
+    subcategory: "Takeout",
+    rewardMultiplierCategory: "Dining",
+  },
   NETFLIX: {
     canonicalName: "Netflix",
     parentBucket: "Fixed Costs",
@@ -254,14 +266,16 @@ export const CONTEXTUAL_REGEX_RULES: readonly {
   rewardMultiplierCategory: string;
 }[] = [
   {
-    pattern: /\b(?:CAFE|COFFEE|ROASTERY|BAKERY|ESPRESSO|ICE CREAM|FROZEN YOGURT|BOBA|TEA)\b/i,
+    pattern:
+      /\b(?:CAFE|COFFEE|ROASTERY|BAKERY|ESPRESSO|ICE CREAM|FROZEN YOGURT|BOBA|BUBBLE TEA|MILK TEA|TEA HOUSE|TEA ROOM|TEA SHOP)\b/i,
     canonicalName: "Cafe & Bakery",
     parentBucket: "Guilt-Free",
     subcategory: "Coffee & Snacks",
     rewardMultiplierCategory: "Dining",
   },
   {
-    pattern: /\b(?:TAKEOUT|FAST FOOD|FOOD DELIVERY)\b/i,
+    pattern:
+      /\b(?:TAKEOUT|FAST FOOD|FOOD DELIVERY|MCDONALD'?S|BURGER KING|WENDY'?S|TACO BELL|DOMINO'?S|SUBWAY)\b/i,
     canonicalName: "Takeout & Delivery",
     parentBucket: "Guilt-Free",
     subcategory: "Takeout",
