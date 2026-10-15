@@ -276,6 +276,14 @@ export const CONTEXTUAL_REGEX_RULES: readonly {
   },
   {
     pattern:
+      /\b(?:MTA|MBTA|BART|WMATA|SEPTA|PATH|TRANSIT|METRO(?:CARD)?|OMNY|CLIPPER|VENTRA|SMARTRIP|CHARLIE\s*CARD|COMMUTER RAIL|CALTRAIN|AMTRAK|(?:METRO|SUBWAY|BUS|TRAIN)\s+(?:FARE|PASS|TICKET|TRANSIT|RIDE|STATION))\b/i,
+    canonicalName: "Public Transit",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Travel",
+  },
+  {
+    pattern:
       /\b(?:CAFE|COFFEE|ROASTERY|BAKERY|ESPRESSO|ICE CREAM|FROZEN YOGURT|BOBA|BUBBLE TEA|MILK TEA|TEA HOUSE|TEA ROOM|TEA SHOP)\b/i,
     canonicalName: "Cafe & Bakery",
     parentBucket: "Guilt-Free",
@@ -284,7 +292,7 @@ export const CONTEXTUAL_REGEX_RULES: readonly {
   },
   {
     pattern:
-      /\b(?:TAKEOUT|FAST FOOD|FOOD DELIVERY|MCDONALD'?S|BURGER KING|WENDY'?S|TACO BELL|DOMINO'?S|SUBWAY)\b/i,
+      /\b(?:TAKEOUT|FAST FOOD|FOOD DELIVERY|MCDONALD'?S|BURGER KING|WENDY'?S|TACO BELL|DOMINO'?S|SUBWAY\s+(?:#?\d+|SANDWICH(?:ES)?|RESTAURANT|STORE|EATS))\b/i,
     canonicalName: "Takeout & Delivery",
     parentBucket: "Guilt-Free",
     subcategory: "Takeout",
