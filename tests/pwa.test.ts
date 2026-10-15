@@ -313,13 +313,8 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
     );
     assert.match(
       indexContent,
-      /min-h-\[44px\][^>]*@click="setRefundMode/,
-      "refund mode button must satisfy 44px touch target requirement",
-    );
-    assert.match(
-      indexContent,
-      /min-h-\[44px\][^>]*@click="toggleSplit/,
-      "split mode button must satisfy 44px touch target requirement",
+      /min-h-\[44px\]\s+min-w-\[44px\][^>]*@click="toggleNegative/,
+      "credit toggle button must satisfy 44x44px touch target requirement",
     );
   });
 });

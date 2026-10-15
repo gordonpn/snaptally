@@ -1057,17 +1057,16 @@ describe("intakeForm Card Lifecycle and Storage", () => {
   });
 });
 
-describe("intakeForm Refund and Reimbursement Workflows (Issue #89)", () => {
-  it("initializes in standard expense mode with isRefund=false and isSplit=false", () => {
+describe("intakeForm Credit and Reimbursement Workflows (Issue #89)", () => {
+  it("initializes in standard expense mode with isNegative=false", () => {
     const form = intakeForm();
-    assert.strictEqual(form.isRefund, false);
-    assert.strictEqual(form.isSplit, false);
-    assert.strictEqual(form.reimbursementCents, 0);
-    assert.strictEqual(form.reimbursementAmount, 0);
+    assert.strictEqual(form.isNegative, false);
     assert.strictEqual(form.submitButtonLabel, "Save Transaction");
+    assert.strictEqual(form.grossAmount, 0);
+    assert.strictEqual(form.netAmountCents, 0);
   });
 
-  it("toggles refund mode, updates display with negative sign, and sets negative gross amount", () => {
+  it("toggles negative credit mode, updates display with negative sign, and sets negative gross amount", () => {
     const form = intakeForm();
     form.pressDigit(3);
     form.pressDigit(5);
@@ -1075,20 +1074,22 @@ describe("intakeForm Refund and Reimbursement Workflows (Issue #89)", () => {
     form.pressDigit(0);
     assert.strictEqual(form.formattedAmount, "$35.00");
     assert.strictEqual(form.grossAmount, 35.0);
+    assert.strictEqual(form.netAmountCents, 3500);
 
-    form.setRefundMode();
-    assert.strictEqual(form.isRefund, true);
-    assert.strictEqual(form.isSplit, false);
+    form.toggleNegative();
+    assert.strictEqual(form.isNegative, true);
     assert.strictEqual(form.grossAmount, -35.0);
-    assert.strictEqual(form.submitButtonLabel, "Save Refund");
+    assert.strictEqual(form.netAmountCents, -3500);
+    assert.strictEqual(form.submitButtonLabel, "Save Credit");
 
-    form.setExpenseMode();
-    assert.strictEqual(form.isRefund, false);
+    form.toggleNegative();
+    assert.strictEqual(form.isNegative, false);
     assert.strictEqual(form.grossAmount, 35.0);
+    assert.strictEqual(form.netAmountCents, 3500);
     assert.strictEqual(form.submitButtonLabel, "Save Transaction");
   });
 
-  it("submits refund transaction with negative gross_amount and zero reimbursement", async () => {
+  it("submits credit transaction with negative gross_amount and zero reimbursement", async () => {
     const form = intakeForm();
     form.pressDigit(2);
     form.pressDigit(5);
@@ -1096,7 +1097,7 @@ describe("intakeForm Refund and Reimbursement Workflows (Issue #89)", () => {
     form.pressDigit(0);
     form.card = "Amex Gold";
     form.merchant = "Uniqlo";
-    form.setRefundMode();
+    form.toggleNegative();
 
     const originalFetch = globalThis.fetch;
     let submittedPayload: unknown;
@@ -1104,7 +1105,7 @@ describe("intakeForm Refund and Reimbursement Workflows (Issue #89)", () => {
       if (options?.body) {
         submittedPayload = JSON.parse(options.body);
       }
-      return new Response(JSON.stringify({ ok: true, id: "tx-refund-1" }), {
+      return new Response(JSON.stringify({ ok: true, id: "tx-credit-1" }), {
         status: 201,
         headers: { "Content-Type": "application/json" },
       });
@@ -1113,8 +1114,8 @@ describe("intakeForm Refund and Reimbursement Workflows (Issue #89)", () => {
     try {
       const result = await form.submitTransaction();
       assert.strictEqual(result, true);
-      assert.strictEqual(form.statusMessage, "Saved refund of $25.00 at Uniqlo");
-      assert.strictEqual(form.isRefund, false);
+      assert.strictEqual(form.statusMessage, "Saved credit of $25.00 at Uniqlo");
+      assert.strictEqual(form.isNegative, false);
       assert.strictEqual(form.amountCents, 0);
 
       const payload = submittedPayload as Record<string, unknown>;
@@ -1125,107 +1126,65 @@ describe("intakeForm Refund and Reimbursement Workflows (Issue #89)", () => {
     }
   });
 
-  it("toggles split mode, calculates 50% split, and updates dynamically with keypad inputs", () => {
+  it("supports two-step reimbursement workflow where reimbursement offsets expense", async () => {
     const form = intakeForm();
-    form.pressDigit(1);
-    form.pressDigit(0);
-    form.pressDigit(0);
-    form.pressDigit(0); // $10.00
-    assert.strictEqual(form.amountCents, 1000);
-
-    form.toggleSplit();
-    assert.strictEqual(form.isSplit, true);
-    assert.strictEqual(form.splitType, "50%");
-    assert.strictEqual(form.reimbursementCents, 500);
-    assert.strictEqual(form.netAmountCents, 500);
-    assert.strictEqual(form.formattedNet, "$5.00");
-    assert.strictEqual(form.submitButtonLabel, "Save Transaction (Net $5.00)");
-
-    // Type 0 to make it $100.00
-    form.pressDigit(0);
-    assert.strictEqual(form.amountCents, 10000);
-    assert.strictEqual(form.reimbursementCents, 5000);
-    assert.strictEqual(form.netAmountCents, 5000);
-    assert.strictEqual(form.formattedNet, "$50.00");
-  });
-
-  it("supports 100% reimbursable corporate work expense mode", async () => {
-    const form = intakeForm();
-    form.pressDigit(4);
-    form.pressDigit(5);
-    form.pressDigit(0);
-    form.pressDigit(0);
-    form.pressDigit(0); // $450.00
-    form.card = "Amex Gold";
-    form.merchant = "Delta Air Lines";
-
-    form.toggleSplit();
-    form.setSplitRatio("100%");
-    assert.strictEqual(form.splitType, "100%");
-    assert.strictEqual(form.reimbursementCents, 45000);
-    assert.strictEqual(form.netAmountCents, 0);
-    assert.strictEqual(form.formattedNet, "$0.00");
-    assert.strictEqual(form.submitButtonLabel, "Save Transaction (Net $0.00)");
-
     const originalFetch = globalThis.fetch;
-    let submittedPayload: unknown;
+    const submittedPayloads: Array<Record<string, unknown>> = [];
+
     globalThis.fetch = (async (_url: unknown, options: { body?: string }) => {
       if (options?.body) {
-        submittedPayload = JSON.parse(options.body);
+        submittedPayloads.push(JSON.parse(options.body));
       }
-      return new Response(JSON.stringify({ ok: true, id: "tx-work-1" }), {
+      return new Response(JSON.stringify({ ok: true, id: `tx-${submittedPayloads.length}` }), {
         status: 201,
         headers: { "Content-Type": "application/json" },
       });
     }) as unknown as typeof fetch;
 
     try {
-      const result = await form.submitTransaction();
-      assert.strictEqual(result, true);
-      assert.strictEqual(form.statusMessage, "Saved $450.00 (Net $0.00) at Delta Air Lines");
+      // Step 1: Log initial $120.00 dinner expense
+      form.pressDigit(1);
+      form.pressDigit(2);
+      form.pressDigit(0);
+      form.pressDigit(0);
+      form.pressDigit(0);
+      form.card = "Amex Gold";
+      form.parentBucket = "Guilt-Free";
+      form.subcategory = "Dining";
+      form.merchant = "Osteria Posto";
 
-      const payload = submittedPayload as Record<string, unknown>;
-      assert.strictEqual(payload.gross_amount, 450.0);
-      assert.strictEqual(payload.reimbursement, 450.0);
+      const step1Result = await form.submitTransaction();
+      assert.strictEqual(step1Result, true);
+      assert.strictEqual(form.isNegative, false);
+
+      // Step 2: Friend sends $60.00 reimbursement 10 minutes later -> log -$60.00 credit to Dining
+      form.pressDigit(6);
+      form.pressDigit(0);
+      form.pressDigit(0);
+      form.pressDigit(0);
+      form.toggleNegative();
+      form.card = "Amex Gold";
+      form.parentBucket = "Guilt-Free";
+      form.subcategory = "Dining";
+      form.merchant = "Venmo Reimbursement";
+
+      const step2Result = await form.submitTransaction();
+      assert.strictEqual(step2Result, true);
+      assert.strictEqual(form.isNegative, false);
+
+      assert.strictEqual(submittedPayloads.length, 2);
+      assert.strictEqual(submittedPayloads[0].gross_amount, 120.0);
+      assert.strictEqual(submittedPayloads[0].reimbursement, 0.0);
+      assert.strictEqual(submittedPayloads[1].gross_amount, -60.0);
+      assert.strictEqual(submittedPayloads[1].reimbursement, 0.0);
+
+      // Verify net spend impact
+      const netSpendTotal =
+        (submittedPayloads[0].gross_amount as number) +
+        (submittedPayloads[1].gross_amount as number);
+      assert.strictEqual(netSpendTotal, 60.0);
     } finally {
       globalThis.fetch = originalFetch;
     }
-  });
-
-  it("supports custom reimbursement dollar amount input capped at gross amount", () => {
-    const form = intakeForm();
-    form.pressDigit(8);
-    form.pressDigit(0);
-    form.pressDigit(0);
-    form.pressDigit(0); // $80.00
-
-    form.toggleSplit();
-    form.setSplitRatio("custom");
-    assert.strictEqual(form.splitType, "custom");
-
-    form.updateCustomReimbursement("30.00");
-    assert.strictEqual(form.reimbursementCents, 3000);
-    assert.strictEqual(form.netAmountCents, 5000);
-    assert.strictEqual(form.formattedNet, "$50.00");
-
-    // Attempting to exceed gross amount clamps to gross amount
-    form.updateCustomReimbursement("150.00");
-    assert.strictEqual(form.reimbursementCents, 8000);
-    assert.strictEqual(form.netAmountCents, 0);
-
-    // Invalid input falls back to zero reimbursement
-    form.updateCustomReimbursement("invalid");
-    assert.strictEqual(form.reimbursementCents, 0);
-    assert.strictEqual(form.netAmountCents, 8000);
-  });
-
-  it("disallows split mode when in refund mode", () => {
-    const form = intakeForm();
-    form.setRefundMode();
-    assert.strictEqual(form.isRefund, true);
-
-    form.toggleSplit();
-    assert.strictEqual(form.isSplit, false);
-    assert.strictEqual(form.reimbursementCents, 0);
   });
 });

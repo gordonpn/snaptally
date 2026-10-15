@@ -98,23 +98,19 @@ Travel expenses follow three distinct rules based on context:
 
 ---
 
-## 4. Handling Reimbursements and Split Expenses
+## 4. Handling Reimbursements, Credits, and Split Expenses
 
-Transactions track both `gross_amount` and `reimbursement`, yielding `net_spend = gross_amount - reimbursement`:
+Reimbursements and refunds are recorded as negative inflows (`gross_amount < 0`) or net spend offsets, where `net_spend = gross_amount - reimbursement`:
 
-1. **Split Dining / Group Payments:**
-   - You pay a $120 dinner bill on your credit card; your friend sends you $60 via peer-to-peer transfer.
-   - **Entry:** Gross = $120.00, Reimbursement = $60.00.
-   - **Net Spend:** $60.00.
-   - **Category:** `Guilt-Free -> Dining`.
-   - **Budget Impact:** Only the $60.00 net cost impacts your monthly dining expenditure.
+1. **Two-Step Reimbursement Workflow (Real-World Cash Flow):**
+   - At point of sale, log the full purchase on your card (e.g., $120.00 to `Guilt-Free -> Dining`).
+   - When your friend sends their share later (e.g., $60.00 via peer-to-peer transfer), log a credit of -$60.00 to the same category using the plus/minus (`±`) toggle button on the intake keypad.
+   - **Monthly Aggregation:** Downstream aggregation computes $\sum \text{net\_spend} = \$120.00 + (-\$60.00) = \$60.00$, accurately reflecting your true out-of-pocket dining spend without needing inline split math or secondary drawers.
 
 2. **Corporate / Reimbursable Work Travel:**
-   - You book a $450 flight on a personal card that your employer will reimburse in full.
-   - **Entry:** Gross = $450.00, Reimbursement = $450.00.
-   - **Net Spend:** $0.00.
-   - **Category:** `Fixed Costs -> Transit` or `Savings -> Travel Fund`.
-   - **Budget Impact:** Neutral ($0.00 impact on monthly budget metrics).
+   - Log the initial expense when booked (e.g., $450.00 to `Fixed Costs -> Transit`).
+   - When your employer pays you back, log the -$450.00 credit to `Fixed Costs -> Transit`.
+   - **Net Impact:** Neutral ($0.00 impact on monthly budget metrics).
 
 ---
 
