@@ -241,6 +241,13 @@ describe("Merchant Normalizer", () => {
       assert.strictEqual(teaShopResult.subcategory, "Coffee & Snacks");
     });
 
+    it("classifies tea markets as Groceries under Fixed Costs rather than snacks", () => {
+      const result = normalizeMerchant("ASIAN TEA MARKET BOSTON MA");
+      assert.strictEqual(result.matchStrategy, "regex_heuristic");
+      assert.strictEqual(result.parentBucket, "Fixed Costs");
+      assert.strictEqual(result.subcategory, "Groceries");
+    });
+
     it("does not classify non-food delivery as Takeout", () => {
       const result = normalizeMerchant("FEDEX PARCEL DELIVERY EXPRESS");
       assert.notStrictEqual(result.subcategory, "Takeout");

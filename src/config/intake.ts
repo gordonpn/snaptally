@@ -1,8 +1,11 @@
-export const BUCKET_SUBCATEGORIES: Record<string, readonly string[]> = {
+export const BUCKET_SUBCATEGORIES = {
   "Guilt-Free": ["Dining", "Takeout", "Coffee & Snacks", "Bars", "Shopping", "Entertainment"],
   "Fixed Costs": ["Rent", "Utilities", "Groceries", "Subscriptions", "Transit"],
   Savings: ["Emergency Fund", "Investments", "Travel Fund"],
-};
+} as const;
+
+export type ParentBucket = keyof typeof BUCKET_SUBCATEGORIES;
+export type Subcategory = (typeof BUCKET_SUBCATEGORIES)[ParentBucket][number];
 
 export const DEFAULT_FREQUENT_MERCHANTS: readonly string[] = [
   "Amazon Cafeteria",

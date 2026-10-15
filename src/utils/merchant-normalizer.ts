@@ -4,6 +4,8 @@
  * and Conscious Spending Plan categories.
  */
 
+import type { ParentBucket, Subcategory } from "../config/intake.ts";
+
 export type PaymentRail =
   | "Toast"
   | "Square"
@@ -21,8 +23,8 @@ export type MatchStrategy =
 
 export interface CategoryRule {
   readonly canonicalName: string;
-  readonly parentBucket: string;
-  readonly subcategory: string;
+  readonly parentBucket: ParentBucket;
+  readonly subcategory: Subcategory;
   readonly rewardMultiplierCategory?: string;
 }
 
@@ -261,10 +263,17 @@ export const DEFAULT_CANONICAL_RULES: Readonly<Record<string, CategoryRule>> = {
 export const CONTEXTUAL_REGEX_RULES: readonly {
   pattern: RegExp;
   canonicalName: string;
-  parentBucket: string;
-  subcategory: string;
+  parentBucket: ParentBucket;
+  subcategory: Subcategory;
   rewardMultiplierCategory: string;
 }[] = [
+  {
+    pattern: /\b(?:MARKET|GROCERY|PRODUCE|BODEGA|SUPERMARKET)\b/i,
+    canonicalName: "Grocery Store",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
   {
     pattern:
       /\b(?:CAFE|COFFEE|ROASTERY|BAKERY|ESPRESSO|ICE CREAM|FROZEN YOGURT|BOBA|BUBBLE TEA|MILK TEA|TEA HOUSE|TEA ROOM|TEA SHOP)\b/i,
@@ -287,13 +296,6 @@ export const CONTEXTUAL_REGEX_RULES: readonly {
     parentBucket: "Guilt-Free",
     subcategory: "Dining",
     rewardMultiplierCategory: "Dining",
-  },
-  {
-    pattern: /\b(?:MARKET|GROCERY|PRODUCE|BODEGA|SUPERMARKET)\b/i,
-    canonicalName: "Grocery Store",
-    parentBucket: "Fixed Costs",
-    subcategory: "Groceries",
-    rewardMultiplierCategory: "Groceries",
   },
   {
     pattern: /\b(?:PHARMACY|DRUGS|CVS|WALGREENS)\b/i,
