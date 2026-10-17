@@ -114,7 +114,7 @@ Reimbursements and refunds are recorded as negative inflows (`gross_amount < 0`)
 
 3. **Rewards Optimization and Auditing Treatment:**
    - Negative gross transactions (`gross_amount < 0`) represent returns or cash reimbursements. They are excluded from forward-looking payment routing optimization, which evaluates only positive outgoing expenditures.
-   - For retrospective rewards auditing, returns and credits reverse points previously earned on the transaction payment method rather than applying negative multipliers to card routing scores.
+   - For retrospective rewards auditing, reverse points only for merchant returns when the issuer reverses them. Cash reimbursement credits reduce net spend but do not reverse points earned on the original card charge. Do not apply negative multipliers to card routing scores.
 
 ---
 

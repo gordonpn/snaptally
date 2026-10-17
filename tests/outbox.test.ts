@@ -1114,4 +1114,49 @@ describe("Sync Listeners (Scenario 2)", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("permanently fails and discards negative-gross items when HTTP 400 is not due to unsupported negative amount", async () => {
+    await clearOutbox();
+    const invalidCreditItem: OutboxItem = {
+      id: "tx-credit-invalid-reimbursement",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Invalid Refund",
+      gross_amount: -60.0,
+      reimbursement: 20.0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(invalidCreditItem);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({
+          error: "Validation failed: refunds (negative gross_amount) cannot have a reimbursement",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token" });
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(result.syncedCount, 0);
+      assert.strictEqual(
+        result.lastError,
+        "Validation failed: refunds (negative gross_amount) cannot have a reimbursement",
+      );
+
+      const items = await getOutbox();
+      assert.strictEqual(items.length, 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

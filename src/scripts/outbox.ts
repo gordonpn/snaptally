@@ -264,10 +264,15 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         }
 
         if (response.status === 400) {
-          // If the item is a credit/reimbursement (gross_amount < 0) and the backend rejects it,
-          // an older API version (or deployment rollback) may be encountering a negative amount.
-          // Retain it with retry backoff rather than permanently discarding user financial records.
-          if (item.gross_amount < 0) {
+          const data = (await response.json().catch(() => null)) as { error?: string } | null;
+          const errorMsg = data?.error || response.statusText || "Validation failed";
+
+          // If the item is a credit/reimbursement (gross_amount < 0) and the backend rejects it
+          // specifically because negative amounts are unsupported by an older API version (or rollback),
+          // retain it with retry backoff rather than permanently discarding user financial records.
+          const isUnsupportedNegativeAmount = item.gross_amount < 0 && /positive/i.test(errorMsg);
+
+          if (isUnsupportedNegativeAmount) {
             const retryCount = (item.retry_count ?? 0) + 1;
             item.retry_count = retryCount;
             const backoffMs = Math.min(60000, 1000 * 2 ** (retryCount - 1));
@@ -279,10 +284,9 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
           }
 
           // Permanently invalid payload; remove from outbox to prevent blocking the queue
-          const data = (await response.json().catch(() => null)) as { error?: string } | null;
           await deleteOutboxItem(item.id);
           failedCount++;
-          lastError = data?.error || response.statusText || "Validation failed";
+          lastError = errorMsg;
           continue;
         }
 
