@@ -4,6 +4,8 @@
  * and Conscious Spending Plan categories.
  */
 
+import type { ParentBucket, Subcategory } from "../config/intake.ts";
+
 export type PaymentRail =
   | "Toast"
   | "Square"
@@ -21,8 +23,8 @@ export type MatchStrategy =
 
 export interface CategoryRule {
   readonly canonicalName: string;
-  readonly parentBucket: string;
-  readonly subcategory: string;
+  readonly parentBucket: ParentBucket;
+  readonly subcategory: Subcategory;
   readonly rewardMultiplierCategory?: string;
 }
 
@@ -109,37 +111,61 @@ export const DEFAULT_CANONICAL_RULES: Readonly<Record<string, CategoryRule>> = {
   "BLUE BOTTLE": {
     canonicalName: "Blue Bottle Coffee",
     parentBucket: "Guilt-Free",
-    subcategory: "Coffee",
+    subcategory: "Coffee & Snacks",
     rewardMultiplierCategory: "Dining",
   },
   "TATTE BAKERY & CAFE": {
     canonicalName: "Tatte Bakery & Cafe",
     parentBucket: "Guilt-Free",
-    subcategory: "Dining",
+    subcategory: "Coffee & Snacks",
     rewardMultiplierCategory: "Dining",
   },
   "TATTE BAKERY": {
     canonicalName: "Tatte Bakery & Cafe",
     parentBucket: "Guilt-Free",
-    subcategory: "Dining",
+    subcategory: "Coffee & Snacks",
     rewardMultiplierCategory: "Dining",
   },
   STARBUCKS: {
     canonicalName: "Starbucks",
     parentBucket: "Guilt-Free",
-    subcategory: "Coffee",
+    subcategory: "Coffee & Snacks",
+    rewardMultiplierCategory: "Dining",
+  },
+  BERRYLINE: {
+    canonicalName: "Berryline",
+    parentBucket: "Guilt-Free",
+    subcategory: "Coffee & Snacks",
     rewardMultiplierCategory: "Dining",
   },
   SWEETGREEN: {
     canonicalName: "Sweetgreen",
     parentBucket: "Guilt-Free",
-    subcategory: "Dining",
+    subcategory: "Takeout",
     rewardMultiplierCategory: "Dining",
   },
   CHIPOTLE: {
     canonicalName: "Chipotle Mexican Grill",
     parentBucket: "Guilt-Free",
-    subcategory: "Dining",
+    subcategory: "Takeout",
+    rewardMultiplierCategory: "Dining",
+  },
+  "SHAKE SHACK": {
+    canonicalName: "Shake Shack",
+    parentBucket: "Guilt-Free",
+    subcategory: "Takeout",
+    rewardMultiplierCategory: "Dining",
+  },
+  MCDONALDS: {
+    canonicalName: "McDonald's",
+    parentBucket: "Guilt-Free",
+    subcategory: "Takeout",
+    rewardMultiplierCategory: "Dining",
+  },
+  "MCDONALD'S": {
+    canonicalName: "McDonald's",
+    parentBucket: "Guilt-Free",
+    subcategory: "Takeout",
     rewardMultiplierCategory: "Dining",
   },
   NETFLIX: {
@@ -181,7 +207,13 @@ export const DEFAULT_CANONICAL_RULES: Readonly<Record<string, CategoryRule>> = {
   "UBER EATS": {
     canonicalName: "Uber Eats",
     parentBucket: "Guilt-Free",
-    subcategory: "Dining",
+    subcategory: "Takeout",
+    rewardMultiplierCategory: "Dining",
+  },
+  DOORDASH: {
+    canonicalName: "DoorDash",
+    parentBucket: "Guilt-Free",
+    subcategory: "Takeout",
     rewardMultiplierCategory: "Dining",
   },
   LYFT: {
@@ -231,15 +263,24 @@ export const DEFAULT_CANONICAL_RULES: Readonly<Record<string, CategoryRule>> = {
 export const CONTEXTUAL_REGEX_RULES: readonly {
   pattern: RegExp;
   canonicalName: string;
-  parentBucket: string;
-  subcategory: string;
+  parentBucket: ParentBucket;
+  subcategory: Subcategory;
   rewardMultiplierCategory: string;
 }[] = [
   {
-    pattern: /\b(?:CAFE|COFFEE|ROASTERY|BAKERY|ESPRESSO)\b/i,
-    canonicalName: "Cafe & Bakery",
+    pattern:
+      /\b(?:MTA|MBTA|BART|WMATA|SEPTA|OMNY|METROCARD|CLIPPER|VENTRA|SMARTRIP|CHARLIE\s*CARD|COMMUTER RAIL|CALTRAIN|AMTRAK|PUBLIC TRANSIT|PANYNJ|(?:METRO|PATH|SUBWAY|BUS|TRAIN)\s+(?:FARE|PASS|TICKET|TRANSIT|RIDE|STATION|TRAIN|RAIL)|(?:NYC|NYCT|MTA|MBTA)\s+(?:SUBWAY|TRANSIT))\b/i,
+    canonicalName: "Public Transit",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Travel",
+  },
+  {
+    pattern:
+      /\b(?:TAKEOUT|FAST FOOD|FOOD DELIVERY|MCDONALD'?S|BURGER KING|WENDY'?S|TACO BELL|DOMINO'?S|SUBWAY\s+(?:#?\d+|SANDWICH(?:ES)?|RESTAURANT|STORE|EATS))\b/i,
+    canonicalName: "Takeout & Delivery",
     parentBucket: "Guilt-Free",
-    subcategory: "Coffee",
+    subcategory: "Takeout",
     rewardMultiplierCategory: "Dining",
   },
   {
@@ -255,6 +296,14 @@ export const CONTEXTUAL_REGEX_RULES: readonly {
     parentBucket: "Fixed Costs",
     subcategory: "Groceries",
     rewardMultiplierCategory: "Groceries",
+  },
+  {
+    pattern:
+      /\b(?:CAFE|COFFEE|ROASTERY|BAKERY|ESPRESSO|ICE CREAM|FROZEN YOGURT|BOBA|BUBBLE TEA|MILK TEA|TEA HOUSE|TEA ROOM|TEA SHOP)\b/i,
+    canonicalName: "Cafe & Bakery",
+    parentBucket: "Guilt-Free",
+    subcategory: "Coffee & Snacks",
+    rewardMultiplierCategory: "Dining",
   },
   {
     pattern: /\b(?:PHARMACY|DRUGS|CVS|WALGREENS)\b/i,

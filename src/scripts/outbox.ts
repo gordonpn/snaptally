@@ -94,26 +94,40 @@ function saveFallbackItems(items: OutboxItem[]): void {
 }
 
 /**
+ * Normalizes legacy subcategories in outbox transactions to match the updated taxonomy.
+ */
+export function normalizeOutboxSubcategory(parentBucket: string, subcategory: string): string {
+  if (parentBucket === "Guilt-Free" && subcategory === "Coffee") {
+    return "Coffee & Snacks";
+  }
+  return subcategory;
+}
+
+/**
  * Saves a transaction to the local IndexedDB outbox.
  */
 export async function saveOutboxItem(item: OutboxItem): Promise<void> {
+  const normalizedItem: OutboxItem = {
+    ...item,
+    subcategory: normalizeOutboxSubcategory(item.parent_bucket, item.subcategory),
+  };
   try {
     const db = await openDatabase();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
-      const req = store.put(item);
+      const req = store.put(normalizedItem);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
       tx.oncomplete = () => db.close();
     });
   } catch {
     const items = getFallbackItems();
-    const existingIndex = items.findIndex((i) => i.id === item.id);
+    const existingIndex = items.findIndex((i) => i.id === normalizedItem.id);
     if (existingIndex >= 0) {
-      items[existingIndex] = item;
+      items[existingIndex] = normalizedItem;
     } else {
-      items.push(item);
+      items.push(normalizedItem);
     }
     saveFallbackItems(items);
   }
@@ -133,10 +147,20 @@ export async function getOutbox(): Promise<OutboxItem[]> {
       req.onerror = () => reject(req.error);
       tx.oncomplete = () => db.close();
     });
-    return items.sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return items
+      .map((item) => ({
+        ...item,
+        subcategory: normalizeOutboxSubcategory(item.parent_bucket, item.subcategory),
+      }))
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
   } catch {
     const items = getFallbackItems();
-    return items.sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return items
+      .map((item) => ({
+        ...item,
+        subcategory: normalizeOutboxSubcategory(item.parent_bucket, item.subcategory),
+      }))
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
   }
 }
 
@@ -237,7 +261,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         date: item.date,
         card: item.card,
         parent_bucket: item.parent_bucket,
-        subcategory: item.subcategory,
+        subcategory: normalizeOutboxSubcategory(item.parent_bucket, item.subcategory),
         merchant: item.merchant,
         gross_amount: item.gross_amount,
         reimbursement: item.reimbursement,
