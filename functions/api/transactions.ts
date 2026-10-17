@@ -161,6 +161,11 @@ export function isValidPayload(body: unknown): body is TransactionPayload {
     return false;
   }
 
+  if (gross_amount > 0 && typeof reimbursement === "number" && reimbursement > gross_amount) {
+    logger.warn("Validation failed: reimbursement cannot exceed gross_amount");
+    return false;
+  }
+
   if (typeof card !== "string" || card.trim().length === 0) {
     logger.warn("Validation failed: card must be a non-empty string");
     return false;

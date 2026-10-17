@@ -34,6 +34,7 @@ const DB_NAME = "snaptally_db";
 const DB_VERSION = 1;
 const STORE_NAME = "outbox";
 const FALLBACK_STORAGE_KEY = "snaptally_outbox_fallback";
+export const MAX_ROLLBACK_RETRIES = 10;
 
 // In-memory fallback for environments without IndexedDB or localStorage
 let memoryFallback: OutboxItem[] = [];
@@ -274,16 +275,18 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
 
           if (isUnsupportedNegativeAmount) {
             const retryCount = (item.retry_count ?? 0) + 1;
-            item.retry_count = retryCount;
-            const backoffMs = Math.min(60000, 1000 * 2 ** (retryCount - 1));
-            item.next_retry_at = Date.now() + backoffMs;
-            await saveOutboxItem(item);
-            failedCount++;
-            scheduleDueRetry(backoffMs, options);
-            continue;
+            if (retryCount <= MAX_ROLLBACK_RETRIES) {
+              item.retry_count = retryCount;
+              const backoffMs = Math.min(60000, 1000 * 2 ** (retryCount - 1));
+              item.next_retry_at = Date.now() + backoffMs;
+              await saveOutboxItem(item);
+              failedCount++;
+              scheduleDueRetry(backoffMs, options);
+              continue;
+            }
           }
 
-          // Permanently invalid payload; remove from outbox to prevent blocking the queue
+          // Permanently invalid payload or exceeded retry cap; remove from outbox to prevent blocking the queue
           await deleteOutboxItem(item.id);
           failedCount++;
           lastError = errorMsg;

@@ -276,7 +276,21 @@ describe("Refund Reimbursement Invariant Migration (0003_enforce_refund_reimburs
       },
       (err: unknown) => {
         const error = err as Error;
-        return /Refund transactions cannot have a reimbursement/.test(error.message);
+        return /Invalid transaction reimbursement amount/.test(error.message);
+      },
+    );
+
+    // Invalid positive transaction with reimbursement exceeding gross_amount
+    assert.throws(
+      () => {
+        db.prepare(`
+          INSERT INTO transactions (id, user_id, date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement)
+          VALUES ('tx-invalid-exceed', 'usr_default', '2026-10-01', 'Amex Gold', 'Guilt-Free', 'Dining', 'Posto', 50.0, 100.0);
+        `).run();
+      },
+      (err: unknown) => {
+        const error = err as Error;
+        return /Invalid transaction reimbursement amount/.test(error.message);
       },
     );
 

@@ -115,6 +115,13 @@ describe("isValidPayload", () => {
     );
   });
 
+  it("rejects positive transactions with reimbursement exceeding gross_amount", () => {
+    assert.strictEqual(
+      isValidPayload({ ...validPayload, gross_amount: 50.0, reimbursement: 100.0 }),
+      false,
+    );
+  });
+
   it("rejects negative or non-finite reimbursement", () => {
     assert.strictEqual(isValidPayload({ ...validPayload, reimbursement: -1 }), false);
     assert.strictEqual(isValidPayload({ ...validPayload, reimbursement: Number.NaN }), false);

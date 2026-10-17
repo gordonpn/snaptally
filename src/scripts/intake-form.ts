@@ -97,10 +97,6 @@ export function intakeForm() {
       return this.isNegative ? -gross : gross;
     },
 
-    get reimbursementAmount(): number {
-      return 0;
-    },
-
     get netAmountCents(): number {
       return this.isNegative ? -this.amountCents : this.amountCents;
     },

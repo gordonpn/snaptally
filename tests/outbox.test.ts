@@ -1159,4 +1159,45 @@ describe("Sync Listeners (Scenario 2)", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("discards negative-gross item when retry attempts exceed MAX_ROLLBACK_RETRIES", async () => {
+    await clearOutbox();
+    const exhaustedCreditItem: OutboxItem = {
+      id: "tx-credit-exhausted",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Venmo Reimbursement",
+      gross_amount: -60.0,
+      reimbursement: 0,
+      retry_count: 10,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(exhaustedCreditItem);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({ error: "Validation failed: gross_amount must be positive" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token", force: true });
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(result.syncedCount, 0);
+      assert.strictEqual(result.lastError, "Validation failed: gross_amount must be positive");
+
+      const items = await getOutbox();
+      assert.strictEqual(items.length, 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
