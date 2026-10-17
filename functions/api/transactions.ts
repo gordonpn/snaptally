@@ -140,8 +140,8 @@ export function isValidPayload(body: unknown): body is TransactionPayload {
     return false;
   }
 
-  if (typeof gross_amount !== "number" || !Number.isFinite(gross_amount) || gross_amount <= 0) {
-    logger.warn("Validation failed: gross_amount must be a positive finite number");
+  if (typeof gross_amount !== "number" || !Number.isFinite(gross_amount) || gross_amount === 0) {
+    logger.warn("Validation failed: gross_amount must be a non-zero finite number");
     return false;
   }
 
@@ -153,6 +153,16 @@ export function isValidPayload(body: unknown): body is TransactionPayload {
     logger.warn(
       "Validation failed: reimbursement must be a non-negative finite number if provided",
     );
+    return false;
+  }
+
+  if (gross_amount < 0 && typeof reimbursement === "number" && reimbursement !== 0) {
+    logger.warn("Validation failed: refunds (negative gross_amount) cannot have a reimbursement");
+    return false;
+  }
+
+  if (gross_amount > 0 && typeof reimbursement === "number" && reimbursement > gross_amount) {
+    logger.warn("Validation failed: reimbursement cannot exceed gross_amount");
     return false;
   }
 
@@ -206,7 +216,7 @@ export async function handlePost(
     return Response.json(
       {
         error:
-          "Invalid payload. Required fields: date (YYYY-MM-DD), card (string), parent_bucket (string), subcategory (string), merchant (string), gross_amount (positive number); optional: reimbursement (non-negative number)",
+          "Invalid payload. Required fields: date (YYYY-MM-DD), card (string), parent_bucket (string), subcategory (string), merchant (string), gross_amount (non-zero number); optional: reimbursement (non-negative number)",
       },
       { status: 400 },
     );

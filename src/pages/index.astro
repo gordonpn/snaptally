@@ -96,14 +96,32 @@ import Layout from "../layouts/Layout.astro";
 
     <!-- Amount Display (Debossed / Inset container) -->
     <section class="w-full py-0.5 sm:py-1 select-none">
-      <div class="neu-inset rounded-2xl py-2 sm:py-2.5 px-4 flex flex-col items-center justify-center transition-all duration-75">
-        <div
-          class="text-4xl sm:text-5xl font-mono font-bold tracking-tight text-neu-text"
-          x-text="formattedAmount"
-          aria-live="off"
+      <div class="neu-inset rounded-2xl py-2 sm:py-2.5 px-4 flex items-center justify-between transition-all duration-75 relative">
+        <button
+          type="button"
+          class="neu-pressed rounded-xl w-11 h-11 min-h-[44px] min-w-[44px] flex items-center justify-center font-bold text-lg transition-all"
+          :class="isNegative ? 'neu-inset-sm text-secondary bg-secondary/10 outline outline-1 outline-secondary/60' : 'neu-raised-sm text-neu-text-muted'"
+          :disabled="loading"
+          @click="toggleNegative()"
+          :aria-pressed="isNegative"
+          aria-label="Credit mode"
         >
-          $0.00
+          &plusmn;
+        </button>
+        <div class="flex-1 flex flex-col items-center justify-center">
+          <div
+            class="text-4xl sm:text-5xl font-mono font-bold tracking-tight text-center transition-colors"
+            :class="isNegative ? 'text-secondary' : 'text-neu-text'"
+            x-text="(isNegative ? '-' : '') + formattedAmount"
+            aria-live="off"
+          >
+            $0.00
+          </div>
+          <template x-if="isNegative">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-secondary mt-0.5">Credit / Reimbursement</span>
+          </template>
         </div>
+        <div class="w-11 min-w-[44px] pointer-events-none" aria-hidden="true"></div>
       </div>
     </section>
 
@@ -323,11 +341,11 @@ import Layout from "../layouts/Layout.astro";
       <button
         type="button"
         class="neu-convex neu-pressed w-full h-11 sm:h-12 rounded-2xl text-base font-bold min-h-[44px] flex items-center justify-center transition-all disabled:cursor-not-allowed"
-        :class="amountCents > 0 ? 'text-primary' : 'text-neu-text-muted/60'"
+        :class="amountCents > 0 ? (isNegative ? 'text-secondary' : 'text-primary') : 'text-neu-text-muted/60'"
         :disabled="loading || amountCents <= 0"
         @click="submitTransaction()"
       >
-        <span x-show="!loading">Save Transaction</span>
+        <span x-show="!loading" x-text="submitButtonLabel">Save Transaction</span>
         <span x-show="loading" class="loading loading-spinner loading-sm"></span>
       </button>
     </footer>
@@ -390,7 +408,15 @@ import Layout from "../layouts/Layout.astro";
           <template x-for="tx in recentTransactions" :key="tx.id">
             <div class="py-2.5 flex items-center justify-between">
               <div class="min-w-0 pr-2">
-                <div class="font-semibold text-sm truncate text-neu-text" x-text="tx.merchant"></div>
+                <div class="font-semibold text-sm text-neu-text flex items-center gap-1.5 min-w-0">
+                  <span class="truncate" x-text="tx.merchant"></span>
+                  <template x-if="Number(tx.gross_amount) < 0">
+                    <span class="badge badge-secondary badge-xs shrink-0">Credit</span>
+                  </template>
+                  <template x-if="Number(tx.reimbursement) > 0">
+                    <span class="badge badge-accent badge-xs shrink-0">Split</span>
+                  </template>
+                </div>
                 <div class="text-xs text-neu-text-muted flex items-center gap-1.5 mt-0.5">
                   <span x-text="tx.subcategory"></span>
                   <span>&bull;</span>
@@ -399,8 +425,18 @@ import Layout from "../layouts/Layout.astro";
                   <span x-text="tx.date"></span>
                 </div>
               </div>
-              <div class="font-mono font-bold text-sm text-right whitespace-nowrap text-neu-text">
-                $<span x-text="Number(tx.net_spend).toFixed(2)"></span>
+              <div class="text-right whitespace-nowrap">
+                <div
+                  class="font-mono font-bold text-sm"
+                  :class="Number(tx.net_spend) < 0 ? 'text-secondary' : 'text-neu-text'"
+                >
+                  <span x-text="Number(tx.net_spend) < 0 ? '-$' + Math.abs(Number(tx.net_spend)).toFixed(2) : '$' + Number(tx.net_spend).toFixed(2)"></span>
+                </div>
+                <template x-if="Number(tx.reimbursement) > 0">
+                  <div class="text-[11px] font-mono text-neu-text-muted">
+                    Gross: $<span x-text="Number(tx.gross_amount).toFixed(2)"></span>
+                  </div>
+                </template>
               </div>
             </div>
           </template>

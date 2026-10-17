@@ -245,3 +245,55 @@ describe("Multi-tenant Schema Migrations", () => {
     db.close();
   });
 });
+
+describe("Refund Reimbursement Invariant Migration (0003_enforce_refund_reimbursement_invariant.sql)", () => {
+  it("rejects insertion of negative gross_amount with non-zero reimbursement at database level", () => {
+    const db = createTestDatabase();
+
+    // Valid positive transaction with reimbursement
+    assert.doesNotThrow(() => {
+      db.prepare(`
+        INSERT INTO transactions (id, user_id, date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement)
+        VALUES ('tx-valid-pos', 'usr_default', '2026-10-01', 'Amex Gold', 'Guilt-Free', 'Dining', 'Posto', 120.0, 60.0);
+      `).run();
+    });
+
+    // Valid negative transaction with zero reimbursement
+    assert.doesNotThrow(() => {
+      db.prepare(`
+        INSERT INTO transactions (id, user_id, date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement)
+        VALUES ('tx-valid-neg', 'usr_default', '2026-10-01', 'Amex Gold', 'Guilt-Free', 'Dining', 'Posto', -60.0, 0.0);
+      `).run();
+    });
+
+    // Invalid negative transaction with non-zero reimbursement
+    assert.throws(
+      () => {
+        db.prepare(`
+          INSERT INTO transactions (id, user_id, date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement)
+          VALUES ('tx-invalid-neg', 'usr_default', '2026-10-01', 'Amex Gold', 'Guilt-Free', 'Dining', 'Posto', -60.0, 30.0);
+        `).run();
+      },
+      (err: unknown) => {
+        const error = err as Error;
+        return /Invalid transaction reimbursement amount/.test(error.message);
+      },
+    );
+
+    // Invalid positive transaction with reimbursement exceeding gross_amount
+    assert.throws(
+      () => {
+        db.prepare(`
+          INSERT INTO transactions (id, user_id, date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement)
+          VALUES ('tx-invalid-exceed', 'usr_default', '2026-10-01', 'Amex Gold', 'Guilt-Free', 'Dining', 'Posto', 50.0, 100.0);
+        `).run();
+      },
+      (err: unknown) => {
+        const error = err as Error;
+        return /Invalid transaction reimbursement amount/.test(error.message);
+      },
+    );
+
+    db.close();
+  });
+});
