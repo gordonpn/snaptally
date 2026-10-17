@@ -218,6 +218,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
   let failedCount = 0;
   let unauthorized = false;
   let lastError: string | undefined;
+  let transportHalted = false;
 
   try {
     const items = await getOutbox();
@@ -310,6 +311,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         await saveOutboxItem(item);
         failedCount++;
         scheduleDueRetry(backoffMs, options, item.next_retry_at);
+        transportHalted = true;
         break;
       } catch {
         // Network error / offline: apply exponential backoff (1s, 2s, 4s, capped at 60s)
@@ -320,6 +322,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         await saveOutboxItem(item);
         failedCount++;
         scheduleDueRetry(backoffMs, options, item.next_retry_at);
+        transportHalted = true;
         break;
       }
     }
@@ -334,15 +337,26 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         (item) => (item.rollback_retry_count ?? 0) <= MAX_ROLLBACK_RETRIES,
       );
 
-      if (activePendingItems.length > 0) {
-        const nextDue = Math.min(
-          ...activePendingItems.map((item) => item.next_retry_at ?? Date.now()),
-        );
+      // Only consider items that have an active scheduled retry deadline.
+      // Untouched items from a broken loop (transport/server error) do not have next_retry_at
+      // and must not collapse the backoff deadline to 0ms.
+      const scheduledDeadlines = activePendingItems
+        .map((item) => item.next_retry_at)
+        .filter((time): time is number => typeof time === "number" && !Number.isNaN(time));
+
+      if (scheduledDeadlines.length > 0) {
+        const nextDue = Math.min(...scheduledDeadlines);
         const delayMs = Math.max(0, nextDue - Date.now());
-        if (activeRetryDeadline === undefined || nextDue < activeRetryDeadline) {
+        if (
+          activeRetryDeadline === undefined ||
+          activeRetryDeadline <= Date.now() ||
+          nextDue < activeRetryDeadline
+        ) {
           scheduleDueRetry(delayMs, options, nextDue);
         }
-      } else {
+      } else if (!transportHalted && activePendingItems.length > 0) {
+        scheduleDueRetry(0, options, Date.now());
+      } else if (activePendingItems.length === 0) {
         clearRetryTimer();
       }
     }
@@ -354,7 +368,11 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
 
 function scheduleDueRetry(delayMs: number, options: SyncOptions, targetDeadline?: number): void {
   const deadline = targetDeadline ?? Date.now() + delayMs;
-  if (activeRetryDeadline !== undefined && activeRetryDeadline <= deadline) {
+  if (
+    activeRetryDeadline !== undefined &&
+    activeRetryDeadline > Date.now() &&
+    activeRetryDeadline <= deadline
+  ) {
     return;
   }
 

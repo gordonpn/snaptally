@@ -1307,4 +1307,124 @@ describe("Sync Listeners (Scenario 2)", () => {
       clearRetryTimer();
     }
   });
+
+  it("preserves exponential backoff and halts queue processing without immediately retrying untouched items when offline", async () => {
+    await clearOutbox();
+    const item1: OutboxItem = {
+      id: "tx-offline-1",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "First Item",
+      gross_amount: 10.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+    const item2: OutboxItem = {
+      id: "tx-offline-2",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Untouched Second Item",
+      gross_amount: 20.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(item1);
+    await saveOutboxItem(item2);
+
+    let fetchCalls = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      fetchCalls++;
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch;
+
+    let scheduledDelayMs = -1;
+    try {
+      const result = await syncOutbox({
+        token: "test-token",
+        onScheduleRetry: (delayMs) => {
+          scheduledDelayMs = delayMs;
+        },
+      });
+
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(fetchCalls, 1);
+      // Scheduled delay must be the 1000ms backoff, NOT 0ms from the untouched second item!
+      assert.strictEqual(scheduledDelayMs, 1000);
+
+      const items = await getOutbox();
+      assert.strictEqual(items.length, 2);
+      assert.strictEqual(items[0].id, "tx-offline-1");
+      assert.strictEqual(items[0].retry_count, 1);
+      assert.ok(items[0].next_retry_at && items[0].next_retry_at > Date.now());
+      assert.strictEqual(items[1].id, "tx-offline-2");
+      assert.strictEqual(items[1].retry_count, undefined);
+      assert.strictEqual(items[1].next_retry_at, undefined);
+    } finally {
+      globalThis.fetch = originalFetch;
+      clearRetryTimer();
+    }
+  });
+
+  it("treats expired activeRetryDeadline as inactive when host timer fires", async () => {
+    await clearOutbox();
+    const item: OutboxItem = {
+      id: "tx-expired-deadline",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Chipotle",
+      gross_amount: 15.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(item);
+
+    const originalFetch = globalThis.fetch;
+    const originalDateNow = Date.now;
+    globalThis.fetch = (async () => {
+      return new Response("Internal Server Error", { status: 500 });
+    }) as unknown as typeof fetch;
+
+    const scheduledDelays: number[] = [];
+    try {
+      let currentTime = originalDateNow();
+      Date.now = () => currentTime;
+
+      // First sync fails and schedules retry with 1000ms backoff
+      await syncOutbox({
+        token: "test-token",
+        onScheduleRetry: (delayMs) => {
+          scheduledDelays.push(delayMs);
+        },
+      });
+      assert.strictEqual(scheduledDelays.length, 1);
+      assert.strictEqual(scheduledDelays[0], 1000);
+
+      // Simulate host callback firing after the 1000ms delay has elapsed
+      currentTime += 1500;
+
+      await syncOutbox({
+        token: "test-token",
+        onScheduleRetry: (delayMs) => {
+          scheduledDelays.push(delayMs);
+        },
+      });
+
+      assert.strictEqual(scheduledDelays.length, 2);
+      // Next exponential backoff step (2000ms)
+      assert.strictEqual(scheduledDelays[1], 2000);
+    } finally {
+      Date.now = originalDateNow;
+      globalThis.fetch = originalFetch;
+      clearRetryTimer();
+    }
+  });
 });
