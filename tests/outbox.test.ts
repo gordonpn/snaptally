@@ -1048,7 +1048,8 @@ describe("Sync Listeners (Scenario 2)", () => {
       const items = await getOutbox();
       assert.strictEqual(items.length, 1);
       assert.strictEqual(items[0].id, "tx-credit-retain");
-      assert.strictEqual(items[0].retry_count, 1);
+      assert.strictEqual(items[0].rollback_retry_count, 1);
+      assert.strictEqual(items[0].retry_count, undefined);
       assert.ok(items[0].next_retry_at && items[0].next_retry_at > Date.now());
     } finally {
       globalThis.fetch = originalFetch;
@@ -1109,7 +1110,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       const items = await getOutbox();
       assert.strictEqual(items.length, 1);
       assert.strictEqual(items[0].id, "tx-credit-item");
-      assert.strictEqual(items[0].retry_count, 1);
+      assert.strictEqual(items[0].rollback_retry_count, 1);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -1160,7 +1161,7 @@ describe("Sync Listeners (Scenario 2)", () => {
     }
   });
 
-  it("discards negative-gross item when retry attempts exceed MAX_ROLLBACK_RETRIES", async () => {
+  it("retains negative-gross item in outbox when rollback retry attempts exceed MAX_ROLLBACK_RETRIES without scheduling further retries", async () => {
     await clearOutbox();
     const exhaustedCreditItem: OutboxItem = {
       id: "tx-credit-exhausted",
@@ -1171,7 +1172,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       merchant: "Venmo Reimbursement",
       gross_amount: -60.0,
       reimbursement: 0,
-      retry_count: 10,
+      rollback_retry_count: 10,
       created_at: new Date().toISOString(),
     };
 
@@ -1195,9 +1196,115 @@ describe("Sync Listeners (Scenario 2)", () => {
       assert.strictEqual(result.lastError, "Validation failed: gross_amount must be positive");
 
       const items = await getOutbox();
-      assert.strictEqual(items.length, 0);
+      assert.strictEqual(items.length, 1);
+      assert.strictEqual(items[0].id, "tx-credit-exhausted");
+      assert.strictEqual(items[0].rollback_retry_count, 11);
+      assert.strictEqual(items[0].next_retry_at, undefined);
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("preserves credit item in outbox when credit has existing network retry_count >= 10 and encounters rollback rejection", async () => {
+    await clearOutbox();
+    const creditWithNetworkRetries: OutboxItem = {
+      id: "tx-credit-network-retried",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Venmo Reimbursement",
+      gross_amount: -60.0,
+      reimbursement: 0,
+      retry_count: 10,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(creditWithNetworkRetries);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({ error: "Validation failed: gross_amount must be positive" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token", force: true });
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(result.syncedCount, 0);
+
+      const items = await getOutbox();
+      assert.strictEqual(items.length, 1);
+      assert.strictEqual(items[0].id, "tx-credit-network-retried");
+      assert.strictEqual(items[0].retry_count, 10);
+      assert.strictEqual(items[0].rollback_retry_count, 1);
+      assert.strictEqual(typeof items[0].next_retry_at, "number");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("preserves earliest pending retry deadline when a retained credit receives a longer backoff", async () => {
+    await clearOutbox();
+    const retainedCredit: OutboxItem = {
+      id: "tx-credit-long-backoff",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Venmo Reimbursement",
+      gross_amount: -60.0,
+      reimbursement: 0,
+      rollback_retry_count: 5, // Next backoff: 32s (32000ms)
+      created_at: new Date().toISOString(),
+    };
+    const pendingItem: OutboxItem = {
+      id: "tx-pending-earlier",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Pending Chipotle",
+      gross_amount: 15.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+      next_retry_at: Date.now() + 2000, // 2s away
+    };
+
+    await saveOutboxItem(retainedCredit);
+    await saveOutboxItem(pendingItem);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({ error: "Validation failed: gross_amount must be positive" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    let scheduledDelayMs = -1;
+    try {
+      await syncOutbox({
+        token: "test-token",
+        onScheduleRetry: (delayMs) => {
+          scheduledDelayMs = delayMs;
+        },
+      });
+
+      // Assert that the earliest scheduled deadline (approx 2000ms) is preserved rather than 32000ms
+      assert.ok(scheduledDelayMs > 0 && scheduledDelayMs <= 2500);
+      assert.ok(scheduledDelayMs < 10000);
+    } finally {
+      globalThis.fetch = originalFetch;
+      clearRetryTimer();
     }
   });
 });

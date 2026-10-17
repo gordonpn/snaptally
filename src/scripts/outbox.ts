@@ -12,6 +12,7 @@ export interface OutboxItem {
   reimbursement: number;
   created_at: string;
   retry_count?: number;
+  rollback_retry_count?: number;
   next_retry_at?: number;
 }
 
@@ -168,6 +169,7 @@ export async function deleteOutboxItem(id: string): Promise<void> {
 }
 
 let activeRetryTimer: ReturnType<typeof setTimeout> | undefined;
+let activeRetryDeadline: number | undefined;
 let registeredSyncTrigger: ((force?: boolean) => void) | undefined;
 
 /**
@@ -178,6 +180,7 @@ export function clearRetryTimer(): void {
     clearTimeout(activeRetryTimer);
     activeRetryTimer = undefined;
   }
+  activeRetryDeadline = undefined;
 }
 
 /**
@@ -221,7 +224,11 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
     options.onStatusChange?.(true, items.length);
 
     for (const item of items) {
-      if (!options.force && item.next_retry_at && Date.now() < item.next_retry_at) {
+      if (
+        !options.force &&
+        ((item.rollback_retry_count ?? 0) > MAX_ROLLBACK_RETRIES ||
+          (item.next_retry_at && Date.now() < item.next_retry_at))
+      ) {
         continue;
       }
 
@@ -274,19 +281,21 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
           const isUnsupportedNegativeAmount = item.gross_amount < 0 && /positive/i.test(errorMsg);
 
           if (isUnsupportedNegativeAmount) {
-            const retryCount = (item.retry_count ?? 0) + 1;
-            if (retryCount <= MAX_ROLLBACK_RETRIES) {
-              item.retry_count = retryCount;
-              const backoffMs = Math.min(60000, 1000 * 2 ** (retryCount - 1));
+            const rollbackCount = (item.rollback_retry_count ?? 0) + 1;
+            item.rollback_retry_count = rollbackCount;
+            if (rollbackCount <= MAX_ROLLBACK_RETRIES) {
+              const backoffMs = Math.min(60000, 1000 * 2 ** (rollbackCount - 1));
               item.next_retry_at = Date.now() + backoffMs;
-              await saveOutboxItem(item);
-              failedCount++;
-              scheduleDueRetry(backoffMs, options);
-              continue;
+            } else {
+              item.next_retry_at = undefined;
             }
+            await saveOutboxItem(item);
+            failedCount++;
+            lastError = errorMsg;
+            continue;
           }
 
-          // Permanently invalid payload or exceeded retry cap; remove from outbox to prevent blocking the queue
+          // Permanently invalid payload; remove from outbox to prevent blocking the queue
           await deleteOutboxItem(item.id);
           failedCount++;
           lastError = errorMsg;
@@ -300,7 +309,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         item.next_retry_at = Date.now() + backoffMs;
         await saveOutboxItem(item);
         failedCount++;
-        scheduleDueRetry(backoffMs, options);
+        scheduleDueRetry(backoffMs, options, item.next_retry_at);
         break;
       } catch {
         // Network error / offline: apply exponential backoff (1s, 2s, 4s, capped at 60s)
@@ -310,7 +319,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         item.next_retry_at = Date.now() + backoffMs;
         await saveOutboxItem(item);
         failedCount++;
-        scheduleDueRetry(backoffMs, options);
+        scheduleDueRetry(backoffMs, options, item.next_retry_at);
         break;
       }
     }
@@ -318,11 +327,24 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
     isSyncInProgress = false;
     const remaining = await getOutbox();
     const remainingCount = remaining.length;
-    if (remainingCount === 0) {
+    if (remainingCount === 0 || unauthorized) {
       clearRetryTimer();
-    } else if (activeRetryTimer === undefined && !options.onScheduleRetry && !unauthorized) {
-      const nextDue = Math.min(...remaining.map((item) => item.next_retry_at ?? Date.now()));
-      scheduleDueRetry(Math.max(0, nextDue - Date.now()), options);
+    } else {
+      const activePendingItems = remaining.filter(
+        (item) => (item.rollback_retry_count ?? 0) <= MAX_ROLLBACK_RETRIES,
+      );
+
+      if (activePendingItems.length > 0) {
+        const nextDue = Math.min(
+          ...activePendingItems.map((item) => item.next_retry_at ?? Date.now()),
+        );
+        const delayMs = Math.max(0, nextDue - Date.now());
+        if (activeRetryDeadline === undefined || nextDue < activeRetryDeadline) {
+          scheduleDueRetry(delayMs, options, nextDue);
+        }
+      } else {
+        clearRetryTimer();
+      }
     }
     options.onStatusChange?.(false, remainingCount);
   }
@@ -330,19 +352,28 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
   return { syncedCount, failedCount, unauthorized, lastError };
 }
 
-function scheduleDueRetry(delayMs: number, options: SyncOptions): void {
+function scheduleDueRetry(delayMs: number, options: SyncOptions, targetDeadline?: number): void {
+  const deadline = targetDeadline ?? Date.now() + delayMs;
+  if (activeRetryDeadline !== undefined && activeRetryDeadline <= deadline) {
+    return;
+  }
+
   clearRetryTimer();
+  activeRetryDeadline = deadline;
+
   if (options.onScheduleRetry) {
     options.onScheduleRetry(delayMs);
   } else if (registeredSyncTrigger) {
     activeRetryTimer = setTimeout(() => {
       activeRetryTimer = undefined;
+      activeRetryDeadline = undefined;
       registeredSyncTrigger?.(false);
     }, delayMs);
     activeRetryTimer.unref?.();
   } else {
     activeRetryTimer = setTimeout(() => {
       activeRetryTimer = undefined;
+      activeRetryDeadline = undefined;
       void syncOutbox({ ...options, force: false });
     }, delayMs);
     activeRetryTimer.unref?.();
