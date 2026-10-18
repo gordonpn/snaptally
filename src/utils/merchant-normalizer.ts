@@ -216,6 +216,72 @@ export const DEFAULT_CANONICAL_RULES: Readonly<Record<string, CategoryRule>> = {
     subcategory: "Takeout",
     rewardMultiplierCategory: "Dining",
   },
+  GRUBHUB: {
+    canonicalName: "Grubhub",
+    parentBucket: "Guilt-Free",
+    subcategory: "Takeout",
+    rewardMultiplierCategory: "Dining",
+  },
+  CAVA: {
+    canonicalName: "Cava",
+    parentBucket: "Guilt-Free",
+    subcategory: "Takeout",
+    rewardMultiplierCategory: "Dining",
+  },
+  "PANDA EXPRESS": {
+    canonicalName: "Panda Express",
+    parentBucket: "Guilt-Free",
+    subcategory: "Takeout",
+    rewardMultiplierCategory: "Dining",
+  },
+  "INSOMNIA COOKIES": {
+    canonicalName: "Insomnia Cookies",
+    parentBucket: "Guilt-Free",
+    subcategory: "Coffee & Snacks",
+    rewardMultiplierCategory: "Dining",
+  },
+  "SALT & STRAW": {
+    canonicalName: "Salt & Straw",
+    parentBucket: "Guilt-Free",
+    subcategory: "Coffee & Snacks",
+    rewardMultiplierCategory: "Dining",
+  },
+  "SALT AND STRAW": {
+    canonicalName: "Salt & Straw",
+    parentBucket: "Guilt-Free",
+    subcategory: "Coffee & Snacks",
+    rewardMultiplierCategory: "Dining",
+  },
+  AMORINO: {
+    canonicalName: "Amorino",
+    parentBucket: "Guilt-Free",
+    subcategory: "Coffee & Snacks",
+    rewardMultiplierCategory: "Dining",
+  },
+  "FLOUR BAKERY": {
+    canonicalName: "Flour Bakery",
+    parentBucket: "Guilt-Free",
+    subcategory: "Coffee & Snacks",
+    rewardMultiplierCategory: "Dining",
+  },
+  "SUBWAY RESTAURANT": {
+    canonicalName: "Subway",
+    parentBucket: "Guilt-Free",
+    subcategory: "Takeout",
+    rewardMultiplierCategory: "Dining",
+  },
+  "SUBWAY SANDWICHES": {
+    canonicalName: "Subway",
+    parentBucket: "Guilt-Free",
+    subcategory: "Takeout",
+    rewardMultiplierCategory: "Dining",
+  },
+  "SUBWAY SANDWICH": {
+    canonicalName: "Subway",
+    parentBucket: "Guilt-Free",
+    subcategory: "Takeout",
+    rewardMultiplierCategory: "Dining",
+  },
   LYFT: {
     canonicalName: "Lyft",
     parentBucket: "Fixed Costs",
@@ -369,6 +435,10 @@ export function cleanRawDescriptor(rawDescription: string): {
       break;
     }
   }
+
+  // Preserve Subway restaurant store-number evidence before trailing noise stripping
+  text = text.replace(/\bSUBWAY\s+(?:STORE\s*#?|#)\s*\d+\b/gi, "SUBWAY RESTAURANT");
+  text = text.replace(/\bSUBWAY\s+\d{3,}\b/gi, "SUBWAY RESTAURANT");
 
   for (const trailingPattern of TRAILING_NOISE_PATTERNS) {
     text = text.replace(trailingPattern, " ");
