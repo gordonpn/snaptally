@@ -89,6 +89,21 @@ describe("Helper Functions", () => {
       assert.strictEqual(cleanAmount("#N/A"), null);
       assert.strictEqual(cleanAmount("#DIV/0!"), null);
     });
+
+    it("rejects malformed decimal amounts and values that round to zero", () => {
+      for (const value of [
+        "10oops",
+        "1.2.3",
+        "1e3",
+        "0x10",
+        "Infinity",
+        "-Infinity",
+        "0.001",
+        "-0.001",
+      ]) {
+        assert.strictEqual(cleanAmount(value), null, value);
+      }
+    });
   });
 
   describe("cleanDate", () => {
@@ -102,6 +117,22 @@ describe("Helper Functions", () => {
       assert.strictEqual(cleanDate("invalid"), null);
       assert.strictEqual(cleanDate(""), null);
       assert.strictEqual(cleanDate(undefined), null);
+    });
+
+    it("checks calendar dates including leap years and early years", () => {
+      for (const value of [
+        "2026-02-30",
+        "2025-02-29",
+        "2026-04-31",
+        "2026-00-10",
+        "2026-13-01",
+        "2026-01-00",
+      ]) {
+        assert.strictEqual(cleanDate(value), null, value);
+      }
+      for (const value of ["2024-02-29", "2000-02-29", "0042-05-15"]) {
+        assert.strictEqual(cleanDate(value), value);
+      }
     });
   });
 

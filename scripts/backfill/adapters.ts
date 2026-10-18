@@ -1,3 +1,4 @@
+import { isValidDate } from "../../src/utils/date.ts";
 import { normalizeMerchant } from "../../src/utils/merchant-normalizer.ts";
 import { generateDeterministicId } from "./idempotency.ts";
 import type { BackfillTransaction, SheetAdapter } from "./types.ts";
@@ -15,9 +16,9 @@ export function cleanAmount(val: string | undefined): number | null {
     cleaned = `-${cleaned.slice(1, -1).trim()}`;
   }
 
-  const num = Number.parseFloat(cleaned);
-  if (!Number.isFinite(num) || num === 0) return null;
-  return Math.round(num * 100) / 100;
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(cleaned)) return null;
+  const amount = Math.round(Number(cleaned) * 100) / 100;
+  return Number.isFinite(amount) && amount !== 0 ? amount : null;
 }
 
 /**
@@ -26,8 +27,7 @@ export function cleanAmount(val: string | undefined): number | null {
 export function cleanDate(val: string | undefined): string | null {
   if (!val) return null;
   const trimmed = val.trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
-  return trimmed;
+  return isValidDate(trimmed) ? trimmed : null;
 }
 
 function createTransaction(

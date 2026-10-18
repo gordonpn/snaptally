@@ -482,6 +482,7 @@ Additional flags: `--file <path>` ingests a single sheet, `--dir <path>` overrid
 
 - Amounts are stored in the currency recorded in the sheet (`USD` or `CAD`) without conversion.
 - Zero-amount rows are spreadsheet formula anchors and are skipped.
+- Invalid calendar dates, malformed decimal amounts, and amounts that round to zero are skipped.
 - Row IDs are deterministic hashes of the source file, row, and transaction fields, so re-runs insert nothing new (`ON CONFLICT(id) DO NOTHING`). Editing a row in the sheet produces a new ID; delete the stale row manually if a corrected sheet is re-ingested.
 - `Salary.csv` entries above 1,000 map to `Income -> Salary`; smaller entries map to `Income -> Reimbursement`.
 
