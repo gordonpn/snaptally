@@ -1427,4 +1427,69 @@ describe("Sync Listeners (Scenario 2)", () => {
       clearRetryTimer();
     }
   });
+
+  it("preserves exponential backoff and excludes expired tail deadlines when transport halts", async () => {
+    await clearOutbox();
+    const item1: OutboxItem = {
+      id: "tx-halt-1",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Failing Server",
+      gross_amount: 10.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+    const item2WithExpiredDeadline: OutboxItem = {
+      id: "tx-halt-2-expired",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Untouched Tail Chipotle",
+      gross_amount: 20.0,
+      reimbursement: 0,
+      retry_count: 2,
+      next_retry_at: Date.now() - 5000,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(item1);
+    await saveOutboxItem(item2WithExpiredDeadline);
+
+    let fetchCalls = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      fetchCalls++;
+      return new Response("Internal Server Error", { status: 500 });
+    }) as unknown as typeof fetch;
+
+    let scheduledDelayMs = -1;
+    try {
+      const result = await syncOutbox({
+        token: "test-token",
+        onScheduleRetry: (delayMs) => {
+          scheduledDelayMs = delayMs;
+        },
+      });
+
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(fetchCalls, 1);
+      // Scheduled delay must preserve the 1000ms backoff and NOT collapse to 0ms from the expired item!
+      assert.strictEqual(scheduledDelayMs, 1000);
+
+      const items = await getOutbox();
+      assert.strictEqual(items.length, 2);
+      assert.strictEqual(items[0].id, "tx-halt-1");
+      assert.strictEqual(items[0].retry_count, 1);
+      assert.ok(items[0].next_retry_at && items[0].next_retry_at > Date.now());
+      assert.strictEqual(items[1].id, "tx-halt-2-expired");
+      assert.strictEqual(items[1].retry_count, 2);
+      assert.strictEqual(items[1].next_retry_at, item2WithExpiredDeadline.next_retry_at);
+    } finally {
+      globalThis.fetch = originalFetch;
+      clearRetryTimer();
+    }
+  });
 });
