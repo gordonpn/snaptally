@@ -486,6 +486,7 @@ Missing input files or directories fail with a nonzero exit status. An existing 
 - Amounts are stored in the currency recorded in the sheet (`USD` or `CAD`) without conversion.
 - Zero-amount rows are spreadsheet formula anchors and are skipped.
 - Invalid calendar dates, malformed decimal amounts, and amounts that round to zero are skipped.
+- Temporary SQL files are readable only by the current user and are removed after Wrangler succeeds or fails.
 - Row IDs are deterministic hashes of the source file, row, and transaction fields, so re-runs insert nothing new (`ON CONFLICT(id) DO NOTHING`). Editing a row in the sheet produces a new ID; delete the stale row manually if a corrected sheet is re-ingested.
 - `Salary.csv` entries above 1,000 map to `Income -> Salary`; smaller entries map to `Income -> Reimbursement`.
 

@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
@@ -137,6 +138,7 @@ describe("Backfill execution", () => {
           "--file",
           file,
         ]);
+        assert.equal(statSync(file).mode & 0o777, 0o600);
         assert.equal(sql, statement);
         return "batch completed";
       });

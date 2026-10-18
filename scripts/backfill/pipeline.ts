@@ -33,7 +33,7 @@ export function executeD1Batch(
     tmpdir(),
     `snaptally-batch-${Date.now()}-${Math.random().toString(36).slice(2)}.sql`,
   );
-  writeFileSync(tempFile, batchSql, "utf-8");
+  writeFileSync(tempFile, batchSql, { encoding: "utf-8", mode: 0o600, flag: "wx" });
 
   try {
     const args = ["wrangler", "d1", "execute", "budget-db"];
