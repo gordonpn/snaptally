@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import {
@@ -25,6 +26,115 @@ import { executeD1Batch, generateInsertSql, runBackfill } from "../scripts/backf
 import type { BackfillOptions, BackfillTransaction } from "../scripts/backfill/types.ts";
 
 const FIXTURES_DIR = resolve(import.meta.dirname, "fixtures/backfill");
+
+function createBackfillOptions(overrides: Partial<BackfillOptions> = {}): BackfillOptions {
+  return {
+    userId: "usr_default",
+    defaultCard: "Historical",
+    dryRun: true,
+    local: false,
+    remote: false,
+    ...overrides,
+  };
+}
+
+describe("Source identity", () => {
+  for (const adapter of ALL_ADAPTERS) {
+    it(`${adapter.name}: preserves IDs across card changes and excludes formula sidebars`, () => {
+      const filename = readdirSync(FIXTURES_DIR).find(adapter.match);
+      assert.ok(filename);
+      const rows = parseCsv(readFileSync(resolve(FIXTURES_DIR, filename), "utf-8"));
+      const original = adapter.parse(rows, filename, createBackfillOptions());
+
+      const changedCard = adapter.parse(
+        rows,
+        filename,
+        createBackfillOptions({ defaultCard: "Changed card" }),
+      );
+      const changedFormulas = adapter.parse(
+        rows.map((row) => [...row, "Updated formula"]),
+        filename,
+        createBackfillOptions(),
+      );
+      const changedTenant = adapter.parse(
+        rows,
+        filename,
+        createBackfillOptions({ userId: "another-user" }),
+      );
+
+      assert.ok(original.length > 0);
+      assert.deepEqual(
+        changedCard.map((tx) => tx.id),
+        original.map((tx) => tx.id),
+      );
+      assert.deepEqual(
+        changedFormulas.map((tx) => tx.id),
+        original.map((tx) => tx.id),
+      );
+      assert.deepEqual(
+        changedCard.map((tx) => tx.card),
+        original.map(() => "Changed card"),
+      );
+      for (const tx of changedTenant)
+        assert.ok(!original.some((existing) => existing.id === tx.id));
+    });
+  }
+
+  it("preserves identity when derived category mappings change", () => {
+    const rows = [
+      ["Date", "Cost", "Merchant"],
+      ["2024-01-01", "10.00", "Starbucks"],
+    ];
+    const filename = "Budgeting - Boston food expenses.csv";
+    const original = bostonFoodAdapter.parse(rows, filename, createBackfillOptions());
+
+    const recategorized = utilitiesAdapter.parse(rows, filename, createBackfillOptions());
+
+    assert.notEqual(original[0].subcategory, recategorized[0].subcategory);
+    assert.equal(original[0].id, recategorized[0].id);
+  });
+
+  it("keeps identical purchases distinct and changes IDs for edited transaction cells", () => {
+    const rows = [
+      ["Date", "Cost"],
+      ["2024-01-01", "10.00"],
+      ["2024-01-01", "10.00"],
+    ];
+    const filename = "Budgeting - Bikeshare.csv";
+    const original = bikeshareAdapter.parse(rows, filename, createBackfillOptions());
+
+    const edited = bikeshareAdapter.parse(
+      [rows[0], ["2024-01-01", "20.00"], rows[2]],
+      filename,
+      createBackfillOptions(),
+    );
+
+    assert.notEqual(original[0].id, original[1].id);
+    assert.notEqual(original[0].id, edited[0].id);
+    assert.equal(original[1].id, edited[1].id);
+  });
+
+  for (const [adapter, filename, formulaIndex] of [
+    [bostonFoodAdapter, "Budgeting - Boston food expenses.csv", 5],
+    [bostonHousingAdapter, "Budgeting - Boston housing expenses.csv", 4],
+    [stuffAdapter, "Budgeting - Stuff.csv", 3],
+  ] as const) {
+    it(`${adapter.name}: ignores changes to existing computed columns`, () => {
+      const rows = parseCsv(readFileSync(resolve(FIXTURES_DIR, filename), "utf-8"));
+      const original = adapter.parse(rows, filename, createBackfillOptions());
+      const updatedRows = rows.map((row) =>
+        row.map((cell, index) => (index === formulaIndex ? "99999" : cell)),
+      );
+
+      const updated = adapter.parse(updatedRows, filename, createBackfillOptions());
+
+      assert.deepEqual(
+        updated.map((tx) => tx.id),
+        original.map((tx) => tx.id),
+      );
+    });
+  }
+});
 
 describe("CSV Parser (parseCsv)", () => {
   it("rejects unterminated quoted fields", () => {

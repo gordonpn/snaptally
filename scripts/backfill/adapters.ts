@@ -44,7 +44,7 @@ function createTransaction(
   sourceRow: number,
   userId: string,
 ): BackfillTransaction {
-  const hashKey = `${userId}|${date}|${card}|${merchant}|${grossAmount.toFixed(2)}|${currency}|${subcategory}|${sourceFile}|${sourceRow}`;
+  const hashKey = `${userId}|${sourceFile}|${sourceRow}|${date}|${grossAmount.toFixed(2)}|${currency}`;
   const id = generateDeterministicId(hashKey);
 
   return {
@@ -113,9 +113,15 @@ export const bostonFoodAdapter: SheetAdapter = {
       const rawMerchant = (row[2] || "").trim() || "Food";
       const normalized = normalizeMerchant(rawMerchant);
 
-      const parentBucket = normalized.parentBucket ?? "Guilt-Free";
-      const subcategory = normalized.subcategory ?? "Dining";
+      let parentBucket = normalized.parentBucket ?? "Guilt-Free";
+      let subcategory = normalized.subcategory ?? "Dining";
       const merchant = normalized.canonicalMerchant || rawMerchant;
+
+      // Climbing gym cafe snacks recorded in food sheet
+      if (/\b(?:BLOC SHOP|CENTRAL ROCK)\b/i.test(rawMerchant)) {
+        parentBucket = "Guilt-Free";
+        subcategory = "Coffee & Snacks";
+      }
 
       transactions.push(
         createTransaction(
@@ -198,12 +204,18 @@ export const canadaFoodAdapter: SheetAdapter = {
       const grossAmount = cleanAmount(row[1]);
       if (!date || grossAmount === null) continue;
 
-      const rawMerchant = (row[2] || "").trim() || "Groceries";
+      const rawMerchant = (row[2] || "").trim() || "Food";
       const normalized = normalizeMerchant(rawMerchant);
 
-      const parentBucket = normalized.parentBucket ?? "Fixed Costs";
-      const subcategory = normalized.subcategory ?? "Groceries";
+      let parentBucket = normalized.parentBucket ?? "Guilt-Free";
+      let subcategory = normalized.subcategory ?? "Dining";
       const merchant = normalized.canonicalMerchant || rawMerchant;
+
+      // Climbing gym cafe snacks recorded in food sheet
+      if (/\b(?:BLOC SHOP|CENTRAL ROCK)\b/i.test(rawMerchant)) {
+        parentBucket = "Guilt-Free";
+        subcategory = "Coffee & Snacks";
+      }
 
       transactions.push(
         createTransaction(
@@ -516,24 +528,58 @@ export const stuffAdapter: SheetAdapter = {
       if (grossAmount === null) continue;
 
       const rawMerchant = (row[4] || "").trim() || "Miscellaneous";
+      const description = (row[5] || "").trim();
+      const combined = `${rawMerchant} ${description}`.trim();
       const normalized = normalizeMerchant(rawMerchant);
 
       let parentBucket = normalized.parentBucket ?? "Guilt-Free";
       let subcategory = normalized.subcategory ?? "Shopping";
+      let merchant = normalized.canonicalMerchant || rawMerchant;
 
-      // Special handling for fitness climbing gym entries found in Stuff sheet
-      if (
-        /\b(?:CLIMB|BOULDER|GYM|FITNESS)\b/i.test(rawMerchant) ||
+      // Contextual overrides based on merchant + description in Stuff sheet
+      if (rawMerchant.toLowerCase() === "gas" || description.toLowerCase() === "gas") {
+        parentBucket = "Fixed Costs";
+        subcategory = "Transit";
+        if (rawMerchant.toLowerCase() === "gas") {
+          merchant = description
+            ? description.toLowerCase().includes("bj")
+              ? "BJ's Gas"
+              : description
+            : "Gas Station";
+        } else {
+          merchant = rawMerchant.toLowerCase().includes("gas") ? rawMerchant : `${rawMerchant} Gas`;
+        }
+      } else if (
+        /\b(?:CLIMB|BOULDER|GYM|FITNESS|PICKLE)\b/i.test(combined) ||
         normalized.subcategory === "Fitness"
       ) {
         parentBucket = "Fixed Costs";
         subcategory = "Fitness";
-      } else if (/\b(?:INSURANCE|ASSURANT)\b/i.test(rawMerchant)) {
+      } else if (/\b(?:INSURANCE|ASSURANT)\b/i.test(combined)) {
         parentBucket = "Fixed Costs";
         subcategory = "Utilities";
+      } else if (/\b(?:RETINAL|EYE GLASSES|OPTOMETR|EXAM|VISION)\b/i.test(combined)) {
+        parentBucket = "Fixed Costs";
+        subcategory = "Healthcare";
+      } else if (
+        /\b(?:AMC|CINEMA|THEATRE|THEATER|CIRQUE|SIX FLAGS|AQUARIUM|MUSEUM|CHICAGO BULLS)\b/i.test(
+          combined,
+        )
+      ) {
+        parentBucket = "Guilt-Free";
+        subcategory = "Entertainment";
+      } else if (/\b(?:CRUNCHYROLL|RING|REAL-DEBRID|MEDIUM|DEEPSEEK|TSN)\b/i.test(combined)) {
+        parentBucket = "Fixed Costs";
+        subcategory = "Subscriptions";
+      } else if (
+        /\b(?:PARKING|MBTA|VENTRA|CLIPPER|STM|EZPASS|EZ-PASS|TRANSIT|SUBWAY)\b/i.test(combined)
+      ) {
+        parentBucket = "Fixed Costs";
+        subcategory = "Transit";
+      } else if (/\b(?:DELTA|FLIGHT|AIRLINE|LUGGAGE)\b/i.test(combined)) {
+        parentBucket = "Savings";
+        subcategory = "Travel Fund";
       }
-
-      const merchant = normalized.canonicalMerchant || rawMerchant;
 
       transactions.push(
         createTransaction(
