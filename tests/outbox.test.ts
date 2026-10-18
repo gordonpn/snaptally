@@ -1492,4 +1492,70 @@ describe("Sync Listeners (Scenario 2)", () => {
       clearRetryTimer();
     }
   });
+
+  it("schedules immediate retry when an unscheduled item remains in queue alongside backed-off items", async () => {
+    await clearOutbox();
+    const inFlightItem: OutboxItem = {
+      id: "tx-in-flight",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "In Flight Item",
+      gross_amount: 10.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+    const retainedItem: OutboxItem = {
+      id: "tx-retained-backoff",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Backed Off Merchant",
+      gross_amount: -25.0,
+      reimbursement: 0,
+      rollback_retry_count: 1,
+      next_retry_at: Date.now() + 30000,
+      created_at: new Date().toISOString(),
+    };
+    const unscheduledItem: OutboxItem = {
+      id: "tx-unscheduled-pending",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Fresh Item",
+      gross_amount: 15.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(inFlightItem);
+    await saveOutboxItem(retainedItem);
+
+    let scheduledDelayMs = -1;
+    const originalFetch = globalThis.fetch;
+    // When sync runs for inFlightItem, simulate concurrent submission while background sync is in flight
+    globalThis.fetch = (async () => {
+      await saveOutboxItem(unscheduledItem);
+      return new Response(JSON.stringify({ success: true }), { status: 201 });
+    }) as unknown as typeof fetch;
+
+    try {
+      await syncOutbox({
+        token: "test-token",
+        onScheduleRetry: (delayMs) => {
+          scheduledDelayMs = delayMs;
+        },
+      });
+
+      // Because tx-unscheduled-pending was added and is due now (no next_retry_at),
+      // the finalizer must schedule retry immediately (0ms) instead of waiting for the 30s deadline
+      assert.strictEqual(scheduledDelayMs, 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+      clearRetryTimer();
+    }
+  });
 });

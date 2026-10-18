@@ -360,23 +360,32 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
           }
         }
       } else {
-        const scheduledDeadlines = activePendingItems
-          .map((item) => item.next_retry_at)
-          .filter((time): time is number => typeof time === "number" && !Number.isNaN(time));
+        const hasDueOrUnscheduled = activePendingItems.some(
+          (item) =>
+            typeof item.next_retry_at !== "number" ||
+            Number.isNaN(item.next_retry_at) ||
+            item.next_retry_at <= Date.now(),
+        );
 
-        if (scheduledDeadlines.length > 0) {
-          const nextDue = Math.min(...scheduledDeadlines);
-          const delayMs = Math.max(0, nextDue - Date.now());
-          if (
-            activeRetryDeadline === undefined ||
-            activeRetryDeadline <= Date.now() ||
-            nextDue < activeRetryDeadline
-          ) {
-            scheduleDueRetry(delayMs, options, nextDue);
-          }
-        } else if (activePendingItems.length > 0) {
+        if (hasDueOrUnscheduled) {
           scheduleDueRetry(0, options, Date.now());
-        } else if (activePendingItems.length === 0) {
+        } else if (activePendingItems.length > 0) {
+          const scheduledDeadlines = activePendingItems
+            .map((item) => item.next_retry_at)
+            .filter((time): time is number => typeof time === "number" && !Number.isNaN(time));
+
+          if (scheduledDeadlines.length > 0) {
+            const nextDue = Math.min(...scheduledDeadlines);
+            const delayMs = Math.max(0, nextDue - Date.now());
+            if (
+              activeRetryDeadline === undefined ||
+              activeRetryDeadline <= Date.now() ||
+              nextDue < activeRetryDeadline
+            ) {
+              scheduleDueRetry(delayMs, options, nextDue);
+            }
+          }
+        } else {
           clearRetryTimer();
         }
       }
