@@ -477,6 +477,7 @@ node scripts/backfill.ts --remote
 ```
 
 Additional flags: `--file <path>` ingests a single sheet, `--dir <path>` overrides the sheet directory, and `--user-id <id>` scopes rows to a tenant (defaults to `usr_default`).
+Unknown flags, missing option values, and simultaneous `--local` and `--remote` targets are rejected. Explicit `--dry-run` prevents writes even when one target flag is present.
 
 ### 8.2 Ingestion Rules
 

@@ -110,6 +110,7 @@ Historical CSV imports use `just backfill-dry-run` to validate local exports bef
 `just backfill-local`. Imports preserve USD/CAD and skip invalid calendar dates,
 malformed amounts, and amounts that round to zero. See the
 [backfill procedure](docs/RUNBOOK.md#8-historical-google-sheets-backfill).
+The CLI rejects unknown flags and conflicting local/remote targets.
  
 - [Architecture & Design](docs/architecture.md): Detailed system design, data flows, database schemas, and free-tier operational limits.
 - [Budgeting Methodology & Category Taxonomy](docs/budgeting.md): Conscious Spending Plan parent buckets, subcategories, sinking funds, travel categorization, and reimbursement rules.

@@ -31,7 +31,6 @@ async function main(): Promise<void> {
       "default-card": { type: "string" },
       help: { type: "boolean" },
     },
-    strict: false,
   });
 
   if (values.help) {
@@ -41,6 +40,9 @@ async function main(): Promise<void> {
 
   const isLocal = Boolean(values.local);
   const isRemote = Boolean(values.remote);
+  if (isLocal && isRemote) {
+    throw new Error("Choose either --local or --remote, not both.");
+  }
   // Default to dry-run if neither local nor remote is specified
   const isDryRun = Boolean(values["dry-run"]) || (!isLocal && !isRemote);
 
