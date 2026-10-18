@@ -67,7 +67,10 @@ export async function runBackfill(options: BackfillOptions): Promise<BackfillSum
       throw new Error(`Specified file not found: ${options.file}`);
     }
     filePaths = [resolvedPath];
-  } else if (existsSync(targetDir)) {
+  } else {
+    if (!existsSync(targetDir)) {
+      throw new Error(`Sheet directory not found: ${targetDir}`);
+    }
     filePaths = readdirSync(targetDir)
       .filter((f) => f.endsWith(".csv") && !f.toLowerCase().includes("general"))
       .sort()

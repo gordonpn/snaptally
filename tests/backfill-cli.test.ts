@@ -59,4 +59,12 @@ describe("Backfill CLI", () => {
     assert.equal(result.status, 1);
     assert.match(result.stderr, /argument missing|requires an argument/);
   });
+
+  it("reports a missing input directory as a failure", () => {
+    const result = runCli(["--dir", resolve(FIXTURES_DIR, "missing")]);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Sheet directory not found/);
+    assert.doesNotMatch(result.stdout, /completed successfully/);
+  });
 });
