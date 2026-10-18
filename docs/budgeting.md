@@ -26,43 +26,36 @@ The target transaction model requires a `parent_bucket` and a `subcategory`. The
 ### 2.1. Fixed Costs (Parent Bucket: `Fixed Costs`)
 Expenses necessary to live and work. These are generally predictable monthly commitments:
 
-- `Rent / Mortgage`: Housing payments and HOA fees.
-- `Utilities`: Electric, gas, water, trash, and internet.
+- `Rent`: Housing payments, lease commitments, and rent.
+- `Utilities`: Electric, gas, water, trash, and home internet.
 - `Groceries`: Supermarket food, household essentials, and cleaning supplies (distinct from restaurant dining).
-- `Transit`: Commuting expenses, subway/train passes, fuel, vehicle insurance, registration, and routine maintenance.
-- `Phone`: Mobile carrier service bills.
-- `Subscriptions`: Essential recurring software or utility subscriptions (cloud storage, password manager, work tooling).
-- `Insurance`: Health, dental, renter, or life insurance premiums not deducted from payroll.
-- `Debt Service`: Minimum payments on student loans, vehicle loans, or credit lines.
+- `Subscriptions`: Recurring software, digital tools, or ongoing services.
+- `Transit`: Commuting expenses, subway/train passes, rideshare, fuel, vehicle insurance, registration, and routine maintenance.
+- `Healthcare`: Mental health therapy sessions, medical copays, dental care, prescriptions, and out-of-pocket health essentials.
+- `Fitness`: Climbing gym memberships, day passes, routine gym dues, and physical fitness training.
 
-### 2.2. Investments (Parent Bucket: `Investments`)
-Cash transferred from take-home pay into investment vehicles:
-
-- `Retirement`: Post-tax contributions to Roth IRA or traditional IRA accounts.
-- `Brokerage`: Automated transfers into taxable index funds or brokerage accounts.
-- `Crypto / Other`: Alternative long-term asset purchases.
-
-### 2.3. Savings Goals / Sinking Funds (Parent Bucket: `Savings`)
+### 2.2. Savings Goals / Sinking Funds (Parent Bucket: `Savings`)
 Allocations toward future known expenses or emergency protection:
 
-- `Emergency Fund`: Contributions to liquid high-yield savings to maintain a 3- to 6-month safety net.
+- `Emergency Fund`: Contributions to liquid high-yield savings to maintain a safety net.
+- `Investments`: Wealth accumulation transfers into index funds, brokerage, or retirement accounts.
 - `Travel Fund`: Sinking fund dedicated to flights, lodging, and planned vacations.
-- `Annual Bills`: Amortized monthly savings for annual insurance premiums, taxes, or registrations.
-- `Home Maintenance`: Reserves for household repairs and appliance replacements.
-- `Special Events`: Savings for weddings, holiday gifts, or family celebrations.
 
-### 2.4. Guilt-Free Spending (Parent Bucket: `Guilt-Free`)
-Discretionary lifestyle purchases that can be spent freely without anxiety once the other three buckets are funded:
+### 2.3. Guilt-Free Spending (Parent Bucket: `Guilt-Free`)
+Discretionary lifestyle purchases that can be spent freely without anxiety once the other buckets are funded:
 
 - `Dining`: Sit-down restaurants, social dinners, and full-service meals.
 - `Takeout`: Fast casual, takeout pickup, and food delivery apps (Chipotle, Shake Shack, McDonald's, Uber Eats).
 - `Coffee & Snacks`: Coffee shops, cafes, bakeries, ice cream (Berryline), bubble tea, and quick snacks.
 - `Bars`: Drinks, pubs, lounges, and nightlife.
-- `Entertainment`: Concerts, movies, sporting events, and recreational activities.
 - `Shopping`: Clothing, electronics, gear, home decor, and personal items.
-- `Hobbies`: Sports equipment, gaming, books, and creative projects.
-- `Personal Care`: Haircuts, grooming, spa visits, and gym/fitness memberships.
-- `Travel`: Discretionary trip expenses, spontaneous getaways, or vacation activities paid from current monthly cash flow (distinct from `Savings -> Travel Fund`).
+- `Entertainment`: Concerts, movies, sporting events, and recreational activities.
+
+### 2.4. Income (Parent Bucket: `Income`)
+Cash inflows and payroll deposits representing top-of-funnel cash velocity:
+
+- `Salary`: Regular payroll direct deposits and primary employment compensation.
+- `Reimbursement`: Standalone cash inflows, subsidies, and employer expense repayments that do not directly offset an expense already tracked in SnapTally (for example, monthly cell phone subsidies, wellness stipends, or per diem allowances where the underlying charge was not logged).
 
 ---
 
@@ -116,6 +109,10 @@ Reimbursements and refunds are recorded as negative inflows (`gross_amount < 0`)
 3. **Rewards Optimization and Auditing Treatment:**
    - Negative gross transactions (`gross_amount < 0`) represent returns or cash reimbursements. They are excluded from forward-looking payment routing optimization, which evaluates only positive outgoing expenditures.
    - For retrospective rewards auditing, reverse points only for merchant returns when the issuer reverses them. Cash reimbursement credits reduce net spend but do not reverse points earned on the original card charge. Do not apply negative multipliers to card routing scores.
+
+4. **Income Reimbursement versus Expense Category Credits:**
+   - When an expense was already logged in SnapTally (such as a $120 dinner or $450 flight), the incoming repayment must be recorded against that same expense category as a credit (negative gross amount or `reimbursement` field) to offset net spend.
+   - In contrast, `Income -> Reimbursement` is reserved for standalone cash inflows where the underlying charge was paid outside of SnapTally (such as corporate card expenses, direct employer subsidies, or non-tracked expense reimbursements).
 
 ---
 

@@ -190,12 +190,19 @@ describe("intakeForm Dynamic Subcategory Switching (Scenario 2)", () => {
       "Groceries",
       "Subscriptions",
       "Transit",
+      "Healthcare",
+      "Fitness",
     ]);
 
     form.selectBucket("Savings");
     assert.strictEqual(form.parentBucket, "Savings");
     assert.strictEqual(form.subcategory, "Emergency Fund");
     assert.deepStrictEqual(form.subcategories, ["Emergency Fund", "Investments", "Travel Fund"]);
+
+    form.selectBucket("Income");
+    assert.strictEqual(form.parentBucket, "Income");
+    assert.strictEqual(form.subcategory, "Salary");
+    assert.deepStrictEqual(form.subcategories, ["Salary", "Reimbursement"]);
   });
 
   it("allows selecting a specific subcategory within the active bucket", () => {

@@ -11,3 +11,5 @@ dist/
 .astro/
 coverage/
 .DS_Store
+data/
+*.csv

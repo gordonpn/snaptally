@@ -19,6 +19,7 @@ export interface TransactionPayload {
   merchant: string;
   gross_amount: number;
   reimbursement?: number;
+  currency?: string;
 }
 
 export interface TransactionRecord {
@@ -31,6 +32,7 @@ export interface TransactionRecord {
   gross_amount: number;
   reimbursement: number;
   net_spend: number;
+  currency: string;
   created_at: string;
 }
 
@@ -127,8 +129,17 @@ export function isValidPayload(body: unknown): body is TransactionPayload {
     return false;
   }
 
-  const { id, date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement } =
-    body as Record<string, unknown>;
+  const {
+    id,
+    date,
+    card,
+    parent_bucket,
+    subcategory,
+    merchant,
+    gross_amount,
+    reimbursement,
+    currency,
+  } = body as Record<string, unknown>;
 
   if (id !== undefined && (typeof id !== "string" || id.trim().length === 0)) {
     logger.warn("Validation failed: id must be a non-empty string if provided");
@@ -186,6 +197,11 @@ export function isValidPayload(body: unknown): body is TransactionPayload {
     return false;
   }
 
+  if (currency !== undefined && (typeof currency !== "string" || currency.trim().length === 0)) {
+    logger.warn("Validation failed: currency must be a non-empty string if provided");
+    return false;
+  }
+
   return true;
 }
 
@@ -216,7 +232,7 @@ export async function handlePost(
     return Response.json(
       {
         error:
-          "Invalid payload. Required fields: date (YYYY-MM-DD), card (string), parent_bucket (string), subcategory (string), merchant (string), gross_amount (non-zero number); optional: reimbursement (non-negative number)",
+          "Invalid payload. Required fields: date (YYYY-MM-DD), card (string), parent_bucket (string), subcategory (string), merchant (string), gross_amount (non-zero number); optional: reimbursement (non-negative number), currency (string)",
       },
       { status: 400 },
     );
@@ -229,6 +245,10 @@ export async function handlePost(
   const normalizedParentBucket = normalizeText(body.parent_bucket);
   const normalizedSubcategory = normalizeText(body.subcategory);
   const reimbursement = typeof body.reimbursement === "number" ? body.reimbursement : 0.0;
+  const currency =
+    typeof body.currency === "string" && body.currency.trim().length > 0
+      ? body.currency.trim().toUpperCase()
+      : "USD";
 
   let canonicalMerchant: string;
   try {
@@ -252,6 +272,7 @@ export async function handlePost(
         canonicalMerchant,
         body.gross_amount,
         reimbursement,
+        currency,
       )
       .run();
 
