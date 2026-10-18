@@ -465,7 +465,7 @@ describe("Pipeline Ingestion (runBackfill)", () => {
   });
 
   it("generateInsertSql: generates escaped SQL statement with ON CONFLICT DO NOTHING", () => {
-    const tx = {
+    const tx: BackfillTransaction = {
       id: "test-id-123",
       userId: "usr_default",
       date: "2024-05-01",

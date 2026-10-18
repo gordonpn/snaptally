@@ -32,8 +32,8 @@ export interface NormalizedTransaction {
   readonly rawDescription: string;
   readonly cleanedDescription: string;
   readonly canonicalMerchant: string;
-  readonly parentBucket: string | null;
-  readonly subcategory: string | null;
+  readonly parentBucket: ParentBucket | null;
+  readonly subcategory: Subcategory | null;
   readonly rewardCategory: string | null;
   readonly confidence: number;
   readonly matchStrategy: MatchStrategy;

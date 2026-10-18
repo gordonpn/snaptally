@@ -456,6 +456,7 @@ When adding new migrations in `migrations/`:
 ## 8. Historical Google Sheets Backfill
 
 `scripts/backfill.ts` ingests the exported `Budgeting - *.csv` sheets into D1. The CSV exports contain personal financial data and are never committed; place them in `data/sheets/` (gitignored). `Budgeting - General.csv` is an overview page and is skipped.
+`just test` uses synthetic fixtures and requires no personal exports. `just typecheck` validates the API and backfill scripts and tests separately for their Cloudflare and Node.js environments.
 
 ### 8.1 Procedure
 

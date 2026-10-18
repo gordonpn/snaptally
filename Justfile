@@ -17,7 +17,7 @@ format:
 
 # Run TypeScript compiler checks
 typecheck:
-    pnpm tsc --noEmit
+    pnpm run typecheck
 
 # Run unit tests
 test:
