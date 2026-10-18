@@ -450,3 +450,58 @@ When adding new migrations in `migrations/`:
 | Migration failed on `BEGIN` | Explicit transaction statements in D1 SQL | Remove manual `BEGIN TRANSACTION` and `COMMIT` statements; D1 manages batches automatically. |
 | Keypad layout bouncing on iOS | Missing viewport meta tags | Ensure `Layout.astro` contains `viewport-fit=cover` and styling includes `overscroll-none`. |
 | Custom domain returns HTTP 403 or CNAME error | CNAME target mismatch or missing DNS record | Ensure DNS CNAME for `tally.gordon-pn.com` points to `snaptally-5wq.pages.dev` with proxy enabled. |
+
+---
+
+## 8. Historical Google Sheets Backfill
+
+`scripts/backfill.ts` ingests the exported `Budgeting - *.csv` sheets into D1. The CSV exports contain personal financial data and are never committed; place them in `data/sheets/` (gitignored). `Budgeting - General.csv` is an overview page and is skipped.
+
+### 8.1 Procedure
+
+Always validate locally before touching production:
+
+```bash
+# 1. Parse and categorize every sheet without writing to D1
+just backfill-dry-run
+
+# 2. Ingest into the local D1 simulation
+just db-migrate-local
+just backfill-local
+```
+
+Only after the local results are reviewed and the source sheets are final, ingest into production:
+
+```bash
+node scripts/backfill.ts --remote
+```
+
+Additional flags: `--file <path>` ingests a single sheet, `--dir <path>` overrides the sheet directory, and `--user-id <id>` scopes rows to a tenant (defaults to `usr_default`).
+
+### 8.2 Ingestion Rules
+
+- Amounts are stored in the currency recorded in the sheet (`USD` or `CAD`) without conversion.
+- Zero-amount rows are spreadsheet formula anchors and are skipped.
+- Row IDs are deterministic hashes of the source file, row, and transaction fields, so re-runs insert nothing new (`ON CONFLICT(id) DO NOTHING`). Editing a row in the sheet produces a new ID; delete the stale row manually if a corrected sheet is re-ingested.
+- `Salary.csv` entries above 1,000 map to `Income -> Salary`; smaller entries map to `Income -> Reimbursement`.
+
+### 8.3 Verification Queries
+
+Replace `--local` with `--remote` when verifying production:
+
+```bash
+pnpm wrangler d1 execute budget-db --local \
+  --command "SELECT count(*), min(date), max(date) FROM transactions WHERE card = 'Historical';"
+
+pnpm wrangler d1 execute budget-db --local \
+  --command "SELECT currency, parent_bucket, subcategory, count(*) FROM transactions WHERE card = 'Historical' GROUP BY 1, 2, 3 ORDER BY 1, 2, 4 DESC;"
+```
+
+### 8.4 Rollback
+
+Backfilled rows use the card `Historical` (unless `--default-card` was overridden), which separates them from live intake:
+
+```bash
+pnpm wrangler d1 execute budget-db --local \
+  --command "DELETE FROM transactions WHERE card = 'Historical';"
+```
