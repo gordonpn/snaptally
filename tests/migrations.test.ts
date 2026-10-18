@@ -247,6 +247,72 @@ describe("Multi-tenant Schema Migrations", () => {
 });
 
 describe("Refund Reimbursement Invariant Migration (0003_enforce_refund_reimbursement_invariant.sql)", () => {
+  const initSql = readFileSync(resolve("migrations/0000_init.sql"), "utf-8");
+  const expandedSchemaSql = readFileSync(resolve("migrations/0001_expanded_schema.sql"), "utf-8");
+  const multiTenantSchemaSql = readFileSync(
+    resolve("migrations/0002_multi_tenant_schema.sql"),
+    "utf-8",
+  );
+  const refundReimbursementSql = readFileSync(
+    resolve("migrations/0003_enforce_refund_reimbursement_invariant.sql"),
+    "utf-8",
+  );
+
+  it("remediates legacy rows with invalid reimbursements before creating triggers", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON;");
+    db.exec(initSql);
+    db.exec(expandedSchemaSql);
+    db.exec(multiTenantSchemaSql);
+
+    // Insert legacy rows that violate new invariants
+    db.prepare(`
+      INSERT INTO transactions (id, user_id, date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement)
+      VALUES
+        ('tx-legacy-exceed', 'usr_default', '2026-10-01', 'Amex', 'Variable', 'Dining', 'Posto', 50.0, 100.0),
+        ('tx-legacy-neg-refund', 'usr_default', '2026-10-01', 'Amex', 'Variable', 'Dining', 'Posto', -60.0, 30.0),
+        ('tx-legacy-neg-reimb', 'usr_default', '2026-10-01', 'Amex', 'Variable', 'Dining', 'Posto', 75.0, -15.0),
+        ('tx-legacy-valid', 'usr_default', '2026-10-01', 'Amex', 'Variable', 'Dining', 'Posto', 120.0, 40.0);
+    `).run();
+
+    // Verify initial pre-migration state with violating values
+    const preExceed = db
+      .prepare("SELECT reimbursement, net_spend FROM transactions WHERE id = ?")
+      .get("tx-legacy-exceed") as { reimbursement: number; net_spend: number };
+    assert.strictEqual(preExceed.reimbursement, 100.0);
+    assert.strictEqual(preExceed.net_spend, -50.0);
+
+    // Execute migration 0003
+    db.exec(refundReimbursementSql);
+
+    // Verify remediated rows and automatically recomputed net_spend
+    const postExceed = db
+      .prepare("SELECT reimbursement, net_spend FROM transactions WHERE id = ?")
+      .get("tx-legacy-exceed") as { reimbursement: number; net_spend: number };
+    assert.strictEqual(postExceed.reimbursement, 50.0);
+    assert.strictEqual(postExceed.net_spend, 0.0);
+
+    const postNegRefund = db
+      .prepare("SELECT reimbursement, net_spend FROM transactions WHERE id = ?")
+      .get("tx-legacy-neg-refund") as { reimbursement: number; net_spend: number };
+    assert.strictEqual(postNegRefund.reimbursement, 0.0);
+    assert.strictEqual(postNegRefund.net_spend, -60.0);
+
+    const postNegReimb = db
+      .prepare("SELECT reimbursement, net_spend FROM transactions WHERE id = ?")
+      .get("tx-legacy-neg-reimb") as { reimbursement: number; net_spend: number };
+    assert.strictEqual(postNegReimb.reimbursement, 0.0);
+    assert.strictEqual(postNegReimb.net_spend, 75.0);
+
+    const postValid = db
+      .prepare("SELECT reimbursement, net_spend FROM transactions WHERE id = ?")
+      .get("tx-legacy-valid") as { reimbursement: number; net_spend: number };
+    assert.strictEqual(postValid.reimbursement, 40.0);
+    assert.strictEqual(postValid.net_spend, 80.0);
+
+    db.close();
+  });
+
   it("rejects insertion of negative gross_amount with non-zero reimbursement at database level", () => {
     const db = createTestDatabase();
 
@@ -293,6 +359,87 @@ describe("Refund Reimbursement Invariant Migration (0003_enforce_refund_reimburs
         return /Invalid transaction reimbursement amount/.test(error.message);
       },
     );
+
+    // Invalid positive transaction with negative reimbursement
+    assert.throws(
+      () => {
+        db.prepare(`
+          INSERT INTO transactions (id, user_id, date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement)
+          VALUES ('tx-invalid-neg-reimb', 'usr_default', '2026-10-01', 'Amex Gold', 'Guilt-Free', 'Dining', 'Posto', 50.0, -10.0);
+        `).run();
+      },
+      (err: unknown) => {
+        const error = err as Error;
+        return /Invalid transaction reimbursement amount/.test(error.message);
+      },
+    );
+
+    db.close();
+  });
+
+  it("rejects updating gross_amount or reimbursement to violate invariants", () => {
+    const db = createTestDatabase();
+
+    db.prepare(`
+      INSERT INTO transactions (id, user_id, date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement)
+      VALUES ('tx-update-test', 'usr_default', '2026-10-01', 'Amex Gold', 'Guilt-Free', 'Dining', 'Posto', 100.0, 20.0);
+    `).run();
+
+    // Updating reimbursement > gross_amount must fail
+    assert.throws(
+      () => {
+        db.prepare("UPDATE transactions SET reimbursement = ? WHERE id = ?").run(
+          150.0,
+          "tx-update-test",
+        );
+      },
+      (err: unknown) => {
+        const error = err as Error;
+        return /Invalid transaction reimbursement amount/.test(error.message);
+      },
+    );
+
+    // Updating reimbursement < 0 must fail
+    assert.throws(
+      () => {
+        db.prepare("UPDATE transactions SET reimbursement = ? WHERE id = ?").run(
+          -10.0,
+          "tx-update-test",
+        );
+      },
+      (err: unknown) => {
+        const error = err as Error;
+        return /Invalid transaction reimbursement amount/.test(error.message);
+      },
+    );
+
+    // Updating gross_amount below reimbursement must fail
+    assert.throws(
+      () => {
+        db.prepare("UPDATE transactions SET gross_amount = ? WHERE id = ?").run(
+          10.0,
+          "tx-update-test",
+        );
+      },
+      (err: unknown) => {
+        const error = err as Error;
+        return /Invalid transaction reimbursement amount/.test(error.message);
+      },
+    );
+
+    // Valid update succeeds and recomputes net_spend
+    assert.doesNotThrow(() => {
+      db.prepare("UPDATE transactions SET reimbursement = ? WHERE id = ?").run(
+        50.0,
+        "tx-update-test",
+      );
+    });
+
+    const updated = db
+      .prepare("SELECT reimbursement, net_spend FROM transactions WHERE id = ?")
+      .get("tx-update-test") as { reimbursement: number; net_spend: number };
+    assert.strictEqual(updated.reimbursement, 50.0);
+    assert.strictEqual(updated.net_spend, 50.0);
 
     db.close();
   });
