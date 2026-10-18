@@ -10,6 +10,7 @@ SELECT
     gross_amount,
     reimbursement,
     net_spend,
+    currency,
     created_at
 FROM transactions
 ORDER BY date DESC, created_at DESC, rowid DESC

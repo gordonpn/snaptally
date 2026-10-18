@@ -231,6 +231,7 @@ describe("Multi-tenant Schema Migrations", () => {
       "George Howell",
       25.5,
       0.0,
+      "USD",
     );
 
     const row = db
@@ -239,6 +240,7 @@ describe("Multi-tenant Schema Migrations", () => {
 
     assert.ok(row);
     assert.strictEqual(row.user_id, "usr_default");
+    assert.strictEqual(row.currency, "USD");
     assert.strictEqual(row.gross_amount, 25.5);
     assert.strictEqual(row.net_spend, 25.5);
 

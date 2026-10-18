@@ -55,7 +55,7 @@ Discretionary lifestyle purchases that can be spent freely without anxiety once 
 Cash inflows and payroll deposits representing top-of-funnel cash velocity:
 
 - `Salary`: Regular payroll direct deposits and primary employment compensation.
-- `Reimbursement`: Employer expense repayments, mobile phone subsidies, travel expense offsets, and business credits.
+- `Reimbursement`: Standalone cash inflows, subsidies, and employer expense repayments that do not directly offset an expense already tracked in SnapTally (for example, monthly cell phone subsidies, wellness stipends, or per diem allowances where the underlying charge was not logged).
 
 ---
 
@@ -109,6 +109,10 @@ Reimbursements and refunds are recorded as negative inflows (`gross_amount < 0`)
 3. **Rewards Optimization and Auditing Treatment:**
    - Negative gross transactions (`gross_amount < 0`) represent returns or cash reimbursements. They are excluded from forward-looking payment routing optimization, which evaluates only positive outgoing expenditures.
    - For retrospective rewards auditing, reverse points only for merchant returns when the issuer reverses them. Cash reimbursement credits reduce net spend but do not reverse points earned on the original card charge. Do not apply negative multipliers to card routing scores.
+
+4. **Income Reimbursement versus Expense Category Credits:**
+   - When an expense was already logged in SnapTally (such as a $120 dinner or $450 flight), the incoming repayment must be recorded against that same expense category as a credit (negative gross amount or `reimbursement` field) to offset net spend.
+   - In contrast, `Income -> Reimbursement` is reserved for standalone cash inflows where the underlying charge was paid outside of SnapTally (such as corporate card expenses, direct employer subsidies, or non-tracked expense reimbursements).
 
 ---
 

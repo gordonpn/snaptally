@@ -342,12 +342,6 @@ export const DEFAULT_CANONICAL_RULES: Readonly<Record<string, CategoryRule>> = {
     subcategory: "Fitness",
     rewardMultiplierCategory: "Other",
   },
-  THERAPY: {
-    canonicalName: "Therapy",
-    parentBucket: "Fixed Costs",
-    subcategory: "Healthcare",
-    rewardMultiplierCategory: "Other",
-  },
 };
 
 export const CONTEXTUAL_REGEX_RULES: readonly {
@@ -381,6 +375,20 @@ export const CONTEXTUAL_REGEX_RULES: readonly {
     rewardMultiplierCategory: "Dining",
   },
   {
+    pattern: /\b(?:CLIMBING|BOULDERING|FITNESS|YOGA|PILATES|CROSSFIT)\b/i,
+    canonicalName: "Gym & Fitness",
+    parentBucket: "Fixed Costs",
+    subcategory: "Fitness",
+    rewardMultiplierCategory: "Other",
+  },
+  {
+    pattern: /\b(?:THERAPY|PSYCHOTHERAPY|COUNSELING|PSYCHIATRY)\b/i,
+    canonicalName: "Mental Therapy",
+    parentBucket: "Fixed Costs",
+    subcategory: "Healthcare",
+    rewardMultiplierCategory: "Other",
+  },
+  {
     pattern: /\b(?:MARKET|GROCERY|PRODUCE|BODEGA|SUPERMARKET)\b/i,
     canonicalName: "Grocery Store",
     parentBucket: "Fixed Costs",
@@ -408,20 +416,6 @@ export const CONTEXTUAL_REGEX_RULES: readonly {
     parentBucket: "Fixed Costs",
     subcategory: "Transit",
     rewardMultiplierCategory: "Travel",
-  },
-  {
-    pattern: /\b(?:CLIMBING|BOULDERING|FITNESS|YOGA|PILATES|CROSSFIT)\b/i,
-    canonicalName: "Gym & Fitness",
-    parentBucket: "Fixed Costs",
-    subcategory: "Fitness",
-    rewardMultiplierCategory: "Other",
-  },
-  {
-    pattern: /\b(?:THERAPY|PSYCHOTHERAPY|COUNSELING|PSYCHIATRY)\b/i,
-    canonicalName: "Mental Therapy",
-    parentBucket: "Fixed Costs",
-    subcategory: "Healthcare",
-    rewardMultiplierCategory: "Other",
   },
 ];
 

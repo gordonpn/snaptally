@@ -443,13 +443,26 @@ describe("Merchant Normalizer", () => {
       assert.strictEqual(contextualBouldering.matchStrategy, "regex_heuristic");
       assert.strictEqual(contextualBouldering.parentBucket, "Fixed Costs");
       assert.strictEqual(contextualBouldering.subcategory, "Fitness");
+
+      const fitnessWithMarket = normalizeMerchant("PLANET FITNESS MARKET STREET");
+      assert.strictEqual(fitnessWithMarket.matchStrategy, "regex_heuristic");
+      assert.strictEqual(fitnessWithMarket.canonicalMerchant, "Planet Fitness Market Street");
+      assert.strictEqual(fitnessWithMarket.parentBucket, "Fixed Costs");
+      assert.strictEqual(fitnessWithMarket.subcategory, "Fitness");
     });
 
     it("evaluates mental therapy descriptors into Fixed Costs Healthcare", () => {
       const therapyExact = normalizeMerchant("THERAPY");
+      assert.strictEqual(therapyExact.matchStrategy, "regex_heuristic");
       assert.strictEqual(therapyExact.canonicalMerchant, "Therapy");
       assert.strictEqual(therapyExact.parentBucket, "Fixed Costs");
       assert.strictEqual(therapyExact.subcategory, "Healthcare");
+
+      const therapyMultiWord = normalizeMerchant("CAMBRIDGE THERAPY GROUP");
+      assert.strictEqual(therapyMultiWord.matchStrategy, "regex_heuristic");
+      assert.strictEqual(therapyMultiWord.canonicalMerchant, "Cambridge Therapy Group");
+      assert.strictEqual(therapyMultiWord.parentBucket, "Fixed Costs");
+      assert.strictEqual(therapyMultiWord.subcategory, "Healthcare");
 
       const psychotherapy = normalizeMerchant("CAMBRIDGE PSYCHOTHERAPY GROUP");
       assert.strictEqual(psychotherapy.matchStrategy, "regex_heuristic");

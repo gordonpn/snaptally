@@ -148,6 +148,18 @@ describe("isValidPayload", () => {
     assert.strictEqual(isValidPayload({ ...validPayload, id: "   " }), false);
     assert.strictEqual(isValidPayload({ ...validPayload, id: 12345 }), false);
   });
+
+  it("accepts a payload with a valid currency", () => {
+    assert.strictEqual(isValidPayload({ ...validPayload, currency: "USD" }), true);
+    assert.strictEqual(isValidPayload({ ...validPayload, currency: "CAD" }), true);
+  });
+
+  it("rejects invalid currency fields when provided", () => {
+    assert.strictEqual(isValidPayload({ ...validPayload, currency: "" }), false);
+    assert.strictEqual(isValidPayload({ ...validPayload, currency: "   " }), false);
+    assert.strictEqual(isValidPayload({ ...validPayload, currency: 123 }), false);
+    assert.strictEqual(isValidPayload({ ...validPayload, currency: null }), false);
+  });
 });
 
 describe("normalizeText", () => {
@@ -476,6 +488,7 @@ describe("handlePost", () => {
       "George Howell",
       25.5,
       5.0,
+      "USD",
     ]);
   });
 
@@ -537,6 +550,7 @@ describe("handlePost", () => {
       "Uniqlo",
       -35.0,
       0.0,
+      "USD",
     ]);
   });
 
@@ -595,6 +609,7 @@ describe("handlePost", () => {
       "George Howell",
       18.0,
       0.0,
+      "USD",
     ]);
   });
 
@@ -800,6 +815,7 @@ describe("handlePost", () => {
       "Trader Joe's",
       42.5,
       2.5,
+      "USD",
     ]);
   });
 
@@ -864,6 +880,73 @@ describe("handlePost", () => {
       "George Howell",
       3.99,
       0.0,
+      "USD",
+    ]);
+  });
+
+  it("inserts valid transaction with custom currency normalized to uppercase", async () => {
+    let boundArgs: unknown[] = [];
+
+    const mockDb = {
+      prepare(query: string) {
+        if (query === selectDistinctMerchantsQuery) {
+          return {
+            async all() {
+              return { results: [] };
+            },
+          };
+        }
+        assert.strictEqual(query, dummyQuery);
+        return {
+          bind(...args: unknown[]) {
+            boundArgs = args;
+            return {
+              async run() {
+                return { success: true };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${validToken}`,
+      },
+      body: JSON.stringify({
+        date: "2026-09-25",
+        card: "Scotiabank Visa",
+        parent_bucket: "Fixed Costs",
+        subcategory: "Fitness",
+        merchant: "Bloc Shop",
+        gross_amount: 32.5,
+        currency: "cad",
+      }),
+    });
+
+    const response = await handlePost(
+      request,
+      mockDb,
+      dummyQuery,
+      validToken,
+      selectDistinctMerchantsQuery,
+    );
+    assert.strictEqual(response.status, 201);
+    const data = (await response.json()) as { ok: boolean; id: string };
+    assert.strictEqual(data.ok, true);
+    assert.deepStrictEqual(boundArgs, [
+      data.id,
+      "2026-09-25",
+      "Scotiabank Visa",
+      "Fixed Costs",
+      "Fitness",
+      "Bloc Shop",
+      32.5,
+      0.0,
+      "CAD",
     ]);
   });
 
@@ -974,6 +1057,7 @@ describe("onRequestPost", () => {
     assert.strictEqual(boundParams[5], "Whole Foods");
     assert.strictEqual(boundParams[6], 32.5);
     assert.strictEqual(boundParams[7], 0.0);
+    assert.strictEqual(boundParams[8], "USD");
   });
 });
 
@@ -981,6 +1065,19 @@ describe("Database Schema and Migrations", () => {
   it("applies migrations cleanly and automatically stores generated net_spend in SQLite", () => {
     const initSql = readFileSync(resolve("migrations/0000_init.sql"), "utf-8");
     const migrationSql = readFileSync(resolve("migrations/0001_expanded_schema.sql"), "utf-8");
+    const migration2Sql = readFileSync(resolve("migrations/0002_multi_tenant_schema.sql"), "utf-8");
+    const migration3Sql = readFileSync(
+      resolve("migrations/0003_enforce_refund_reimbursement_invariant.sql"),
+      "utf-8",
+    );
+    const migration4Sql = readFileSync(
+      resolve("migrations/0004_taxonomy_coffee_and_snacks.sql"),
+      "utf-8",
+    );
+    const migration5Sql = readFileSync(
+      resolve("migrations/0005_add_currency_to_transactions.sql"),
+      "utf-8",
+    );
 
     const db = new DatabaseSync(":memory:");
     db.exec(initSql);
@@ -991,6 +1088,10 @@ describe("Database Schema and Migrations", () => {
     `);
 
     db.exec(migrationSql);
+    db.exec(migration2Sql);
+    db.exec(migration3Sql);
+    db.exec(migration4Sql);
+    db.exec(migration5Sql);
 
     const migratedRow = db
       .prepare("SELECT * FROM transactions WHERE id = ?")
@@ -1005,6 +1106,7 @@ describe("Database Schema and Migrations", () => {
     assert.strictEqual(migratedRow.gross_amount, 45.0);
     assert.strictEqual(migratedRow.reimbursement, 0.0);
     assert.strictEqual(migratedRow.net_spend, 45.0);
+    assert.strictEqual(migratedRow.currency, "USD");
 
     const insertStmt = db.prepare(insertTransactionQuery);
     insertStmt.run(
@@ -1016,6 +1118,7 @@ describe("Database Schema and Migrations", () => {
       "George Howell",
       50.0,
       15.0,
+      "USD",
     );
 
     const insertedRow = db
@@ -1025,8 +1128,19 @@ describe("Database Schema and Migrations", () => {
     assert.strictEqual(insertedRow.gross_amount, 50.0);
     assert.strictEqual(insertedRow.reimbursement, 15.0);
     assert.strictEqual(insertedRow.net_spend, 35.0);
+    assert.strictEqual(insertedRow.currency, "USD");
 
-    insertStmt.run("new-2", "2026-09-26", "Apple Cash", "Fixed Costs", "Transit", "MBTA", 2.4, 0.0);
+    insertStmt.run(
+      "new-2",
+      "2026-09-26",
+      "Apple Cash",
+      "Fixed Costs",
+      "Transit",
+      "MBTA",
+      2.4,
+      0.0,
+      "CAD",
+    );
 
     const zeroReimbursementRow = db
       .prepare("SELECT * FROM transactions WHERE id = ?")
@@ -1035,6 +1149,7 @@ describe("Database Schema and Migrations", () => {
     assert.strictEqual(zeroReimbursementRow.gross_amount, 2.4);
     assert.strictEqual(zeroReimbursementRow.reimbursement, 0.0);
     assert.strictEqual(zeroReimbursementRow.net_spend, 2.4);
+    assert.strictEqual(zeroReimbursementRow.currency, "CAD");
 
     const indexes = db.prepare("PRAGMA index_list(transactions)").all() as Array<{
       name: string;
@@ -1100,6 +1215,7 @@ describe("GET /api/transactions handleGet", () => {
       gross_amount: 18.5,
       reimbursement: 0.0,
       net_spend: 18.5,
+      currency: "USD",
       created_at: "2026-09-29 12:00:00",
     };
 
@@ -1285,19 +1401,64 @@ describe("Recent Transactions SQLite Query Integration", () => {
     const db = createTestDatabase();
 
     const insertStmt = db.prepare(insertTransactionQuery);
-    insertStmt.run("tx-past", "2026-09-20", "Amex", "Food", "Groceries", "Trader Joe", 20, 0);
-    insertStmt.run("tx-recent-1", "2026-09-25", "Chase", "Food", "Dining", "George Howell", 15, 0);
-    insertStmt.run("tx-recent-2", "2026-09-25", "Apple Cash", "Transit", "Subway", "MBTA", 2.4, 0);
-    insertStmt.run("tx-latest", "2026-09-28", "Amex", "Food", "Coffee", "Blue Bottle", 6.5, 0);
+    insertStmt.run(
+      "tx-past",
+      "2026-09-20",
+      "Amex",
+      "Food",
+      "Groceries",
+      "Trader Joe",
+      20,
+      0,
+      "USD",
+    );
+    insertStmt.run(
+      "tx-recent-1",
+      "2026-09-25",
+      "Chase",
+      "Food",
+      "Dining",
+      "George Howell",
+      15,
+      0,
+      "USD",
+    );
+    insertStmt.run(
+      "tx-recent-2",
+      "2026-09-25",
+      "Apple Cash",
+      "Transit",
+      "Subway",
+      "MBTA",
+      2.4,
+      0,
+      "CAD",
+    );
+    insertStmt.run(
+      "tx-latest",
+      "2026-09-28",
+      "Amex",
+      "Food",
+      "Coffee",
+      "Blue Bottle",
+      6.5,
+      0,
+      "USD",
+    );
 
     const queryStmt = db.prepare(selectRecentTransactionsQuery);
-    const rows = queryStmt.all(3) as Array<{ id: string; date: string }>;
+    const rows = queryStmt.all(3) as Array<{ id: string; date: string; currency: string }>;
 
     assert.strictEqual(rows.length, 3);
     assert.strictEqual(rows[0].id, "tx-latest");
     assert.strictEqual(rows[0].date, "2026-09-28");
+    assert.strictEqual(rows[0].currency, "USD");
+    assert.strictEqual(rows[1].id, "tx-recent-2");
     assert.strictEqual(rows[1].date, "2026-09-25");
+    assert.strictEqual(rows[1].currency, "CAD");
+    assert.strictEqual(rows[2].id, "tx-recent-1");
     assert.strictEqual(rows[2].date, "2026-09-25");
+    assert.strictEqual(rows[2].currency, "USD");
 
     db.close();
   });
@@ -1306,9 +1467,29 @@ describe("Recent Transactions SQLite Query Integration", () => {
     const db = createTestDatabase();
 
     const insertStmt = db.prepare(insertTransactionQuery);
-    insertStmt.run("tx-dup-1", "2026-09-20", "Amex", "Food", "Groceries", "Trader Joe", 20, 0);
+    insertStmt.run(
+      "tx-dup-1",
+      "2026-09-20",
+      "Amex",
+      "Food",
+      "Groceries",
+      "Trader Joe",
+      20,
+      0,
+      "USD",
+    );
     // Duplicate run with the same id should not throw and should be ignored
-    insertStmt.run("tx-dup-1", "2026-09-20", "Amex", "Food", "Groceries", "Trader Joe", 20, 0);
+    insertStmt.run(
+      "tx-dup-1",
+      "2026-09-20",
+      "Amex",
+      "Food",
+      "Groceries",
+      "Trader Joe",
+      20,
+      0,
+      "USD",
+    );
 
     const countStmt = db.prepare(
       "SELECT COUNT(*) AS total FROM transactions WHERE id = 'tx-dup-1'",

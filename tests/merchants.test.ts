@@ -232,17 +232,17 @@ describe("Merchants SQLite Query Integration", () => {
     const db = createTestDatabase();
 
     const insertStmt = db.prepare(insertTransactionQuery);
-    insertStmt.run("t1", "2026-09-20", "Amex", "Food", "Groceries", "Trader Joe's", 20, 0);
-    insertStmt.run("t2", "2026-09-21", "Amex", "Food", "Groceries", "Trader Joe's", 30, 0);
-    insertStmt.run("t3", "2026-09-22", "Amex", "Food", "Groceries", "Trader Joe's", 40, 0);
+    insertStmt.run("t1", "2026-09-20", "Amex", "Food", "Groceries", "Trader Joe's", 20, 0, "USD");
+    insertStmt.run("t2", "2026-09-21", "Amex", "Food", "Groceries", "Trader Joe's", 30, 0, "USD");
+    insertStmt.run("t3", "2026-09-22", "Amex", "Food", "Groceries", "Trader Joe's", 40, 0, "USD");
 
-    insertStmt.run("t4", "2026-09-21", "Chase", "Food", "Dining", "George Howell", 5, 0);
-    insertStmt.run("t5", "2026-09-23", "Chase", "Food", "Dining", "George Howell", 6, 0);
+    insertStmt.run("t4", "2026-09-21", "Chase", "Food", "Dining", "George Howell", 5, 0, "USD");
+    insertStmt.run("t5", "2026-09-23", "Chase", "Food", "Dining", "George Howell", 6, 0, "USD");
 
-    insertStmt.run("t6", "2026-09-23", "Cash", "Food", "Dining", "Blue Bottle", 7, 0);
-    insertStmt.run("t7", "2026-09-24", "Cash", "Food", "Dining", "Blue Bottle", 8, 0);
+    insertStmt.run("t6", "2026-09-23", "Cash", "Food", "Dining", "Blue Bottle", 7, 0, "USD");
+    insertStmt.run("t7", "2026-09-24", "Cash", "Food", "Dining", "Blue Bottle", 8, 0, "USD");
 
-    insertStmt.run("t8", "2026-09-19", "Visa", "Food", "Groceries", "Whole Foods", 50, 0);
+    insertStmt.run("t8", "2026-09-19", "Visa", "Food", "Groceries", "Whole Foods", 50, 0, "USD");
 
     const queryStmt = db.prepare(selectFrequentMerchantsQuery);
     const rows = queryStmt.all(3) as Array<{ merchant: string }>;
