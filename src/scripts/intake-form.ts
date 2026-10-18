@@ -101,6 +101,17 @@ export function intakeForm() {
       return this.isNegative ? -this.amountCents : this.amountCents;
     },
 
+    get amountFontSizeClass(): string {
+      const displayLength = (this.isNegative ? 1 : 0) + this.formattedAmount.length;
+      if (displayLength >= 10) {
+        return "text-2xl sm:text-3xl";
+      }
+      if (displayLength >= 8) {
+        return "text-3xl sm:text-4xl";
+      }
+      return "text-4xl sm:text-5xl";
+    },
+
     get submitButtonLabel(): string {
       if (this.isNegative) {
         return "Save Credit";

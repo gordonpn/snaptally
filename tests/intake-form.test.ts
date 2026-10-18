@@ -1095,6 +1095,57 @@ describe("intakeForm Credit and Reimbursement Workflows (Issue #89)", () => {
     form.loading = false;
   });
 
+  it("scales amountFontSizeClass responsively based on rendered character length", () => {
+    const form = intakeForm();
+
+    // Default $0.00 (5 chars) -> text-4xl sm:text-5xl
+    assert.strictEqual(form.amountFontSizeClass, "text-4xl sm:text-5xl");
+
+    // $999.99 (7 chars) -> text-4xl sm:text-5xl
+    form.amountCents = 99999;
+    assert.strictEqual(form.formattedAmount, "$999.99");
+    assert.strictEqual(form.amountFontSizeClass, "text-4xl sm:text-5xl");
+
+    // -$999.99 (8 chars) -> text-3xl sm:text-4xl
+    form.isNegative = true;
+    assert.strictEqual(form.amountFontSizeClass, "text-3xl sm:text-4xl");
+
+    // $9999.99 (8 chars) -> text-3xl sm:text-4xl
+    form.isNegative = false;
+    form.amountCents = 999999;
+    assert.strictEqual(form.formattedAmount, "$9999.99");
+    assert.strictEqual(form.amountFontSizeClass, "text-3xl sm:text-4xl");
+
+    // -$9999.99 (9 chars) -> text-3xl sm:text-4xl
+    form.isNegative = true;
+    assert.strictEqual(form.amountFontSizeClass, "text-3xl sm:text-4xl");
+
+    // $10000.00 (9 chars) -> text-3xl sm:text-4xl
+    form.isNegative = false;
+    form.amountCents = 1000000;
+    assert.strictEqual(form.formattedAmount, "$10000.00");
+    assert.strictEqual(form.amountFontSizeClass, "text-3xl sm:text-4xl");
+
+    // -$10000.00 (10 chars) -> text-2xl sm:text-3xl
+    form.isNegative = true;
+    assert.strictEqual(form.amountFontSizeClass, "text-2xl sm:text-3xl");
+
+    // $100000.00 (10 chars) -> text-2xl sm:text-3xl
+    form.isNegative = false;
+    form.amountCents = 10000000;
+    assert.strictEqual(form.formattedAmount, "$100000.00");
+    assert.strictEqual(form.amountFontSizeClass, "text-2xl sm:text-3xl");
+
+    // -$100000.00 (11 chars) -> text-2xl sm:text-3xl
+    form.isNegative = true;
+    assert.strictEqual(form.amountFontSizeClass, "text-2xl sm:text-3xl");
+
+    // Clear restores text-4xl sm:text-5xl
+    form.pressClear();
+    form.isNegative = false;
+    assert.strictEqual(form.amountFontSizeClass, "text-4xl sm:text-5xl");
+  });
+
   it("submits credit transaction with negative gross_amount and zero reimbursement", async () => {
     const form = intakeForm();
     form.pressDigit(2);
