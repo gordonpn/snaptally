@@ -44,6 +44,9 @@ export function intakeForm() {
     amountCents: 0,
     maxCents: 10000000,
 
+    // Credit / Reimbursement sign state
+    isNegative: false,
+
     // Card selection (dynamically populated from recent transactions with Other... fallback)
     cards: [] as string[],
     card: "",
@@ -90,7 +93,30 @@ export function intakeForm() {
     },
 
     get grossAmount(): number {
-      return this.amountCents / 100;
+      const gross = this.amountCents / 100;
+      return this.isNegative ? -gross : gross;
+    },
+
+    get netAmountCents(): number {
+      return this.isNegative ? -this.amountCents : this.amountCents;
+    },
+
+    get amountFontSizeClass(): string {
+      const displayLength = (this.isNegative ? 1 : 0) + this.formattedAmount.length;
+      if (displayLength >= 10) {
+        return "text-2xl sm:text-3xl";
+      }
+      if (displayLength >= 8) {
+        return "text-3xl sm:text-4xl";
+      }
+      return "text-4xl sm:text-5xl";
+    },
+
+    get submitButtonLabel(): string {
+      if (this.isNegative) {
+        return "Save Credit";
+      }
+      return "Save Transaction";
     },
 
     get subcategories(): string[] {
@@ -146,6 +172,13 @@ export function intakeForm() {
         this.isError = false;
       }
       this.amountCents = 0;
+    },
+
+    toggleNegative(): void {
+      if (this.loading) {
+        return;
+      }
+      this.isNegative = !this.isNegative;
     },
 
     // Selectors
@@ -515,9 +548,13 @@ export function intakeForm() {
 
       this.loading = true;
       try {
+        const isCredit = this.isNegative;
         const submittedAmountCents = this.amountCents;
-        const submittedGrossAmount = submittedAmountCents / 100;
-        const formatted = (submittedAmountCents / 100).toFixed(2);
+        const submittedGrossAmount = isCredit
+          ? -(submittedAmountCents / 100)
+          : submittedAmountCents / 100;
+        const submittedReimbursement = 0.0;
+        const formattedGross = (submittedAmountCents / 100).toFixed(2);
 
         const outboxItem: OutboxItem = {
           id:
@@ -530,7 +567,7 @@ export function intakeForm() {
           subcategory: this.subcategory,
           merchant: trimmedMerchant,
           gross_amount: submittedGrossAmount,
-          reimbursement: 0.0,
+          reimbursement: submittedReimbursement,
           created_at: new Date().toISOString(),
         };
 
@@ -539,9 +576,14 @@ export function intakeForm() {
         this.outboxCount = await getOutboxCount();
 
         // 2. 0ms UI reset
-        this.statusMessage = `Saved $${formatted} at ${trimmedMerchant}`;
+        if (isCredit) {
+          this.statusMessage = `Saved credit of $${formattedGross} at ${trimmedMerchant}`;
+        } else {
+          this.statusMessage = `Saved $${formattedGross} at ${trimmedMerchant}`;
+        }
         this.isError = false;
         this.amountCents = 0;
+        this.isNegative = false;
         this.resetDateToToday();
 
         // Add merchant to local autocomplete cache

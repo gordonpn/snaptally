@@ -877,6 +877,40 @@ describe("intakeForm Submission Validation and Error Handling", () => {
     }
   });
 
+  it("preserves saved credit confirmation and queues for retry when backend rejects negative gross_amount due to rollback", async () => {
+    const form = intakeForm();
+    form.pressDigit(2);
+    form.pressDigit(5);
+    form.pressDigit(0);
+    form.pressDigit(0);
+    form.card = "Amex Gold";
+    form.merchant = "Uniqlo";
+    form.toggleNegative();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({ error: "Validation failed: gross_amount must be a positive number" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await form.submitTransaction();
+      assert.strictEqual(result, true);
+      assert.strictEqual(form.isError, false);
+      assert.strictEqual(form.statusMessage, "Saved credit of $25.00 at Uniqlo");
+      assert.strictEqual(form.amountCents, 0);
+      assert.strictEqual(form.isNegative, false);
+      assert.strictEqual(form.outboxCount, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("resets custom merchant state and selects first frequent merchant on successful submit", async () => {
     const form = intakeForm();
     form.pressDigit(2);
@@ -1051,6 +1085,195 @@ describe("intakeForm Card Lifecycle and Storage", () => {
       const success = await form.submitTransaction();
       assert.strictEqual(success, true);
       assert.deepStrictEqual(form.cards, ["Bilt Mastercard"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("intakeForm Credit and Reimbursement Workflows (Issue #89)", () => {
+  it("initializes in standard expense mode with isNegative=false", () => {
+    const form = intakeForm();
+    assert.strictEqual(form.isNegative, false);
+    assert.strictEqual(form.submitButtonLabel, "Save Transaction");
+    assert.strictEqual(form.grossAmount, 0);
+    assert.strictEqual(form.netAmountCents, 0);
+  });
+
+  it("toggles negative credit mode, updates display with negative sign, and sets negative gross amount", () => {
+    const form = intakeForm();
+    form.pressDigit(3);
+    form.pressDigit(5);
+    form.pressDigit(0);
+    form.pressDigit(0);
+    assert.strictEqual(form.formattedAmount, "$35.00");
+    assert.strictEqual(form.grossAmount, 35.0);
+    assert.strictEqual(form.netAmountCents, 3500);
+
+    form.toggleNegative();
+    assert.strictEqual(form.isNegative, true);
+    assert.strictEqual(form.grossAmount, -35.0);
+    assert.strictEqual(form.netAmountCents, -3500);
+    assert.strictEqual(form.submitButtonLabel, "Save Credit");
+
+    form.toggleNegative();
+    assert.strictEqual(form.isNegative, false);
+    assert.strictEqual(form.grossAmount, 35.0);
+    assert.strictEqual(form.netAmountCents, 3500);
+    assert.strictEqual(form.submitButtonLabel, "Save Transaction");
+
+    // Guard against mode changes while form is loading
+    form.loading = true;
+    form.toggleNegative();
+    assert.strictEqual(form.isNegative, false);
+    form.loading = false;
+  });
+
+  it("scales amountFontSizeClass responsively based on rendered character length", () => {
+    const form = intakeForm();
+
+    // Default $0.00 (5 chars) -> text-4xl sm:text-5xl
+    assert.strictEqual(form.amountFontSizeClass, "text-4xl sm:text-5xl");
+
+    // $999.99 (7 chars) -> text-4xl sm:text-5xl
+    form.amountCents = 99999;
+    assert.strictEqual(form.formattedAmount, "$999.99");
+    assert.strictEqual(form.amountFontSizeClass, "text-4xl sm:text-5xl");
+
+    // -$999.99 (8 chars) -> text-3xl sm:text-4xl
+    form.isNegative = true;
+    assert.strictEqual(form.amountFontSizeClass, "text-3xl sm:text-4xl");
+
+    // $9999.99 (8 chars) -> text-3xl sm:text-4xl
+    form.isNegative = false;
+    form.amountCents = 999999;
+    assert.strictEqual(form.formattedAmount, "$9999.99");
+    assert.strictEqual(form.amountFontSizeClass, "text-3xl sm:text-4xl");
+
+    // -$9999.99 (9 chars) -> text-3xl sm:text-4xl
+    form.isNegative = true;
+    assert.strictEqual(form.amountFontSizeClass, "text-3xl sm:text-4xl");
+
+    // $10000.00 (9 chars) -> text-3xl sm:text-4xl
+    form.isNegative = false;
+    form.amountCents = 1000000;
+    assert.strictEqual(form.formattedAmount, "$10000.00");
+    assert.strictEqual(form.amountFontSizeClass, "text-3xl sm:text-4xl");
+
+    // -$10000.00 (10 chars) -> text-2xl sm:text-3xl
+    form.isNegative = true;
+    assert.strictEqual(form.amountFontSizeClass, "text-2xl sm:text-3xl");
+
+    // $100000.00 (10 chars) -> text-2xl sm:text-3xl
+    form.isNegative = false;
+    form.amountCents = 10000000;
+    assert.strictEqual(form.formattedAmount, "$100000.00");
+    assert.strictEqual(form.amountFontSizeClass, "text-2xl sm:text-3xl");
+
+    // -$100000.00 (11 chars) -> text-2xl sm:text-3xl
+    form.isNegative = true;
+    assert.strictEqual(form.amountFontSizeClass, "text-2xl sm:text-3xl");
+
+    // Clear restores text-4xl sm:text-5xl
+    form.pressClear();
+    form.isNegative = false;
+    assert.strictEqual(form.amountFontSizeClass, "text-4xl sm:text-5xl");
+  });
+
+  it("submits credit transaction with negative gross_amount and zero reimbursement", async () => {
+    const form = intakeForm();
+    form.pressDigit(2);
+    form.pressDigit(5);
+    form.pressDigit(0);
+    form.pressDigit(0);
+    form.card = "Amex Gold";
+    form.merchant = "Uniqlo";
+    form.toggleNegative();
+
+    const originalFetch = globalThis.fetch;
+    let submittedPayload: unknown;
+    globalThis.fetch = (async (_url: unknown, options: { body?: string }) => {
+      if (options?.body) {
+        submittedPayload = JSON.parse(options.body);
+      }
+      return new Response(JSON.stringify({ ok: true, id: "tx-credit-1" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await form.submitTransaction();
+      assert.strictEqual(result, true);
+      assert.strictEqual(form.statusMessage, "Saved credit of $25.00 at Uniqlo");
+      assert.strictEqual(form.isNegative, false);
+      assert.strictEqual(form.amountCents, 0);
+
+      const payload = submittedPayload as Record<string, unknown>;
+      assert.strictEqual(payload.gross_amount, -25.0);
+      assert.strictEqual(payload.reimbursement, 0.0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("supports two-step reimbursement workflow where reimbursement offsets expense", async () => {
+    const form = intakeForm();
+    const originalFetch = globalThis.fetch;
+    const submittedPayloads: Array<Record<string, unknown>> = [];
+
+    globalThis.fetch = (async (_url: unknown, options: { body?: string }) => {
+      if (options?.body) {
+        submittedPayloads.push(JSON.parse(options.body));
+      }
+      return new Response(JSON.stringify({ ok: true, id: `tx-${submittedPayloads.length}` }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      // Step 1: Log initial $120.00 dinner expense
+      form.pressDigit(1);
+      form.pressDigit(2);
+      form.pressDigit(0);
+      form.pressDigit(0);
+      form.pressDigit(0);
+      form.card = "Amex Gold";
+      form.parentBucket = "Guilt-Free";
+      form.subcategory = "Dining";
+      form.merchant = "Osteria Posto";
+
+      const step1Result = await form.submitTransaction();
+      assert.strictEqual(step1Result, true);
+      assert.strictEqual(form.isNegative, false);
+
+      // Step 2: Friend sends $60.00 reimbursement 10 minutes later -> log -$60.00 credit to Dining
+      form.pressDigit(6);
+      form.pressDigit(0);
+      form.pressDigit(0);
+      form.pressDigit(0);
+      form.toggleNegative();
+      form.card = "Amex Gold";
+      form.parentBucket = "Guilt-Free";
+      form.subcategory = "Dining";
+      form.merchant = "Venmo Reimbursement";
+
+      const step2Result = await form.submitTransaction();
+      assert.strictEqual(step2Result, true);
+      assert.strictEqual(form.isNegative, false);
+
+      assert.strictEqual(submittedPayloads.length, 2);
+      assert.strictEqual(submittedPayloads[0].gross_amount, 120.0);
+      assert.strictEqual(submittedPayloads[0].reimbursement, 0.0);
+      assert.strictEqual(submittedPayloads[1].gross_amount, -60.0);
+      assert.strictEqual(submittedPayloads[1].reimbursement, 0.0);
+
+      // Verify net spend impact
+      const netSpendTotal =
+        (submittedPayloads[0].gross_amount as number) +
+        (submittedPayloads[1].gross_amount as number);
+      assert.strictEqual(netSpendTotal, 60.0);
     } finally {
       globalThis.fetch = originalFetch;
     }

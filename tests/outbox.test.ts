@@ -1013,4 +1013,550 @@ describe("Sync Listeners (Scenario 2)", () => {
       });
     }
   });
+
+  it("retains queued credit items with backoff when receiving HTTP 400 from older API version", async () => {
+    const creditItem: OutboxItem = {
+      id: "tx-credit-retain",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Venmo Reimbursement",
+      gross_amount: -60.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(creditItem);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({ error: "Validation failed: gross_amount must be positive" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token" });
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(result.syncedCount, 0);
+
+      const items = await getOutbox();
+      assert.strictEqual(items.length, 1);
+      assert.strictEqual(items[0].id, "tx-credit-retain");
+      assert.strictEqual(items[0].rollback_retry_count, 1);
+      assert.strictEqual(items[0].retry_count, undefined);
+      assert.ok(items[0].next_retry_at && items[0].next_retry_at > Date.now());
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("continues syncing subsequent valid transactions when an older API rejects a credit", async () => {
+    await clearOutbox();
+    const creditItem: OutboxItem = {
+      id: "tx-credit-item",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Venmo Reimbursement",
+      gross_amount: -60.0,
+      reimbursement: 0,
+      created_at: new Date(Date.now() - 2000).toISOString(),
+    };
+    const validExpense: OutboxItem = {
+      id: "tx-expense-item",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Tacos",
+      gross_amount: 25.0,
+      reimbursement: 0,
+      created_at: new Date(Date.now() - 1000).toISOString(),
+    };
+
+    await saveOutboxItem(creditItem);
+    await saveOutboxItem(validExpense);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { gross_amount: number };
+      if (body.gross_amount < 0) {
+        return new Response(
+          JSON.stringify({ error: "Validation failed: gross_amount must be positive" }),
+          {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+      return new Response(JSON.stringify({ id: "tx-expense-item", message: "Created" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token" });
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(result.syncedCount, 1);
+      assert.strictEqual(result.lastError, undefined);
+
+      const items = await getOutbox();
+      assert.strictEqual(items.length, 1);
+      assert.strictEqual(items[0].id, "tx-credit-item");
+      assert.strictEqual(items[0].rollback_retry_count, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("permanently fails and discards negative-gross items when HTTP 400 is not due to unsupported negative amount", async () => {
+    await clearOutbox();
+    const invalidCreditItem: OutboxItem = {
+      id: "tx-credit-invalid-reimbursement",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Invalid Refund",
+      gross_amount: -60.0,
+      reimbursement: 20.0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(invalidCreditItem);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({
+          error: "Validation failed: refunds (negative gross_amount) cannot have a reimbursement",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token" });
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(result.syncedCount, 0);
+      assert.strictEqual(
+        result.lastError,
+        "Validation failed: refunds (negative gross_amount) cannot have a reimbursement",
+      );
+
+      const items = await getOutbox();
+      assert.strictEqual(items.length, 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("retains negative-gross item in outbox when rollback retry attempts exceed MAX_ROLLBACK_RETRIES without scheduling further retries", async () => {
+    await clearOutbox();
+    const exhaustedCreditItem: OutboxItem = {
+      id: "tx-credit-exhausted",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Venmo Reimbursement",
+      gross_amount: -60.0,
+      reimbursement: 0,
+      rollback_retry_count: 10,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(exhaustedCreditItem);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({ error: "Validation failed: gross_amount must be positive" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token", force: true });
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(result.syncedCount, 0);
+      assert.strictEqual(result.lastError, "Validation failed: gross_amount must be positive");
+
+      const items = await getOutbox();
+      assert.strictEqual(items.length, 1);
+      assert.strictEqual(items[0].id, "tx-credit-exhausted");
+      assert.strictEqual(items[0].rollback_retry_count, 11);
+      assert.strictEqual(items[0].next_retry_at, undefined);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("preserves credit item in outbox when credit has existing network retry_count >= 10 and encounters rollback rejection", async () => {
+    await clearOutbox();
+    const creditWithNetworkRetries: OutboxItem = {
+      id: "tx-credit-network-retried",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Venmo Reimbursement",
+      gross_amount: -60.0,
+      reimbursement: 0,
+      retry_count: 10,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(creditWithNetworkRetries);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({ error: "Validation failed: gross_amount must be positive" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token", force: true });
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(result.syncedCount, 0);
+
+      const items = await getOutbox();
+      assert.strictEqual(items.length, 1);
+      assert.strictEqual(items[0].id, "tx-credit-network-retried");
+      assert.strictEqual(items[0].retry_count, 10);
+      assert.strictEqual(items[0].rollback_retry_count, 1);
+      assert.strictEqual(typeof items[0].next_retry_at, "number");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("preserves earliest pending retry deadline when a retained credit receives a longer backoff", async () => {
+    await clearOutbox();
+    const retainedCredit: OutboxItem = {
+      id: "tx-credit-long-backoff",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Venmo Reimbursement",
+      gross_amount: -60.0,
+      reimbursement: 0,
+      rollback_retry_count: 5, // Next backoff: 32s (32000ms)
+      created_at: new Date().toISOString(),
+    };
+    const pendingItem: OutboxItem = {
+      id: "tx-pending-earlier",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Pending Chipotle",
+      gross_amount: 15.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+      next_retry_at: Date.now() + 2000, // 2s away
+    };
+
+    await saveOutboxItem(retainedCredit);
+    await saveOutboxItem(pendingItem);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({ error: "Validation failed: gross_amount must be positive" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    let scheduledDelayMs = -1;
+    try {
+      await syncOutbox({
+        token: "test-token",
+        onScheduleRetry: (delayMs) => {
+          scheduledDelayMs = delayMs;
+        },
+      });
+
+      // Assert that the earliest scheduled deadline (approx 2000ms) is preserved rather than 32000ms
+      assert.ok(scheduledDelayMs > 0 && scheduledDelayMs <= 2500);
+      assert.ok(scheduledDelayMs < 10000);
+    } finally {
+      globalThis.fetch = originalFetch;
+      clearRetryTimer();
+    }
+  });
+
+  it("preserves exponential backoff and halts queue processing without immediately retrying untouched items when offline", async () => {
+    await clearOutbox();
+    const item1: OutboxItem = {
+      id: "tx-offline-1",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "First Item",
+      gross_amount: 10.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+    const item2: OutboxItem = {
+      id: "tx-offline-2",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Untouched Second Item",
+      gross_amount: 20.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(item1);
+    await saveOutboxItem(item2);
+
+    let fetchCalls = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      fetchCalls++;
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch;
+
+    let scheduledDelayMs = -1;
+    try {
+      const result = await syncOutbox({
+        token: "test-token",
+        onScheduleRetry: (delayMs) => {
+          scheduledDelayMs = delayMs;
+        },
+      });
+
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(fetchCalls, 1);
+      // Scheduled delay must be the 1000ms backoff, NOT 0ms from the untouched second item!
+      assert.strictEqual(scheduledDelayMs, 1000);
+
+      const items = await getOutbox();
+      assert.strictEqual(items.length, 2);
+      assert.strictEqual(items[0].id, "tx-offline-1");
+      assert.strictEqual(items[0].retry_count, 1);
+      assert.ok(items[0].next_retry_at && items[0].next_retry_at > Date.now());
+      assert.strictEqual(items[1].id, "tx-offline-2");
+      assert.strictEqual(items[1].retry_count, undefined);
+      assert.strictEqual(items[1].next_retry_at, undefined);
+    } finally {
+      globalThis.fetch = originalFetch;
+      clearRetryTimer();
+    }
+  });
+
+  it("treats expired activeRetryDeadline as inactive when host timer fires", async () => {
+    await clearOutbox();
+    const item: OutboxItem = {
+      id: "tx-expired-deadline",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Chipotle",
+      gross_amount: 15.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(item);
+
+    const originalFetch = globalThis.fetch;
+    const originalDateNow = Date.now;
+    globalThis.fetch = (async () => {
+      return new Response("Internal Server Error", { status: 500 });
+    }) as unknown as typeof fetch;
+
+    const scheduledDelays: number[] = [];
+    try {
+      let currentTime = originalDateNow();
+      Date.now = () => currentTime;
+
+      // First sync fails and schedules retry with 1000ms backoff
+      await syncOutbox({
+        token: "test-token",
+        onScheduleRetry: (delayMs) => {
+          scheduledDelays.push(delayMs);
+        },
+      });
+      assert.strictEqual(scheduledDelays.length, 1);
+      assert.strictEqual(scheduledDelays[0], 1000);
+
+      // Simulate host callback firing after the 1000ms delay has elapsed
+      currentTime += 1500;
+
+      await syncOutbox({
+        token: "test-token",
+        onScheduleRetry: (delayMs) => {
+          scheduledDelays.push(delayMs);
+        },
+      });
+
+      assert.strictEqual(scheduledDelays.length, 2);
+      // Next exponential backoff step (2000ms)
+      assert.strictEqual(scheduledDelays[1], 2000);
+    } finally {
+      Date.now = originalDateNow;
+      globalThis.fetch = originalFetch;
+      clearRetryTimer();
+    }
+  });
+
+  it("preserves exponential backoff and excludes expired tail deadlines when transport halts", async () => {
+    await clearOutbox();
+    const item1: OutboxItem = {
+      id: "tx-halt-1",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Failing Server",
+      gross_amount: 10.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+    const item2WithExpiredDeadline: OutboxItem = {
+      id: "tx-halt-2-expired",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Untouched Tail Chipotle",
+      gross_amount: 20.0,
+      reimbursement: 0,
+      retry_count: 2,
+      next_retry_at: Date.now() - 5000,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(item1);
+    await saveOutboxItem(item2WithExpiredDeadline);
+
+    let fetchCalls = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      fetchCalls++;
+      return new Response("Internal Server Error", { status: 500 });
+    }) as unknown as typeof fetch;
+
+    let scheduledDelayMs = -1;
+    try {
+      const result = await syncOutbox({
+        token: "test-token",
+        onScheduleRetry: (delayMs) => {
+          scheduledDelayMs = delayMs;
+        },
+      });
+
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(fetchCalls, 1);
+      // Scheduled delay must preserve the 1000ms backoff and NOT collapse to 0ms from the expired item!
+      assert.strictEqual(scheduledDelayMs, 1000);
+
+      const items = await getOutbox();
+      assert.strictEqual(items.length, 2);
+      assert.strictEqual(items[0].id, "tx-halt-1");
+      assert.strictEqual(items[0].retry_count, 1);
+      assert.ok(items[0].next_retry_at && items[0].next_retry_at > Date.now());
+      assert.strictEqual(items[1].id, "tx-halt-2-expired");
+      assert.strictEqual(items[1].retry_count, 2);
+      assert.strictEqual(items[1].next_retry_at, item2WithExpiredDeadline.next_retry_at);
+    } finally {
+      globalThis.fetch = originalFetch;
+      clearRetryTimer();
+    }
+  });
+
+  it("schedules immediate retry when an unscheduled item remains in queue alongside backed-off items", async () => {
+    await clearOutbox();
+    const inFlightItem: OutboxItem = {
+      id: "tx-in-flight",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "In Flight Item",
+      gross_amount: 10.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+    const retainedItem: OutboxItem = {
+      id: "tx-retained-backoff",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Backed Off Merchant",
+      gross_amount: -25.0,
+      reimbursement: 0,
+      rollback_retry_count: 1,
+      next_retry_at: Date.now() + 30000,
+      created_at: new Date().toISOString(),
+    };
+    const unscheduledItem: OutboxItem = {
+      id: "tx-unscheduled-pending",
+      date: "2026-10-01",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Fresh Item",
+      gross_amount: 15.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(inFlightItem);
+    await saveOutboxItem(retainedItem);
+
+    let scheduledDelayMs = -1;
+    const originalFetch = globalThis.fetch;
+    // When sync runs for inFlightItem, simulate concurrent submission while background sync is in flight
+    globalThis.fetch = (async () => {
+      await saveOutboxItem(unscheduledItem);
+      return new Response(JSON.stringify({ success: true }), { status: 201 });
+    }) as unknown as typeof fetch;
+
+    try {
+      await syncOutbox({
+        token: "test-token",
+        onScheduleRetry: (delayMs) => {
+          scheduledDelayMs = delayMs;
+        },
+      });
+
+      // Because tx-unscheduled-pending was added and is due now (no next_retry_at),
+      // the finalizer must schedule retry immediately (0ms) instead of waiting for the 30s deadline
+      assert.strictEqual(scheduledDelayMs, 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+      clearRetryTimer();
+    }
+  });
 });
