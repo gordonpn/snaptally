@@ -488,26 +488,29 @@ Missing input files or directories fail with a nonzero exit status. An existing 
 - Invalid calendar dates, malformed decimal amounts, and amounts that round to zero are skipped.
 - Unterminated CSV quotes stop the import before any database writes.
 - Temporary SQL files are readable only by the current user and are removed after Wrangler succeeds or fails.
-- Row IDs are deterministic hashes of the source file, row, and transaction fields, so re-runs insert nothing new (`ON CONFLICT(id) DO NOTHING`). Editing a row in the sheet produces a new ID; delete the stale row manually if a corrected sheet is re-ingested.
+- Row IDs are deterministic hashes of the source file, row position, date, gross amount, and currency, so re-running an unchanged export inserts nothing new (`ON CONFLICT(id) DO NOTHING`). Editing a row's amount or date changes its ID. Inserting or deleting a nonempty row shifts the row positions of subsequent entries, producing new IDs on re-run. Before re-ingesting a modified sheet, roll back the backfilled entries for that tenant using section 8.4.
 - `Salary.csv` entries above 1,000 map to `Income -> Salary`; smaller entries map to `Income -> Reimbursement`.
 
 ### 8.3 Verification Queries
 
-Replace `--local` with `--remote` when verifying production:
+Scope verification queries to the tenant (`user_id`) and card (`card`) specified during the import (defaulting to `usr_default` and `Historical`). Replace `--local` with `--remote` when verifying production:
 
 ```bash
+# Verify record counts and date coverage (adjust user_id and card to match backfill options)
 pnpm wrangler d1 execute budget-db --local \
-  --command "SELECT count(*), min(date), max(date) FROM transactions WHERE card = 'Historical';"
+  --command "SELECT count(*), min(date), max(date) FROM transactions WHERE user_id = 'usr_default' AND card = 'Historical';"
 
+# Verify distribution across categories and currencies
 pnpm wrangler d1 execute budget-db --local \
-  --command "SELECT currency, parent_bucket, subcategory, count(*) FROM transactions WHERE card = 'Historical' GROUP BY 1, 2, 3 ORDER BY 1, 2, 4 DESC;"
+  --command "SELECT currency, parent_bucket, subcategory, count(*) FROM transactions WHERE user_id = 'usr_default' AND card = 'Historical' GROUP BY 1, 2, 3 ORDER BY 1, 2, 4 DESC;"
 ```
 
 ### 8.4 Rollback
 
-Backfilled rows use the card `Historical` (unless `--default-card` was overridden), which separates them from live intake:
+Backfilled rows are scoped to the imported tenant (`user_id`) and default card `Historical` (unless `--default-card` was overridden). Always include both `user_id` and `card` in the deletion predicate to avoid deleting other tenants' data or live intake transactions:
 
 ```bash
+# Roll back historical backfill for a specific tenant and card (replace --local with --remote if rolling back production)
 pnpm wrangler d1 execute budget-db --local \
-  --command "DELETE FROM transactions WHERE card = 'Historical';"
+  --command "DELETE FROM transactions WHERE user_id = 'usr_default' AND card = 'Historical';"
 ```
