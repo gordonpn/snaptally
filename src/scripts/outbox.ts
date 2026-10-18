@@ -16,6 +16,18 @@ export interface OutboxItem {
   next_retry_at?: number;
 }
 
+/**
+ * Dead-letter queue item representing a failed or quarantined transaction.
+ */
+export interface DeadLetterItem {
+  id: string;
+  payload: OutboxItem;
+  error_reason: string;
+  http_status?: number;
+  failed_at: string;
+  retry_count: number;
+}
+
 export interface SyncOptions {
   token?: string;
   force?: boolean;
@@ -32,13 +44,17 @@ export interface SyncResult {
 }
 
 const DB_NAME = "snaptally_db";
-const DB_VERSION = 1;
-const STORE_NAME = "outbox";
-const FALLBACK_STORAGE_KEY = "snaptally_outbox_fallback";
+export const DB_VERSION = 2;
+export const STORE_NAME = "outbox";
+export const DLQ_STORE_NAME = "dead_letter_queue";
+export const FALLBACK_STORAGE_KEY = "snaptally_outbox_fallback";
+export const DLQ_FALLBACK_STORAGE_KEY = "snaptally_dlq_fallback";
 export const MAX_ROLLBACK_RETRIES = 10;
+export const MAX_SYNC_RETRIES = 10;
 
-// In-memory fallback for environments without IndexedDB or localStorage
+// In-memory fallbacks for environments without IndexedDB or localStorage
 let memoryFallback: OutboxItem[] = [];
+let memoryDlqFallback: DeadLetterItem[] = [];
 
 function isIndexedDBAvailable(): boolean {
   return typeof indexedDB !== "undefined";
@@ -58,11 +74,42 @@ function openDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: "id" });
       }
+      if (!db.objectStoreNames.contains(DLQ_STORE_NAME)) {
+        db.createObjectStore(DLQ_STORE_NAME, { keyPath: "id" });
+      }
     };
 
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+}
+
+function getFallbackDlqItems(): DeadLetterItem[] {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(DLQ_FALLBACK_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed)) {
+          return parsed as DeadLetterItem[];
+        }
+      }
+    }
+  } catch {
+    // Ignore storage restriction
+  }
+  return [...memoryDlqFallback];
+}
+
+function saveFallbackDlqItems(items: DeadLetterItem[]): void {
+  memoryDlqFallback = [...items];
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(DLQ_FALLBACK_STORAGE_KEY, JSON.stringify(items));
+    }
+  } catch {
+    // Ignore storage restriction
+  }
 }
 
 function getFallbackItems(): OutboxItem[] {
@@ -227,6 +274,121 @@ export async function clearOutbox(): Promise<void> {
   }
 }
 
+/**
+ * Saves or updates a transaction in the local dead-letter queue.
+ */
+export async function saveDeadLetterItem(item: DeadLetterItem): Promise<void> {
+  try {
+    const db = await openDatabase();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(DLQ_STORE_NAME, "readwrite");
+      const store = tx.objectStore(DLQ_STORE_NAME);
+      const req = store.put(item);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+      tx.oncomplete = () => db.close();
+    });
+  } catch {
+    const items = getFallbackDlqItems();
+    const existingIndex = items.findIndex((i) => i.id === item.id);
+    if (existingIndex >= 0) {
+      items[existingIndex] = item;
+    } else {
+      items.push(item);
+    }
+    saveFallbackDlqItems(items);
+  }
+}
+
+/**
+ * Retrieves all quarantined transactions from the dead-letter queue ordered by failure time.
+ */
+export async function getDeadLetterQueue(): Promise<DeadLetterItem[]> {
+  try {
+    const db = await openDatabase();
+    const items = await new Promise<DeadLetterItem[]>((resolve, reject) => {
+      const tx = db.transaction(DLQ_STORE_NAME, "readonly");
+      const store = tx.objectStore(DLQ_STORE_NAME);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result as DeadLetterItem[]);
+      req.onerror = () => reject(req.error);
+      tx.oncomplete = () => db.close();
+    });
+    return items.sort((a, b) => a.failed_at.localeCompare(b.failed_at));
+  } catch {
+    const items = getFallbackDlqItems();
+    return items.sort((a, b) => a.failed_at.localeCompare(b.failed_at));
+  }
+}
+
+/**
+ * Returns the current number of quarantined transactions in the dead-letter queue.
+ */
+export async function getDeadLetterCount(): Promise<number> {
+  const items = await getDeadLetterQueue();
+  return items.length;
+}
+
+/**
+ * Permanently removes a transaction from the dead-letter queue.
+ */
+export async function deleteDeadLetterItem(id: string): Promise<void> {
+  try {
+    const db = await openDatabase();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(DLQ_STORE_NAME, "readwrite");
+      const store = tx.objectStore(DLQ_STORE_NAME);
+      const req = store.delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+      tx.oncomplete = () => db.close();
+    });
+  } catch {
+    const items = getFallbackDlqItems().filter((i) => i.id !== id);
+    saveFallbackDlqItems(items);
+  }
+}
+
+/**
+ * Clears all items from the dead-letter queue.
+ */
+export async function clearDeadLetterQueue(): Promise<void> {
+  try {
+    const db = await openDatabase();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(DLQ_STORE_NAME, "readwrite");
+      const store = tx.objectStore(DLQ_STORE_NAME);
+      const req = store.clear();
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+      tx.oncomplete = () => db.close();
+    });
+  } catch {
+    saveFallbackDlqItems([]);
+  }
+}
+
+/**
+ * Restores a quarantined dead-letter transaction back to the active outbox for retry.
+ */
+export async function requeueDeadLetterItem(id: string): Promise<void> {
+  const queue = await getDeadLetterQueue();
+  const item = queue.find((entry) => entry.id === id);
+  if (!item) {
+    return;
+  }
+
+  const restoredPayload: OutboxItem = {
+    ...item.payload,
+    retry_count: 0,
+    rollback_retry_count: 0,
+    next_retry_at: undefined,
+  };
+
+  await saveOutboxItem(restoredPayload);
+  await deleteDeadLetterItem(id);
+}
+
 let isSyncInProgress = false;
 
 /**
@@ -249,6 +411,21 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
     options.onStatusChange?.(true, items.length);
 
     for (const item of items) {
+      if (item.gross_amount >= 0 && (item.retry_count ?? 0) >= MAX_SYNC_RETRIES) {
+        const dlqItem: DeadLetterItem = {
+          id: item.id,
+          payload: { ...item },
+          error_reason: "Exceeded maximum retry threshold",
+          failed_at: new Date().toISOString(),
+          retry_count: item.retry_count ?? MAX_SYNC_RETRIES,
+        };
+        await saveDeadLetterItem(dlqItem);
+        await deleteOutboxItem(item.id);
+        failedCount++;
+        lastError = "Exceeded maximum retry threshold";
+        continue;
+      }
+
       if (
         !options.force &&
         ((item.rollback_retry_count ?? 0) > MAX_ROLLBACK_RETRIES ||
@@ -320,7 +497,16 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
             continue;
           }
 
-          // Permanently invalid payload; remove from outbox to prevent blocking the queue
+          // Permanently invalid payload; quarantine to DLQ to prevent blocking the queue and eliminate data loss
+          const dlqItem: DeadLetterItem = {
+            id: item.id,
+            payload: { ...item },
+            error_reason: errorMsg,
+            http_status: 400,
+            failed_at: new Date().toISOString(),
+            retry_count: item.retry_count ?? 0,
+          };
+          await saveDeadLetterItem(dlqItem);
           await deleteOutboxItem(item.id);
           failedCount++;
           lastError = errorMsg;
@@ -330,6 +516,22 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         // Server error or unexpected status: apply exponential backoff (1s, 2s, 4s, capped at 60s)
         const retryCount = (item.retry_count ?? 0) + 1;
         item.retry_count = retryCount;
+        if (retryCount >= MAX_SYNC_RETRIES) {
+          const dlqItem: DeadLetterItem = {
+            id: item.id,
+            payload: { ...item },
+            error_reason: "Exceeded maximum retry threshold",
+            http_status: response.status,
+            failed_at: new Date().toISOString(),
+            retry_count: retryCount,
+          };
+          await saveDeadLetterItem(dlqItem);
+          await deleteOutboxItem(item.id);
+          failedCount++;
+          lastError = "Exceeded maximum retry threshold";
+          continue;
+        }
+
         const backoffMs = Math.min(60000, 1000 * 2 ** (retryCount - 1));
         item.next_retry_at = Date.now() + backoffMs;
         await saveOutboxItem(item);
@@ -337,10 +539,25 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         scheduleDueRetry(backoffMs, options, item.next_retry_at);
         transportHalted = true;
         break;
-      } catch {
+      } catch (err) {
         // Network error / offline: apply exponential backoff (1s, 2s, 4s, capped at 60s)
         const retryCount = (item.retry_count ?? 0) + 1;
         item.retry_count = retryCount;
+        if (retryCount >= MAX_SYNC_RETRIES) {
+          const dlqItem: DeadLetterItem = {
+            id: item.id,
+            payload: { ...item },
+            error_reason: err instanceof Error ? err.message : "Network error",
+            failed_at: new Date().toISOString(),
+            retry_count: retryCount,
+          };
+          await saveDeadLetterItem(dlqItem);
+          await deleteOutboxItem(item.id);
+          failedCount++;
+          lastError = dlqItem.error_reason;
+          continue;
+        }
+
         const backoffMs = Math.min(60000, 1000 * 2 ** (retryCount - 1));
         item.next_retry_at = Date.now() + backoffMs;
         await saveOutboxItem(item);

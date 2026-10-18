@@ -6,12 +6,23 @@ import {
   MERCHANTS_STORAGE_KEY,
 } from "../src/scripts/intake-form.ts";
 import {
+  clearDeadLetterQueue,
   clearOutbox,
   clearRetryTimer,
+  DB_VERSION,
+  type DeadLetterItem,
+  DLQ_FALLBACK_STORAGE_KEY,
+  DLQ_STORE_NAME,
+  deleteDeadLetterItem,
   deleteOutboxItem,
+  getDeadLetterCount,
+  getDeadLetterQueue,
   getOutbox,
   getOutboxCount,
+  MAX_SYNC_RETRIES,
   type OutboxItem,
+  requeueDeadLetterItem,
+  saveDeadLetterItem,
   saveOutboxItem,
   setupSyncListeners,
   syncOutbox,
@@ -947,13 +958,13 @@ describe("Sync Listeners (Scenario 2)", () => {
   });
 
   it("creates object store when not present during IDB upgradeneeded", async () => {
-    let createdStoreName = "";
+    const createdStoreNames: string[] = [];
     const mockDb = {
       objectStoreNames: {
         contains: (_name: string) => false,
       },
       createObjectStore: (name: string, _opts: unknown) => {
-        createdStoreName = name;
+        createdStoreNames.push(name);
       },
       transaction: () => ({
         objectStore: () => ({
@@ -1004,7 +1015,7 @@ describe("Sync Listeners (Scenario 2)", () => {
         reimbursement: 0,
         created_at: new Date().toISOString(),
       });
-      assert.strictEqual(createdStoreName, "outbox");
+      assert.deepStrictEqual(createdStoreNames, ["outbox", "dead_letter_queue"]);
     } finally {
       Object.defineProperty(globalThis, "indexedDB", {
         value: originalIDB,
@@ -1621,6 +1632,503 @@ describe("Outbox Legacy Taxonomy Normalization", () => {
       assert.strictEqual(postedPayload.subcategory, "Coffee & Snacks");
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
+  beforeEach(async () => {
+    await clearOutbox();
+    await clearDeadLetterQueue();
+  });
+
+  afterEach(async () => {
+    await clearOutbox();
+    await clearDeadLetterQueue();
+  });
+
+  it("quarantines permanently invalid transactions on HTTP 400 validation error", async () => {
+    const invalidItem: OutboxItem = {
+      id: "tx-invalid-400",
+      date: "invalid-date",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Sweetgreen",
+      gross_amount: 18.5,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(invalidItem);
+    assert.strictEqual(await getOutboxCount(), 1);
+    assert.strictEqual(await getDeadLetterCount(), 0);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(JSON.stringify({ error: "date must be a valid YYYY-MM-DD string" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token" });
+
+      assert.strictEqual(result.syncedCount, 0);
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(result.lastError, "date must be a valid YYYY-MM-DD string");
+
+      // Item must be removed from outbox to prevent blocking
+      assert.strictEqual(await getOutboxCount(), 0);
+
+      // Item must be quarantined in dead_letter_queue
+      assert.strictEqual(await getDeadLetterCount(), 1);
+      const dlq = await getDeadLetterQueue();
+      assert.strictEqual(dlq.length, 1);
+      assert.strictEqual(dlq[0].id, "tx-invalid-400");
+      assert.strictEqual(dlq[0].http_status, 400);
+      assert.strictEqual(dlq[0].error_reason, "date must be a valid YYYY-MM-DD string");
+      assert.strictEqual(dlq[0].payload.merchant, "Sweetgreen");
+      assert.ok(dlq[0].failed_at);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("quarantines items that exceed the maximum retry threshold and allows subsequent valid items to sync", async () => {
+    const poisonPill: OutboxItem = {
+      id: "tx-poison-500",
+      date: "2026-10-02",
+      card: "Chase Sapphire",
+      parent_bucket: "Fixed Costs",
+      subcategory: "Groceries",
+      merchant: "Trader Joe's",
+      gross_amount: 50.0,
+      reimbursement: 0,
+      created_at: "2026-10-02T10:00:00.000Z",
+      retry_count: 10, // Pre-exhausted at threshold
+    };
+
+    const healthyItem: OutboxItem = {
+      id: "tx-healthy-tail",
+      date: "2026-10-02",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Chipotle",
+      gross_amount: 12.5,
+      reimbursement: 0,
+      created_at: "2026-10-02T10:05:00.000Z",
+    };
+
+    await saveOutboxItem(poisonPill);
+    await saveOutboxItem(healthyItem);
+    assert.strictEqual(await getOutboxCount(), 2);
+
+    const originalFetch = globalThis.fetch;
+    const syncedIds: string[] = [];
+
+    globalThis.fetch = (async (_url: unknown, options: { body?: string }) => {
+      if (options?.body) {
+        const payload = JSON.parse(options.body) as { id: string };
+        syncedIds.push(payload.id);
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token" });
+
+      // Poison pill should have been quarantined, healthy tail item synced
+      assert.strictEqual(result.syncedCount, 1);
+      assert.strictEqual(result.failedCount, 1);
+      assert.deepStrictEqual(syncedIds, ["tx-healthy-tail"]);
+
+      // Outbox should now be empty
+      assert.strictEqual(await getOutboxCount(), 0);
+
+      // Dead-letter queue should hold the poisoned item
+      const dlq = await getDeadLetterQueue();
+      assert.strictEqual(dlq.length, 1);
+      assert.strictEqual(dlq[0].id, "tx-poison-500");
+      assert.strictEqual(dlq[0].error_reason, "Exceeded maximum retry threshold");
+      assert.strictEqual(dlq[0].retry_count, 10);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("quarantines items reaching max retry threshold during 5xx errors", async () => {
+    const item: OutboxItem = {
+      id: "tx-500-exhausted",
+      date: "2026-10-02",
+      card: "Chase Sapphire",
+      parent_bucket: "Fixed Costs",
+      subcategory: "Groceries",
+      merchant: "Whole Foods",
+      gross_amount: 60.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+      retry_count: MAX_SYNC_RETRIES - 1, // Will reach 10 on this attempt
+    };
+
+    await saveOutboxItem(item);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(JSON.stringify({ error: "Internal Database Error" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token" });
+
+      assert.strictEqual(result.syncedCount, 0);
+      assert.strictEqual(result.failedCount, 1);
+      assert.strictEqual(result.lastError, "Exceeded maximum retry threshold");
+
+      // Quarantined to DLQ
+      assert.strictEqual(await getOutboxCount(), 0);
+      assert.strictEqual(await getDeadLetterCount(), 1);
+
+      const dlq = await getDeadLetterQueue();
+      assert.strictEqual(dlq[0].id, "tx-500-exhausted");
+      assert.strictEqual(dlq[0].http_status, 500);
+      assert.strictEqual(dlq[0].error_reason, "Exceeded maximum retry threshold");
+      assert.strictEqual(dlq[0].retry_count, MAX_SYNC_RETRIES);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("requeues a dead-letter item back into the outbox with reset retry state", async () => {
+    const dlqItem: DeadLetterItem = {
+      id: "tx-requeue-test",
+      payload: {
+        id: "tx-requeue-test",
+        date: "2026-10-02",
+        card: "Amex Gold",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
+        merchant: "Shake Shack",
+        gross_amount: 22.0,
+        reimbursement: 0,
+        created_at: new Date().toISOString(),
+        retry_count: 10,
+        next_retry_at: Date.now() + 60000,
+      },
+      error_reason: "Exceeded maximum retry threshold",
+      http_status: 500,
+      failed_at: new Date().toISOString(),
+      retry_count: 10,
+    };
+
+    await saveDeadLetterItem(dlqItem);
+    assert.strictEqual(await getDeadLetterCount(), 1);
+    assert.strictEqual(await getOutboxCount(), 0);
+
+    await requeueDeadLetterItem("tx-requeue-test");
+
+    // DLQ should be empty
+    assert.strictEqual(await getDeadLetterCount(), 0);
+
+    // Outbox should contain the restored item with reset retry counters
+    assert.strictEqual(await getOutboxCount(), 1);
+    const outboxItems = await getOutbox();
+    assert.strictEqual(outboxItems[0].id, "tx-requeue-test");
+    assert.strictEqual(outboxItems[0].retry_count, 0);
+    assert.strictEqual(outboxItems[0].rollback_retry_count, 0);
+    assert.strictEqual(outboxItems[0].next_retry_at, undefined);
+  });
+
+  it("handles requeue gracefully when item id is not found in DLQ", async () => {
+    await requeueDeadLetterItem("non-existent-id");
+    assert.strictEqual(await getDeadLetterCount(), 0);
+    assert.strictEqual(await getOutboxCount(), 0);
+  });
+
+  it("deletes a dead-letter item permanently", async () => {
+    const item1: DeadLetterItem = {
+      id: "dlq-del-1",
+      payload: {
+        id: "dlq-del-1",
+        date: "2026-10-02",
+        card: "Amex Gold",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
+        merchant: "Cafe",
+        gross_amount: 5.0,
+        reimbursement: 0,
+        created_at: new Date().toISOString(),
+      },
+      error_reason: "Validation failed",
+      failed_at: "2026-10-02T12:00:00.000Z",
+      retry_count: 0,
+    };
+
+    const item2: DeadLetterItem = {
+      id: "dlq-del-2",
+      payload: {
+        id: "dlq-del-2",
+        date: "2026-10-02",
+        card: "Amex Gold",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
+        merchant: "Bakery",
+        gross_amount: 7.0,
+        reimbursement: 0,
+        created_at: new Date().toISOString(),
+      },
+      error_reason: "Validation failed",
+      failed_at: "2026-10-02T12:05:00.000Z",
+      retry_count: 0,
+    };
+
+    await saveDeadLetterItem(item1);
+    await saveDeadLetterItem(item2);
+    assert.strictEqual(await getDeadLetterCount(), 2);
+
+    await deleteDeadLetterItem("dlq-del-1");
+    assert.strictEqual(await getDeadLetterCount(), 1);
+
+    const remaining = await getDeadLetterQueue();
+    assert.strictEqual(remaining[0].id, "dlq-del-2");
+
+    await clearDeadLetterQueue();
+    assert.strictEqual(await getDeadLetterCount(), 0);
+  });
+
+  it("sorts dead-letter items chronologically by failed_at", async () => {
+    const itemEarly: DeadLetterItem = {
+      id: "dlq-early",
+      payload: {
+        id: "dlq-early",
+        date: "2026-10-02",
+        card: "Amex Gold",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
+        merchant: "Early Cafe",
+        gross_amount: 5.0,
+        reimbursement: 0,
+        created_at: new Date().toISOString(),
+      },
+      error_reason: "Validation failed",
+      failed_at: "2026-10-02T08:00:00.000Z",
+      retry_count: 0,
+    };
+
+    const itemLate: DeadLetterItem = {
+      id: "dlq-late",
+      payload: {
+        id: "dlq-late",
+        date: "2026-10-02",
+        card: "Amex Gold",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
+        merchant: "Late Diner",
+        gross_amount: 25.0,
+        reimbursement: 0,
+        created_at: new Date().toISOString(),
+      },
+      error_reason: "Validation failed",
+      failed_at: "2026-10-02T20:00:00.000Z",
+      retry_count: 0,
+    };
+
+    // Save in reverse order
+    await saveDeadLetterItem(itemLate);
+    await saveDeadLetterItem(itemEarly);
+
+    const queue = await getDeadLetterQueue();
+    assert.strictEqual(queue.length, 2);
+    assert.strictEqual(queue[0].id, "dlq-early");
+    assert.strictEqual(queue[1].id, "dlq-late");
+  });
+
+  it("handles native IndexedDB schema upgrade to version 2 and DLQ operations", async () => {
+    const outboxStore = new Map<string, OutboxItem>();
+    const dlqStore = new Map<string, DeadLetterItem>();
+    let schemaVersion = 0;
+    const createdStores: string[] = [];
+
+    const mockDb = {
+      objectStoreNames: {
+        contains: (name: string) => createdStores.includes(name),
+      },
+      createObjectStore: (name: string, _opts: unknown) => {
+        createdStores.push(name);
+      },
+      transaction: (storeName: string, _mode: string) => {
+        const storeMap = (storeName === DLQ_STORE_NAME ? dlqStore : outboxStore) as Map<
+          string,
+          OutboxItem | DeadLetterItem
+        >;
+        return {
+          objectStore: (_name: string) => ({
+            put: (item: OutboxItem | DeadLetterItem) => {
+              storeMap.set(item.id, item);
+              const req: { onsuccess?: () => void; onerror?: () => void } = {};
+              setTimeout(() => req.onsuccess?.(), 0);
+              return req;
+            },
+            getAll: () => {
+              const req: {
+                result?: (OutboxItem | DeadLetterItem)[];
+                onsuccess?: () => void;
+                onerror?: () => void;
+              } = {
+                result: Array.from(storeMap.values()),
+              };
+              setTimeout(() => req.onsuccess?.(), 0);
+              return req;
+            },
+            delete: (id: string) => {
+              storeMap.delete(id);
+              const req: { onsuccess?: () => void; onerror?: () => void } = {};
+              setTimeout(() => req.onsuccess?.(), 0);
+              return req;
+            },
+            clear: () => {
+              storeMap.clear();
+              const req: { onsuccess?: () => void; onerror?: () => void } = {};
+              setTimeout(() => req.onsuccess?.(), 0);
+              return req;
+            },
+          }),
+          oncomplete: () => {},
+        };
+      },
+      close: () => {},
+    };
+
+    const mockIndexedDB = {
+      open: (_name: string, version: number) => {
+        schemaVersion = version;
+        const req: {
+          result: typeof mockDb;
+          onsuccess?: () => void;
+          onupgradeneeded?: () => void;
+          onerror?: () => void;
+        } = {
+          result: mockDb,
+        };
+        setTimeout(() => {
+          req.onupgradeneeded?.();
+          req.onsuccess?.();
+        }, 0);
+        return req;
+      },
+    };
+
+    const originalIDB = globalThis.indexedDB;
+    Object.defineProperty(globalThis, "indexedDB", {
+      value: mockIndexedDB,
+      writable: true,
+      configurable: true,
+    });
+
+    try {
+      assert.strictEqual(DB_VERSION, 2);
+
+      const dlqItem: DeadLetterItem = {
+        id: "idb-dlq-1",
+        payload: {
+          id: "idb-dlq-1",
+          date: "2026-10-02",
+          card: "Visa",
+          parent_bucket: "Fixed Costs",
+          subcategory: "Rent",
+          merchant: "Landlord",
+          gross_amount: 1500,
+          reimbursement: 0,
+          created_at: new Date().toISOString(),
+        },
+        error_reason: "Invalid tenant account",
+        http_status: 400,
+        failed_at: new Date().toISOString(),
+        retry_count: 0,
+      };
+
+      await saveDeadLetterItem(dlqItem);
+      assert.strictEqual(schemaVersion, 2);
+      assert.ok(createdStores.includes(DLQ_STORE_NAME));
+
+      const queue = await getDeadLetterQueue();
+      assert.strictEqual(queue.length, 1);
+      assert.strictEqual(queue[0].id, "idb-dlq-1");
+      assert.strictEqual(await getDeadLetterCount(), 1);
+
+      await deleteDeadLetterItem("idb-dlq-1");
+      assert.strictEqual(await getDeadLetterCount(), 0);
+
+      await saveDeadLetterItem(dlqItem);
+      await clearDeadLetterQueue();
+      assert.strictEqual(await getDeadLetterCount(), 0);
+    } finally {
+      Object.defineProperty(globalThis, "indexedDB", {
+        value: originalIDB,
+        writable: true,
+        configurable: true,
+      });
+    }
+  });
+
+  it("supports localStorage fallback for dead_letter_queue when indexedDB fails", async () => {
+    const mockStorage = new MockLocalStorage();
+    const originalLocalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      value: mockStorage,
+      writable: true,
+      configurable: true,
+    });
+
+    try {
+      const dlqItem: DeadLetterItem = {
+        id: "ls-dlq-1",
+        payload: {
+          id: "ls-dlq-1",
+          date: "2026-10-02",
+          card: "Mastercard",
+          parent_bucket: "Guilt-Free",
+          subcategory: "Shopping",
+          merchant: "Target",
+          gross_amount: 35.5,
+          reimbursement: 0,
+          created_at: new Date().toISOString(),
+        },
+        error_reason: "Malformed body",
+        http_status: 400,
+        failed_at: new Date().toISOString(),
+        retry_count: 0,
+      };
+
+      await saveDeadLetterItem(dlqItem);
+      const rawFallback = mockStorage.getItem(DLQ_FALLBACK_STORAGE_KEY);
+      assert.ok(rawFallback);
+      assert.ok(rawFallback.includes("ls-dlq-1"));
+
+      const items = await getDeadLetterQueue();
+      assert.strictEqual(items.length, 1);
+      assert.strictEqual(items[0].id, "ls-dlq-1");
+
+      await deleteDeadLetterItem("ls-dlq-1");
+      assert.strictEqual(await getDeadLetterCount(), 0);
+
+      await saveDeadLetterItem(dlqItem);
+      await clearDeadLetterQueue();
+      assert.strictEqual(await getDeadLetterCount(), 0);
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        value: originalLocalStorage,
+        writable: true,
+        configurable: true,
+      });
     }
   });
 });
