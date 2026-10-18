@@ -236,46 +236,6 @@ export const canadaFoodAdapter: SheetAdapter = {
   },
 };
 
-export const datingAdapter: SheetAdapter = {
-  name: "Dating",
-  match: (file) => /Budgeting - Dating\.csv$/i.test(file),
-  parse: (rows, filename, options) => {
-    const transactions: BackfillTransaction[] = [];
-    const dataRows = rows.slice(1);
-
-    for (let i = 0; i < dataRows.length; i++) {
-      const row = dataRows[i];
-      const sourceRow = i + 2;
-      const date = cleanDate(row[0]);
-      const grossAmount = cleanAmount(row[1]);
-      if (!date || grossAmount === null) continue;
-
-      const rawMerchant = (row[2] || "").trim() || "Dining";
-      const normalized = normalizeMerchant(rawMerchant);
-
-      const parentBucket = normalized.parentBucket ?? "Guilt-Free";
-      const subcategory = normalized.subcategory ?? "Dining";
-      const merchant = normalized.canonicalMerchant || rawMerchant;
-
-      transactions.push(
-        createTransaction(
-          date,
-          options.defaultCard,
-          parentBucket,
-          subcategory,
-          merchant,
-          grossAmount,
-          "USD",
-          filename,
-          sourceRow,
-          options.userId,
-        ),
-      );
-    }
-    return transactions;
-  },
-};
-
 export const flightExpensesAdapter: SheetAdapter = {
   name: "Flight Expenses",
   match: (file) => /Budgeting - Flight expenses\.csv$/i.test(file),
@@ -640,7 +600,6 @@ export const ALL_ADAPTERS: readonly SheetAdapter[] = [
   bostonFoodAdapter,
   bostonHousingAdapter,
   canadaFoodAdapter,
-  datingAdapter,
   flightExpensesAdapter,
   hydroQcAdapter,
   mentalTherapyAdapter,

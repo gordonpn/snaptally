@@ -10,7 +10,6 @@ import {
   canadaFoodAdapter,
   cleanAmount,
   cleanDate,
-  datingAdapter,
   flightExpensesAdapter,
   hydroQcAdapter,
   mentalTherapyAdapter,
@@ -511,25 +510,6 @@ describe("Sheet Adapters", () => {
     assert.strictEqual(txs[3].subcategory, "Fitness");
   });
 
-  it("datingAdapter: keeps known merchant rules and falls back to Guilt-Free Dining in USD", () => {
-    const rows = [
-      ["Date", "Cost", "Merchant"],
-      ["2024-09-14", "12.40", "Starbucks"],
-      ["2024-09-21", "88.00", "Pammy's"],
-      ["2024-09-28", "0.00", "Placeholder"],
-    ];
-
-    const txs = datingAdapter.parse(rows, "Budgeting - Dating.csv", options);
-
-    assert.strictEqual(txs.length, 2);
-    assert.strictEqual(txs[0].merchant, "Starbucks");
-    assert.strictEqual(txs[0].subcategory, "Coffee & Snacks");
-    assert.strictEqual(txs[1].merchant, "Pammy's");
-    assert.strictEqual(txs[1].parentBucket, "Guilt-Free");
-    assert.strictEqual(txs[1].subcategory, "Dining");
-    assert.strictEqual(txs[1].currency, "USD");
-  });
-
   it("utilitiesAdapter: sets Fixed Costs Utilities and preserves utility provider name", () => {
     const rows = [
       ["Date", "Cost (US$)", "Merchant"],
@@ -544,13 +524,13 @@ describe("Sheet Adapters", () => {
     assert.strictEqual(txs[1].subcategory, "Utilities");
   });
 
-  it("covers all 13 sheet adapters in ALL_ADAPTERS registry", () => {
-    assert.strictEqual(ALL_ADAPTERS.length, 13);
+  it("covers all 12 sheet adapters in ALL_ADAPTERS registry", () => {
+    assert.strictEqual(ALL_ADAPTERS.length, 12);
   });
 });
 
 describe("Pipeline Ingestion (runBackfill)", () => {
-  it("runs dry-run across all 13 sheets and produces exact metrics without DB writes", async () => {
+  it("runs dry-run across all 12 sheets and produces exact metrics without DB writes", async () => {
     const summary = await runBackfill({
       userId: "usr_default",
       defaultCard: "Historical",
@@ -567,7 +547,6 @@ describe("Pipeline Ingestion (runBackfill)", () => {
         "Budgeting - Boston food expenses.csv",
         "Budgeting - Boston housing expenses.csv",
         "Budgeting - Canada food expenses.csv",
-        "Budgeting - Dating.csv",
         "Budgeting - Flight expenses.csv",
         "Budgeting - Hydro QC.csv",
         "Budgeting - Mental therapy.csv",
