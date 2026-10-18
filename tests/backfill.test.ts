@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import {
   ALL_ADAPTERS,
@@ -22,6 +23,8 @@ import { parseCsv } from "../scripts/backfill/csv.ts";
 import { generateDeterministicId } from "../scripts/backfill/idempotency.ts";
 import { executeD1Batch, generateInsertSql, runBackfill } from "../scripts/backfill/pipeline.ts";
 import type { BackfillOptions, BackfillTransaction } from "../scripts/backfill/types.ts";
+
+const FIXTURES_DIR = resolve(import.meta.dirname, "fixtures/backfill");
 
 describe("CSV Parser (parseCsv)", () => {
   it("parses simple unquoted comma-separated values", () => {
@@ -389,21 +392,45 @@ describe("Pipeline Ingestion (runBackfill)", () => {
       dryRun: true,
       local: false,
       remote: false,
-      dir: "data/sheets",
+      dir: FIXTURES_DIR,
     });
 
-    assert.strictEqual(summary.sheets.length, 13);
-    assert.strictEqual(summary.totalValid, 1680);
-    assert.strictEqual(summary.totalUsd, 1355);
-    assert.strictEqual(summary.totalCad, 325);
-    assert.strictEqual(summary.totalSkipped, 35);
-
-    // Verify key categories exist in breakdown
-    assert.ok(summary.categoryBreakdown["Fixed Costs -> Transit"] > 0);
-    assert.ok(summary.categoryBreakdown["Fixed Costs -> Fitness"] > 0);
-    assert.ok(summary.categoryBreakdown["Fixed Costs -> Healthcare"] > 0);
-    assert.ok(summary.categoryBreakdown["Income -> Salary"] > 0);
-    assert.ok(summary.categoryBreakdown["Income -> Reimbursement"] > 0);
+    assert.deepStrictEqual(
+      summary.sheets.map((sheet) => sheet.file),
+      [
+        "Budgeting - Bikeshare.csv",
+        "Budgeting - Boston food expenses.csv",
+        "Budgeting - Boston housing expenses.csv",
+        "Budgeting - Canada food expenses.csv",
+        "Budgeting - Dating.csv",
+        "Budgeting - Flight expenses.csv",
+        "Budgeting - Hydro QC.csv",
+        "Budgeting - Mental therapy.csv",
+        "Budgeting - Montreal gas expenses.csv",
+        "Budgeting - Ride-hail.csv",
+        "Budgeting - Salary.csv",
+        "Budgeting - Stuff.csv",
+        "Budgeting - Utilities.csv",
+      ],
+    );
+    assert.strictEqual(summary.totalValid, 19);
+    assert.strictEqual(summary.totalUsd, 12);
+    assert.strictEqual(summary.totalCad, 7);
+    assert.strictEqual(summary.totalSkipped, 3);
+    assert.deepStrictEqual(summary.categoryBreakdown, {
+      "Fixed Costs -> Transit": 5,
+      "Fixed Costs -> Groceries": 2,
+      "Guilt-Free -> Coffee & Snacks": 1,
+      "Fixed Costs -> Rent": 2,
+      "Guilt-Free -> Dining": 1,
+      "Savings -> Travel Fund": 1,
+      "Fixed Costs -> Utilities": 2,
+      "Fixed Costs -> Healthcare": 1,
+      "Income -> Salary": 1,
+      "Income -> Reimbursement": 1,
+      "Guilt-Free -> Shopping": 1,
+      "Fixed Costs -> Fitness": 1,
+    });
   });
 
   it("generateInsertSql: generates escaped SQL statement with ON CONFLICT DO NOTHING", () => {
@@ -440,13 +467,21 @@ describe("Pipeline Ingestion (runBackfill)", () => {
       dryRun: true,
       local: false,
       remote: false,
-      file: "data/sheets/Budgeting - Bikeshare.csv",
+      file: resolve(FIXTURES_DIR, "Budgeting - Bikeshare.csv"),
     });
 
-    assert.strictEqual(summary.sheets.length, 1);
-    assert.strictEqual(summary.sheets[0].file, "Budgeting - Bikeshare.csv");
-    assert.strictEqual(summary.totalValid, 8);
-    assert.strictEqual(summary.totalSkipped, 4);
+    assert.deepStrictEqual(summary.sheets, [
+      {
+        file: "Budgeting - Bikeshare.csv",
+        totalRows: 3,
+        validTransactions: 1,
+        skippedRows: 2,
+        usdCount: 1,
+        cadCount: 0,
+      },
+    ]);
+    assert.strictEqual(summary.totalValid, 1);
+    assert.strictEqual(summary.totalSkipped, 2);
   });
 
   it("runBackfill: throws error when single file does not exist", async () => {
