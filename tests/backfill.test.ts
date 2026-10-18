@@ -27,6 +27,21 @@ import type { BackfillOptions, BackfillTransaction } from "../scripts/backfill/t
 const FIXTURES_DIR = resolve(import.meta.dirname, "fixtures/backfill");
 
 describe("CSV Parser (parseCsv)", () => {
+  it("rejects unterminated quoted fields", () => {
+    assert.throws(
+      () => parseCsv('Date,Cost,Merchant\n2024-01-01,10,"Unclosed'),
+      /Unterminated quoted field/,
+    );
+  });
+
+  it("accepts embedded newlines and empty input", () => {
+    assert.deepStrictEqual(parseCsv('Merchant,Cost\n"Line one\nLine two",10'), [
+      ["Merchant", "Cost"],
+      ["Line one\nLine two", "10"],
+    ]);
+    assert.deepStrictEqual(parseCsv(""), []);
+    assert.deepStrictEqual(parseCsv("\n\r\n"), []);
+  });
   it("parses simple unquoted comma-separated values", () => {
     const csv = "Date,Cost,Merchant\n2026-09-25,18.50,George Howell";
     const result = parseCsv(csv);
@@ -74,6 +89,9 @@ describe("Helper Functions", () => {
     it("strips dollar signs and commas", () => {
       assert.strictEqual(cleanAmount("$1,250.00"), 1250);
       assert.strictEqual(cleanAmount("$10.50"), 10.5);
+      assert.strictEqual(cleanAmount("($1,250.00)"), -1250);
+      assert.strictEqual(cleanAmount("-$7.00"), -7);
+      assert.strictEqual(cleanAmount("$-7.00"), -7);
     });
 
     it("parses negative amounts and accounting parentheses", () => {
@@ -100,6 +118,12 @@ describe("Helper Functions", () => {
         "-Infinity",
         "0.001",
         "-0.001",
+        "1,2",
+        "12,34.00",
+        "$$10",
+        "1$0",
+        " ",
+        "9".repeat(400),
       ]) {
         assert.strictEqual(cleanAmount(value), null, value);
       }

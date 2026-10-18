@@ -118,6 +118,24 @@ describe("Backfill file discovery", () => {
 });
 
 describe("Backfill execution", () => {
+  it("rejects malformed CSV before writing any already parsed sheets", async (t) => {
+    const dir = createDirectory(t);
+    copyFileSync(
+      join(FIXTURES_DIR, "Budgeting - Bikeshare.csv"),
+      join(dir, "Budgeting - Bikeshare.csv"),
+    );
+    writeFileSync(
+      join(dir, "Budgeting - Utilities.csv"),
+      'Date,Cost,Merchant\n2024-01-01,10,"Unclosed',
+    );
+    interceptWrangler(t, () => assert.fail("Unexpected database execution"));
+
+    await assert.rejects(
+      runBackfill(createOptions({ dir, local: true, dryRun: false })),
+      /Unterminated quoted field/,
+    );
+  });
+
   for (const target of ["local", "remote"] as const) {
     it(`selects the ${target} target and deletes its temporary SQL file`, (t) => {
       const statement = readFileSync(

@@ -1,6 +1,6 @@
 /**
- * RFC 4180-compliant zero-dependency CSV parser.
- * Handles quoted fields containing commas, double quotes, and line breaks.
+ * Parses CSV with quoted commas, escaped quotes, and line breaks, trimming fields and skipping empty rows.
+ * Throws if a quoted field is unterminated.
  */
 export function parseCsv(content: string): string[][] {
   const rows: string[][] = [];
@@ -36,6 +36,10 @@ export function parseCsv(content: string): string[][] {
     } else {
       currentField += char;
     }
+  }
+
+  if (inQuotes) {
+    throw new Error("Unterminated quoted field in CSV input");
   }
 
   // Handle trailing field without final newline

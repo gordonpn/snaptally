@@ -112,6 +112,7 @@ malformed amounts, and amounts that round to zero. See the
 [backfill procedure](docs/RUNBOOK.md#8-historical-google-sheets-backfill).
 The CLI rejects unknown flags and conflicting local/remote targets.
 Missing input files or directories fail explicitly.
+Unterminated CSV quotes stop the import before database writes.
 `just typecheck` checks both the API and the backfill scripts and tests.
  
 - [Architecture & Design](docs/architecture.md): Detailed system design, data flows, database schemas, and free-tier operational limits.

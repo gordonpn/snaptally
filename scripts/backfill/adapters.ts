@@ -8,7 +8,7 @@ import type { BackfillTransaction, SheetAdapter } from "./types.ts";
  */
 export function cleanAmount(val: string | undefined): number | null {
   if (!val) return null;
-  let cleaned = val.replace(/[$,]/g, "").trim();
+  let cleaned = val.trim();
   if (!cleaned) return null;
 
   // Handle accounting parentheses for negative values e.g. (7.00) -> -7.00
@@ -16,8 +16,10 @@ export function cleanAmount(val: string | undefined): number | null {
     cleaned = `-${cleaned.slice(1, -1).trim()}`;
   }
 
-  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(cleaned)) return null;
-  const amount = Math.round(Number(cleaned) * 100) / 100;
+  if (!/^(?:[+-]?\$?|\$[+-]?)(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d*)?|\.\d+)$/.test(cleaned)) {
+    return null;
+  }
+  const amount = Math.round(Number(cleaned.replace(/[$,]/g, "")) * 100) / 100;
   return Number.isFinite(amount) && amount !== 0 ? amount : null;
 }
 
