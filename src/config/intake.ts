@@ -1,7 +1,16 @@
 export const BUCKET_SUBCATEGORIES = {
   "Guilt-Free": ["Dining", "Takeout", "Coffee & Snacks", "Bars", "Shopping", "Entertainment"],
-  "Fixed Costs": ["Rent", "Utilities", "Groceries", "Subscriptions", "Transit"],
+  "Fixed Costs": [
+    "Rent",
+    "Utilities",
+    "Groceries",
+    "Subscriptions",
+    "Transit",
+    "Healthcare",
+    "Fitness",
+  ],
   Savings: ["Emergency Fund", "Investments", "Travel Fund"],
+  Income: ["Salary", "Reimbursement"],
 } as const;
 
 export type ParentBucket = keyof typeof BUCKET_SUBCATEGORIES;

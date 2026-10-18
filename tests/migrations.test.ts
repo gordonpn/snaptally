@@ -491,3 +491,47 @@ describe("Taxonomy Migrations (0004_taxonomy_coffee_and_snacks.sql)", () => {
     db.close();
   });
 });
+
+describe("Currency Column Migration (0005_add_currency_to_transactions.sql)", () => {
+  const initSql = readFileSync(resolve("migrations/0000_init.sql"), "utf-8");
+  const expandedSchemaSql = readFileSync(resolve("migrations/0001_expanded_schema.sql"), "utf-8");
+  const multiTenantSchemaSql = readFileSync(
+    resolve("migrations/0002_multi_tenant_schema.sql"),
+    "utf-8",
+  );
+  const currencyMigrationSql = readFileSync(
+    resolve("migrations/0005_add_currency_to_transactions.sql"),
+    "utf-8",
+  );
+
+  it("adds currency column defaulting to USD and preserves existing records", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(initSql);
+    db.exec(expandedSchemaSql);
+    db.exec(multiTenantSchemaSql);
+
+    db.exec(`
+      INSERT INTO transactions (id, user_id, date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement)
+      VALUES ('tx-existing-usd', 'usr_default', '2026-09-15', 'Amex Gold', 'Guilt-Free', 'Dining', 'Posto', 45.00, 0.0);
+    `);
+
+    db.exec(currencyMigrationSql);
+
+    const existingRow = db
+      .prepare("SELECT * FROM transactions WHERE id = ?")
+      .get("tx-existing-usd") as Record<string, unknown>;
+    assert.strictEqual(existingRow.currency, "USD");
+
+    db.exec(`
+      INSERT INTO transactions (id, user_id, date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement, currency)
+      VALUES ('tx-new-cad', 'usr_default', '2026-09-16', 'Amex Gold', 'Guilt-Free', 'Dining', 'Montreal Cafe', 22.50, 0.0, 'CAD');
+    `);
+
+    const cadRow = db
+      .prepare("SELECT * FROM transactions WHERE id = ?")
+      .get("tx-new-cad") as Record<string, unknown>;
+    assert.strictEqual(cadRow.currency, "CAD");
+
+    db.close();
+  });
+});
