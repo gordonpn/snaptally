@@ -877,6 +877,40 @@ describe("intakeForm Submission Validation and Error Handling", () => {
     }
   });
 
+  it("preserves saved credit confirmation and queues for retry when backend rejects negative gross_amount due to rollback", async () => {
+    const form = intakeForm();
+    form.pressDigit(2);
+    form.pressDigit(5);
+    form.pressDigit(0);
+    form.pressDigit(0);
+    form.card = "Amex Gold";
+    form.merchant = "Uniqlo";
+    form.toggleNegative();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({ error: "Validation failed: gross_amount must be a positive number" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await form.submitTransaction();
+      assert.strictEqual(result, true);
+      assert.strictEqual(form.isError, false);
+      assert.strictEqual(form.statusMessage, "Saved credit of $25.00 at Uniqlo");
+      assert.strictEqual(form.amountCents, 0);
+      assert.strictEqual(form.isNegative, false);
+      assert.strictEqual(form.outboxCount, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("resets custom merchant state and selects first frequent merchant on successful submit", async () => {
     const form = intakeForm();
     form.pressDigit(2);

@@ -1106,6 +1106,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       const result = await syncOutbox({ token: "test-token" });
       assert.strictEqual(result.failedCount, 1);
       assert.strictEqual(result.syncedCount, 1);
+      assert.strictEqual(result.lastError, undefined);
 
       const items = await getOutbox();
       assert.strictEqual(items.length, 1);

@@ -289,10 +289,10 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
               item.next_retry_at = Date.now() + backoffMs;
             } else {
               item.next_retry_at = undefined;
+              lastError = errorMsg;
             }
             await saveOutboxItem(item);
             failedCount++;
-            lastError = errorMsg;
             continue;
           }
 
