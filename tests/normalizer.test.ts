@@ -98,26 +98,26 @@ describe("Merchant Normalizer", () => {
   });
 
   describe("normalizeMerchant", () => {
-    it("Scenario 1: evaluates Toast Blue Bottle Coffee into Guilt-Free Coffee", () => {
+    it("Scenario 1: evaluates Toast Blue Bottle Coffee into Guilt-Free Coffee & Snacks", () => {
       const result = normalizeMerchant("TST* BLUE BOTTLE COFFEE BOSTON MA");
       assert.strictEqual(result.paymentRail, "Toast");
       assert.strictEqual(result.cleanedDescription, "BLUE BOTTLE COFFEE");
       assert.strictEqual(result.canonicalMerchant, "Blue Bottle Coffee");
       assert.strictEqual(result.parentBucket, "Guilt-Free");
-      assert.strictEqual(result.subcategory, "Coffee");
+      assert.strictEqual(result.subcategory, "Coffee & Snacks");
       assert.strictEqual(result.rewardCategory, "Dining");
       assert.strictEqual(result.matchStrategy, "exact_rule");
       assert.strictEqual(result.requiresLLM, false);
       assert.strictEqual(result.confidence, 0.98);
     });
 
-    it("Scenario 2: evaluates Square Tatte Bakery into Guilt-Free Dining", () => {
+    it("Scenario 2: evaluates Square Tatte Bakery into Guilt-Free Coffee & Snacks", () => {
       const result = normalizeMerchant("SQ *TATTE BAKERY & CAFE #14 CAMBRIDGE MA 02138");
       assert.strictEqual(result.paymentRail, "Square");
       assert.strictEqual(result.cleanedDescription, "TATTE BAKERY & CAFE");
       assert.strictEqual(result.canonicalMerchant, "Tatte Bakery & Cafe");
       assert.strictEqual(result.parentBucket, "Guilt-Free");
-      assert.strictEqual(result.subcategory, "Dining");
+      assert.strictEqual(result.subcategory, "Coffee & Snacks");
       assert.strictEqual(result.rewardCategory, "Dining");
       assert.strictEqual(result.matchStrategy, "exact_rule");
       assert.strictEqual(result.requiresLLM, false);
@@ -159,13 +159,220 @@ describe("Merchant Normalizer", () => {
       assert.strictEqual(result.requiresLLM, false);
     });
 
-    it("matches contextual regex rules for unmapped cafe", () => {
+    it("evaluates Uber Eats, DoorDash, Chipotle, and Shake Shack into Guilt-Free Takeout", () => {
+      const uberEats = normalizeMerchant("UBER EATS PENDING");
+      assert.strictEqual(uberEats.canonicalMerchant, "Uber Eats");
+      assert.strictEqual(uberEats.parentBucket, "Guilt-Free");
+      assert.strictEqual(uberEats.subcategory, "Takeout");
+
+      const doordash = normalizeMerchant("DOORDASH*BURGER CAMBRIDGE MA");
+      assert.strictEqual(doordash.canonicalMerchant, "DoorDash");
+      assert.strictEqual(doordash.parentBucket, "Guilt-Free");
+      assert.strictEqual(doordash.subcategory, "Takeout");
+
+      const chipotle = normalizeMerchant("CHIPOTLE 1234 BOSTON MA");
+      assert.strictEqual(chipotle.canonicalMerchant, "Chipotle Mexican Grill");
+      assert.strictEqual(chipotle.parentBucket, "Guilt-Free");
+      assert.strictEqual(chipotle.subcategory, "Takeout");
+
+      const shakeShack = normalizeMerchant("SHAKE SHACK #102");
+      assert.strictEqual(shakeShack.canonicalMerchant, "Shake Shack");
+      assert.strictEqual(shakeShack.parentBucket, "Guilt-Free");
+      assert.strictEqual(shakeShack.subcategory, "Takeout");
+    });
+
+    it("evaluates Berryline ice cream into Guilt-Free Coffee & Snacks", () => {
+      const result = normalizeMerchant("SQ *BERRYLINE CAMBRIDGE MA");
+      assert.strictEqual(result.canonicalMerchant, "Berryline");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Coffee & Snacks");
+      assert.strictEqual(result.rewardCategory, "Dining");
+    });
+
+    it("matches contextual regex rules for unmapped cafe and snacks", () => {
       const result = normalizeMerchant("TST* CORNER ARTISAN ROASTERY SOMERVILLE MA");
       assert.strictEqual(result.matchStrategy, "regex_heuristic");
       assert.strictEqual(result.parentBucket, "Guilt-Free");
-      assert.strictEqual(result.subcategory, "Coffee");
+      assert.strictEqual(result.subcategory, "Coffee & Snacks");
       assert.strictEqual(result.requiresLLM, false);
       assert.strictEqual(result.confidence, 0.88);
+    });
+
+    it("matches contextual regex rules for unmapped fast food and food delivery", () => {
+      const result = normalizeMerchant("EXPRESS FAST FOOD DELIVERY");
+      assert.strictEqual(result.matchStrategy, "regex_heuristic");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Takeout");
+      assert.strictEqual(result.requiresLLM, false);
+      assert.strictEqual(result.confidence, 0.88);
+    });
+
+    it("evaluates McDonald's descriptors deterministically into Guilt-Free Takeout", () => {
+      const result = normalizeMerchant("MCDONALDS #102 BOSTON MA");
+      assert.strictEqual(result.canonicalMerchant, "McDonald's");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Takeout");
+      assert.strictEqual(result.rewardCategory, "Dining");
+      assert.strictEqual(result.confidence, 0.98);
+
+      const apostropheVariant = normalizeMerchant("MCDONALD'S 4821 SOMERVILLE MA");
+      assert.strictEqual(apostropheVariant.canonicalMerchant, "McDonald's");
+      assert.strictEqual(apostropheVariant.parentBucket, "Guilt-Free");
+      assert.strictEqual(apostropheVariant.subcategory, "Takeout");
+    });
+
+    it("does not classify non-food merchants containing standalone TEA as Coffee & Snacks", () => {
+      const result = normalizeMerchant("TEA COLLECTION KIDS CLOTHING");
+      assert.strictEqual(result.matchStrategy, "unresolved");
+      assert.strictEqual(result.requiresLLM, true);
+      assert.strictEqual(result.parentBucket, null);
+      assert.strictEqual(result.subcategory, null);
+    });
+
+    it("matches beverage tea phrases as Cafe & Bakery under Coffee & Snacks", () => {
+      const bobaResult = normalizeMerchant("HAPPY LEMON BOBA TEA");
+      assert.strictEqual(bobaResult.matchStrategy, "regex_heuristic");
+      assert.strictEqual(bobaResult.parentBucket, "Guilt-Free");
+      assert.strictEqual(bobaResult.subcategory, "Coffee & Snacks");
+
+      const teaShopResult = normalizeMerchant("ARTISAN LEAF TEA SHOP BOSTON MA");
+      assert.strictEqual(teaShopResult.matchStrategy, "regex_heuristic");
+      assert.strictEqual(teaShopResult.parentBucket, "Guilt-Free");
+      assert.strictEqual(teaShopResult.subcategory, "Coffee & Snacks");
+    });
+
+    it("classifies tea markets as Groceries under Fixed Costs rather than snacks", () => {
+      const result = normalizeMerchant("ASIAN TEA MARKET BOSTON MA");
+      assert.strictEqual(result.matchStrategy, "regex_heuristic");
+      assert.strictEqual(result.parentBucket, "Fixed Costs");
+      assert.strictEqual(result.subcategory, "Groceries");
+    });
+
+    it("preserves restaurant classification when descriptors contain MARKET", () => {
+      const result = normalizeMerchant("THE MARKET RESTAURANT");
+      assert.strictEqual(result.matchStrategy, "regex_heuristic");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Dining");
+      assert.strictEqual(result.rewardCategory, "Dining");
+    });
+
+    it("does not classify non-transit merchants with METRO or PATH as transit", () => {
+      const metroDiner = normalizeMerchant("METRO DINER");
+      assert.strictEqual(metroDiner.matchStrategy, "regex_heuristic");
+      assert.strictEqual(metroDiner.parentBucket, "Guilt-Free");
+      assert.strictEqual(metroDiner.subcategory, "Dining");
+
+      const metroMobile = normalizeMerchant("METRO BY T-MOBILE");
+      assert.strictEqual(metroMobile.matchStrategy, "unresolved");
+      assert.strictEqual(metroMobile.requiresLLM, true);
+      assert.strictEqual(metroMobile.parentBucket, null);
+
+      const pathSoftware = normalizeMerchant("CRITICAL PATH SOFTWARE");
+      assert.strictEqual(pathSoftware.matchStrategy, "unresolved");
+      assert.strictEqual(pathSoftware.requiresLLM, true);
+      assert.strictEqual(pathSoftware.parentBucket, null);
+
+      const pathTrain = normalizeMerchant("PATH TRAIN");
+      assert.strictEqual(pathTrain.matchStrategy, "regex_heuristic");
+      assert.strictEqual(pathTrain.parentBucket, "Fixed Costs");
+      assert.strictEqual(pathTrain.subcategory, "Transit");
+    });
+
+    it("classifies transit subway descriptors as Transit under Fixed Costs", () => {
+      const mtaResult = normalizeMerchant("MTA SUBWAY FARE");
+      assert.strictEqual(mtaResult.matchStrategy, "regex_heuristic");
+      assert.strictEqual(mtaResult.parentBucket, "Fixed Costs");
+      assert.strictEqual(mtaResult.subcategory, "Transit");
+      assert.strictEqual(mtaResult.rewardCategory, "Travel");
+      assert.strictEqual(mtaResult.requiresLLM, false);
+
+      const subwayFareResult = normalizeMerchant("SUBWAY FARE BOSTON MA");
+      assert.strictEqual(subwayFareResult.matchStrategy, "regex_heuristic");
+      assert.strictEqual(subwayFareResult.parentBucket, "Fixed Costs");
+      assert.strictEqual(subwayFareResult.subcategory, "Transit");
+
+      const omnyResult = normalizeMerchant("OMNY NYCT PAYGO");
+      assert.strictEqual(omnyResult.matchStrategy, "regex_heuristic");
+      assert.strictEqual(omnyResult.parentBucket, "Fixed Costs");
+      assert.strictEqual(omnyResult.subcategory, "Transit");
+    });
+
+    it("classifies subway restaurant descriptors with food or store context as Takeout", () => {
+      const sandwichResult = normalizeMerchant("SUBWAY SANDWICHES BOSTON MA");
+      assert.strictEqual(sandwichResult.canonicalMerchant, "Subway");
+      assert.strictEqual(sandwichResult.parentBucket, "Guilt-Free");
+      assert.strictEqual(sandwichResult.subcategory, "Takeout");
+      assert.strictEqual(sandwichResult.rewardCategory, "Dining");
+
+      const restaurantResult = normalizeMerchant("SUBWAY RESTAURANT #12345 CAMBRIDGE MA");
+      assert.strictEqual(restaurantResult.canonicalMerchant, "Subway");
+      assert.strictEqual(restaurantResult.parentBucket, "Guilt-Free");
+      assert.strictEqual(restaurantResult.subcategory, "Takeout");
+
+      const hashStoreResult = normalizeMerchant("SUBWAY #12345 CAMBRIDGE MA");
+      assert.strictEqual(hashStoreResult.canonicalMerchant, "Subway");
+      assert.strictEqual(hashStoreResult.parentBucket, "Guilt-Free");
+      assert.strictEqual(hashStoreResult.subcategory, "Takeout");
+
+      const storeKeywordResult = normalizeMerchant("SUBWAY STORE #456");
+      assert.strictEqual(storeKeywordResult.canonicalMerchant, "Subway");
+      assert.strictEqual(storeKeywordResult.parentBucket, "Guilt-Free");
+      assert.strictEqual(storeKeywordResult.subcategory, "Takeout");
+
+      const bareStoreIdResult = normalizeMerchant("SUBWAY 9876 BOSTON MA");
+      assert.strictEqual(bareStoreIdResult.canonicalMerchant, "Subway");
+      assert.strictEqual(bareStoreIdResult.parentBucket, "Guilt-Free");
+      assert.strictEqual(bareStoreIdResult.subcategory, "Takeout");
+    });
+
+    it("evaluates rollout takeout and coffee snack merchants deterministically", () => {
+      const grubhub = normalizeMerchant("GRUBHUB*12345");
+      assert.strictEqual(grubhub.canonicalMerchant, "Grubhub");
+      assert.strictEqual(grubhub.parentBucket, "Guilt-Free");
+      assert.strictEqual(grubhub.subcategory, "Takeout");
+
+      const cava = normalizeMerchant("CAVA 1234");
+      assert.strictEqual(cava.canonicalMerchant, "Cava");
+      assert.strictEqual(cava.parentBucket, "Guilt-Free");
+      assert.strictEqual(cava.subcategory, "Takeout");
+
+      const panda = normalizeMerchant("PANDA EXPRESS 123");
+      assert.strictEqual(panda.canonicalMerchant, "Panda Express");
+      assert.strictEqual(panda.parentBucket, "Guilt-Free");
+      assert.strictEqual(panda.subcategory, "Takeout");
+
+      const insomnia = normalizeMerchant("INSOMNIA COOKIES #10");
+      assert.strictEqual(insomnia.canonicalMerchant, "Insomnia Cookies");
+      assert.strictEqual(insomnia.parentBucket, "Guilt-Free");
+      assert.strictEqual(insomnia.subcategory, "Coffee & Snacks");
+
+      const saltStraw = normalizeMerchant("SALT & STRAW CAMBRIDGE MA");
+      assert.strictEqual(saltStraw.canonicalMerchant, "Salt & Straw");
+      assert.strictEqual(saltStraw.parentBucket, "Guilt-Free");
+      assert.strictEqual(saltStraw.subcategory, "Coffee & Snacks");
+
+      const amorino = normalizeMerchant("AMORINO GELATO BOSTON");
+      assert.strictEqual(amorino.canonicalMerchant, "Amorino");
+      assert.strictEqual(amorino.parentBucket, "Guilt-Free");
+      assert.strictEqual(amorino.subcategory, "Coffee & Snacks");
+
+      const flour = normalizeMerchant("FLOUR BAKERY + CAFE");
+      assert.strictEqual(flour.canonicalMerchant, "Flour Bakery");
+      assert.strictEqual(flour.parentBucket, "Guilt-Free");
+      assert.strictEqual(flour.subcategory, "Coffee & Snacks");
+    });
+
+    it("leaves ambiguous bare SUBWAY without food or transit context for LLM fallback", () => {
+      const bareResult = normalizeMerchant("SUBWAY");
+      assert.strictEqual(bareResult.matchStrategy, "unresolved");
+      assert.strictEqual(bareResult.requiresLLM, true);
+      assert.strictEqual(bareResult.parentBucket, null);
+      assert.strictEqual(bareResult.subcategory, null);
+    });
+
+    it("does not classify non-food delivery as Takeout", () => {
+      const result = normalizeMerchant("FEDEX PARCEL DELIVERY EXPRESS");
+      assert.notStrictEqual(result.subcategory, "Takeout");
     });
 
     it("matches contextual regex rules for pharmacy", () => {
