@@ -98,6 +98,42 @@ describe("Merchant Normalizer", () => {
   });
 
   describe("normalizeMerchant", () => {
+    it("resolves every grocery chain rule to Fixed Costs Groceries", () => {
+      const cases: readonly [string, string][] = [
+        ["Costco", "Costco Wholesale"],
+        ["Stop & Shop", "Stop & Shop"],
+        ["Stop and Shop", "Stop & Shop"],
+        ["Star Market", "Star Market"],
+        ["Shaw's", "Shaw's"],
+        ["Shaws", "Shaw's"],
+        ["H-Mart", "H Mart"],
+        ["H Mart", "H Mart"],
+        ["Wegmans", "Wegmans"],
+        ["Market Basket", "Market Basket"],
+        ["T&T", "T&T Supermarket"],
+        ["T&T Supermarket", "T&T Supermarket"],
+        ["Kim Phat", "Kim Phat"],
+        ["IGA", "IGA"],
+        ["Maxi", "Maxi"],
+      ];
+
+      for (const [raw, canonical] of cases) {
+        const result = normalizeMerchant(raw);
+
+        assert.strictEqual(result.canonicalMerchant, canonical, raw);
+        assert.strictEqual(result.parentBucket, "Fixed Costs", raw);
+        assert.strictEqual(result.subcategory, "Groceries", raw);
+        assert.strictEqual(result.matchStrategy, "exact_rule", raw);
+      }
+    });
+
+    it("does not match grocery tokens embedded inside other words", () => {
+      const result = normalizeMerchant("Bigarade");
+
+      assert.strictEqual(result.matchStrategy, "unresolved");
+      assert.strictEqual(result.parentBucket, null);
+    });
+
     it("Scenario 1: evaluates Toast Blue Bottle Coffee into Guilt-Free Coffee & Snacks", () => {
       const result = normalizeMerchant("TST* BLUE BOTTLE COFFEE BOSTON MA");
       assert.strictEqual(result.paymentRail, "Toast");

@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["scripts/backfill.ts", "scripts/backfill/**/*.ts", "tests/backfill*.test.ts"]
+}

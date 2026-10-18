@@ -32,8 +32,8 @@ export interface NormalizedTransaction {
   readonly rawDescription: string;
   readonly cleanedDescription: string;
   readonly canonicalMerchant: string;
-  readonly parentBucket: string | null;
-  readonly subcategory: string | null;
+  readonly parentBucket: ParentBucket | null;
+  readonly subcategory: Subcategory | null;
   readonly rewardCategory: string | null;
   readonly confidence: number;
   readonly matchStrategy: MatchStrategy;
@@ -101,6 +101,144 @@ export const DEFAULT_CANONICAL_RULES: Readonly<Record<string, CategoryRule>> = {
     parentBucket: "Fixed Costs",
     subcategory: "Groceries",
     rewardMultiplierCategory: "Wholesale",
+  },
+  COSTCO: {
+    canonicalName: "Costco Wholesale",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Wholesale",
+  },
+  "STOP & SHOP": {
+    canonicalName: "Stop & Shop",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  "STOP AND SHOP": {
+    canonicalName: "Stop & Shop",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  "STAR MARKET": {
+    canonicalName: "Star Market",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  "SHAW'S": {
+    canonicalName: "Shaw's",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  SHAWS: {
+    canonicalName: "Shaw's",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  "H-MART": {
+    canonicalName: "H Mart",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  "H MART": {
+    canonicalName: "H Mart",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  WEGMANS: {
+    canonicalName: "Wegmans",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  "MARKET BASKET": {
+    canonicalName: "Market Basket",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  "T&T": {
+    canonicalName: "T&T Supermarket",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  "T&T SUPERMARKET": {
+    canonicalName: "T&T Supermarket",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  "KIM PHAT": {
+    canonicalName: "Kim Phat",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  IGA: {
+    canonicalName: "IGA",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  MAXI: {
+    canonicalName: "Maxi",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  ADONIS: {
+    canonicalName: "Adonis",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  "SUPERMARCHE PA": {
+    canonicalName: "Supermarché PA",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  "SUPER C": {
+    canonicalName: "Super C",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  "C&T": {
+    canonicalName: "C&T Supermarket",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  TROTTIER: {
+    canonicalName: "Marché Trottier",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  "MARCHE HUNG PHAT": {
+    canonicalName: "Marché Hung Phat",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
+  "AMAZON CAFETERIA": {
+    canonicalName: "Amazon Cafeteria",
+    parentBucket: "Guilt-Free",
+    subcategory: "Dining",
+    rewardMultiplierCategory: "Dining",
+  },
+  "AMAZON CAFE": {
+    canonicalName: "Amazon Cafeteria",
+    parentBucket: "Guilt-Free",
+    subcategory: "Dining",
+    rewardMultiplierCategory: "Dining",
   },
   "BOSTON MARKET": {
     canonicalName: "Boston Market",
@@ -300,13 +438,97 @@ export const DEFAULT_CANONICAL_RULES: Readonly<Record<string, CategoryRule>> = {
     subcategory: "Transit",
     rewardMultiplierCategory: "Gas",
   },
+  SHELL: {
+    canonicalName: "Shell",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Gas",
+  },
   EXXONMOBIL: {
     canonicalName: "ExxonMobil",
     parentBucket: "Fixed Costs",
     subcategory: "Transit",
     rewardMultiplierCategory: "Gas",
   },
+  "EXXON MOBIL": {
+    canonicalName: "ExxonMobil",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Gas",
+  },
+  EXXON: {
+    canonicalName: "ExxonMobil",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Gas",
+  },
+  MOBIL: {
+    canonicalName: "Mobil",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Gas",
+  },
+  "PETRO-CANADA": {
+    canonicalName: "Petro-Canada",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Gas",
+  },
+  "PETRO CANADA": {
+    canonicalName: "Petro-Canada",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Gas",
+  },
+  ULTRAMAR: {
+    canonicalName: "Ultramar",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Gas",
+  },
+  IRVING: {
+    canonicalName: "Irving",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Gas",
+  },
+  "IRVING OIL": {
+    canonicalName: "Irving",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Gas",
+  },
+  "BJ'S GAS": {
+    canonicalName: "BJ's Gas",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Gas",
+  },
+  EZPASS: {
+    canonicalName: "EZPass",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Travel",
+  },
+  "EZ-PASS": {
+    canonicalName: "EZPass",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Travel",
+  },
+  "EZ PASS": {
+    canonicalName: "EZPass",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Travel",
+  },
   "DELTA AIR": {
+    canonicalName: "Delta Air Lines",
+    parentBucket: "Savings",
+    subcategory: "Travel Fund",
+    rewardMultiplierCategory: "Travel",
+  },
+  DELTA: {
     canonicalName: "Delta Air Lines",
     parentBucket: "Savings",
     subcategory: "Travel Fund",
@@ -317,6 +539,84 @@ export const DEFAULT_CANONICAL_RULES: Readonly<Record<string, CategoryRule>> = {
     parentBucket: "Savings",
     subcategory: "Travel Fund",
     rewardMultiplierCategory: "Travel",
+  },
+  AMC: {
+    canonicalName: "AMC Theatres",
+    parentBucket: "Guilt-Free",
+    subcategory: "Entertainment",
+    rewardMultiplierCategory: "Entertainment",
+  },
+  "AMC THEATRES": {
+    canonicalName: "AMC Theatres",
+    parentBucket: "Guilt-Free",
+    subcategory: "Entertainment",
+    rewardMultiplierCategory: "Entertainment",
+  },
+  REGAL: {
+    canonicalName: "Regal Cinemas",
+    parentBucket: "Guilt-Free",
+    subcategory: "Entertainment",
+    rewardMultiplierCategory: "Entertainment",
+  },
+  "SIX FLAGS": {
+    canonicalName: "Six Flags",
+    parentBucket: "Guilt-Free",
+    subcategory: "Entertainment",
+    rewardMultiplierCategory: "Entertainment",
+  },
+  "CIRQUE DU SOLEIL": {
+    canonicalName: "Cirque du Soleil",
+    parentBucket: "Guilt-Free",
+    subcategory: "Entertainment",
+    rewardMultiplierCategory: "Entertainment",
+  },
+  CRUNCHYROLL: {
+    canonicalName: "Crunchyroll",
+    parentBucket: "Fixed Costs",
+    subcategory: "Subscriptions",
+    rewardMultiplierCategory: "Entertainment",
+  },
+  "MINT MOBILE": {
+    canonicalName: "Mint Mobile",
+    parentBucket: "Fixed Costs",
+    subcategory: "Utilities",
+    rewardMultiplierCategory: "Other",
+  },
+  "REAL-DEBRID": {
+    canonicalName: "Real-Debrid",
+    parentBucket: "Fixed Costs",
+    subcategory: "Subscriptions",
+    rewardMultiplierCategory: "Entertainment",
+  },
+  "REAL DEBRID": {
+    canonicalName: "Real-Debrid",
+    parentBucket: "Fixed Costs",
+    subcategory: "Subscriptions",
+    rewardMultiplierCategory: "Entertainment",
+  },
+  RING: {
+    canonicalName: "Ring",
+    parentBucket: "Fixed Costs",
+    subcategory: "Subscriptions",
+    rewardMultiplierCategory: "Other",
+  },
+  MEDIUM: {
+    canonicalName: "Medium",
+    parentBucket: "Fixed Costs",
+    subcategory: "Subscriptions",
+    rewardMultiplierCategory: "Other",
+  },
+  TSN: {
+    canonicalName: "TSN",
+    parentBucket: "Fixed Costs",
+    subcategory: "Subscriptions",
+    rewardMultiplierCategory: "Entertainment",
+  },
+  DEEPSEEK: {
+    canonicalName: "DeepSeek",
+    parentBucket: "Fixed Costs",
+    subcategory: "Subscriptions",
+    rewardMultiplierCategory: "Other",
   },
   CONEDISON: {
     canonicalName: "ConEdison",
@@ -353,11 +653,18 @@ export const CONTEXTUAL_REGEX_RULES: readonly {
 }[] = [
   {
     pattern:
-      /\b(?:MTA|MBTA|BART|WMATA|SEPTA|OMNY|METROCARD|CLIPPER|VENTRA|SMARTRIP|CHARLIE\s*CARD|COMMUTER RAIL|CALTRAIN|AMTRAK|PUBLIC TRANSIT|PANYNJ|(?:METRO|PATH|SUBWAY|BUS|TRAIN)\s+(?:FARE|PASS|TICKET|TRANSIT|RIDE|STATION|TRAIN|RAIL)|(?:NYC|NYCT|MTA|MBTA)\s+(?:SUBWAY|TRANSIT))\b/i,
+      /\b(?:MTA|MBTA|STM|BART|WMATA|SEPTA|OMNY|METROCARD|CLIPPER|VENTRA|SMARTRIP|CHARLIE\s*CARD|COMMUTER RAIL|CALTRAIN|AMTRAK|PUBLIC TRANSIT|PANYNJ|(?:METRO|PATH|SUBWAY|BUS|TRAIN)\s+(?:FARE|PASS|TICKET|TRANSIT|RIDE|STATION|TRAIN|RAIL)|(?:NYC|NYCT|MTA|MBTA)\s+(?:SUBWAY|TRANSIT))\b/i,
     canonicalName: "Public Transit",
     parentBucket: "Fixed Costs",
     subcategory: "Transit",
     rewardMultiplierCategory: "Travel",
+  },
+  {
+    pattern: /\b(?:GAS(?:\s+STATION)?|FUEL)\b/i,
+    canonicalName: "Gas Station",
+    parentBucket: "Fixed Costs",
+    subcategory: "Transit",
+    rewardMultiplierCategory: "Gas",
   },
   {
     pattern:
@@ -382,11 +689,19 @@ export const CONTEXTUAL_REGEX_RULES: readonly {
     rewardMultiplierCategory: "Other",
   },
   {
-    pattern: /\b(?:THERAPY|PSYCHOTHERAPY|COUNSELING|PSYCHIATRY)\b/i,
-    canonicalName: "Mental Therapy",
+    pattern:
+      /\b(?:THERAPY|PSYCHOTHERAPY|COUNSELING|PSYCHIATRY|OPTOMETR|EYE EXAM|RETINAL|VISION CARE)\b/i,
+    canonicalName: "Healthcare",
     parentBucket: "Fixed Costs",
     subcategory: "Healthcare",
     rewardMultiplierCategory: "Other",
+  },
+  {
+    pattern: /\b(?:CINEMA|THEATRE|THEATER|CIRQUE|SIX FLAGS|AQUARIUM|MUSEUM)\b/i,
+    canonicalName: "Entertainment",
+    parentBucket: "Guilt-Free",
+    subcategory: "Entertainment",
+    rewardMultiplierCategory: "Entertainment",
   },
   {
     pattern: /\b(?:MARKET|GROCERY|PRODUCE|BODEGA|SUPERMARKET)\b/i,

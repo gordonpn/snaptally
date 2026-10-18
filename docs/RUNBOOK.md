@@ -450,3 +450,67 @@ When adding new migrations in `migrations/`:
 | Migration failed on `BEGIN` | Explicit transaction statements in D1 SQL | Remove manual `BEGIN TRANSACTION` and `COMMIT` statements; D1 manages batches automatically. |
 | Keypad layout bouncing on iOS | Missing viewport meta tags | Ensure `Layout.astro` contains `viewport-fit=cover` and styling includes `overscroll-none`. |
 | Custom domain returns HTTP 403 or CNAME error | CNAME target mismatch or missing DNS record | Ensure DNS CNAME for `tally.gordon-pn.com` points to `snaptally-5wq.pages.dev` with proxy enabled. |
+
+---
+
+## 8. Historical Google Sheets Backfill
+
+`scripts/backfill.ts` ingests the exported `Budgeting - *.csv` sheets into D1. The CSV exports contain personal financial data and are never committed; place them in `data/sheets/` (gitignored). `Budgeting - General.csv` is an overview page and is skipped.
+`just test` uses synthetic fixtures and requires no personal exports. `just typecheck` validates the API and backfill scripts and tests separately for their Cloudflare and Node.js environments.
+
+### 8.1 Procedure
+
+Always validate locally before touching production:
+
+```bash
+# 1. Parse and categorize every sheet without writing to D1
+just backfill-dry-run
+
+# 2. Ingest into the local D1 simulation
+just db-migrate-local
+just backfill-local
+```
+
+Only after the local results are reviewed and the source sheets are final, ingest into production:
+
+```bash
+node scripts/backfill.ts --remote
+```
+
+Additional flags: `--file <path>` ingests a single sheet, `--dir <path>` overrides the sheet directory, and `--user-id <id>` scopes rows to a tenant (defaults to `usr_default`).
+Unknown flags, missing option values, and simultaneous `--local` and `--remote` targets are rejected. Explicit `--dry-run` prevents writes even when one target flag is present.
+Missing input files or directories fail with a nonzero exit status. An existing empty directory reports zero transactions; unmatched files and the overview sheet are ignored during directory imports.
+
+### 8.2 Ingestion Rules
+
+- Amounts are stored in the currency recorded in the sheet (`USD` or `CAD`) without conversion.
+- Zero-amount rows are spreadsheet formula anchors and are skipped.
+- Invalid calendar dates, malformed decimal amounts, and amounts that round to zero are skipped.
+- Unterminated CSV quotes stop the import before any database writes.
+- Temporary SQL files are readable only by the current user and are removed after Wrangler succeeds or fails.
+- Row IDs are deterministic hashes of the source file, row position, date, gross amount, and currency, so re-running an unchanged export inserts nothing new (`ON CONFLICT(id) DO NOTHING`). Editing a row's amount or date changes its ID. Inserting or deleting a nonempty row shifts the row positions of subsequent entries, producing new IDs on re-run. Before re-ingesting a modified sheet, roll back the backfilled entries for that tenant using section 8.4.
+- `Salary.csv` entries above 1,000 map to `Income -> Salary`; smaller entries map to `Income -> Reimbursement`.
+
+### 8.3 Verification Queries
+
+Scope verification queries to the tenant (`user_id`) and card (`card`) specified during the import (defaulting to `usr_default` and `Historical`). Replace `--local` with `--remote` when verifying production:
+
+```bash
+# Verify record counts and date coverage (adjust user_id and card to match backfill options)
+pnpm wrangler d1 execute budget-db --local \
+  --command "SELECT count(*), min(date), max(date) FROM transactions WHERE user_id = 'usr_default' AND card = 'Historical';"
+
+# Verify distribution across categories and currencies
+pnpm wrangler d1 execute budget-db --local \
+  --command "SELECT currency, parent_bucket, subcategory, count(*) FROM transactions WHERE user_id = 'usr_default' AND card = 'Historical' GROUP BY 1, 2, 3 ORDER BY 1, 2, 4 DESC;"
+```
+
+### 8.4 Rollback
+
+Backfilled rows are scoped to the imported tenant (`user_id`) and default card `Historical` (unless `--default-card` was overridden). Always include both `user_id` and `card` in the deletion predicate to avoid deleting other tenants' data or live intake transactions:
+
+```bash
+# Roll back historical backfill for a specific tenant and card (replace --local with --remote if rolling back production)
+pnpm wrangler d1 execute budget-db --local \
+  --command "DELETE FROM transactions WHERE user_id = 'usr_default' AND card = 'Historical';"
+```

@@ -17,7 +17,7 @@ format:
 
 # Run TypeScript compiler checks
 typecheck:
-    pnpm tsc --noEmit
+    pnpm run typecheck
 
 # Run unit tests
 test:
@@ -34,6 +34,14 @@ db-migrate-local:
 # List all transactions from the local D1 database
 db-list-local:
     pnpm wrangler d1 execute budget-db --local --command "SELECT * FROM transactions"
+
+# Run dry-run backfill simulation across historical Google Sheets
+backfill-dry-run:
+    node scripts/backfill.ts --dry-run
+
+# Ingest historical Google Sheets into local D1 SQLite database
+backfill-local:
+    node scripts/backfill.ts --local
 
 # Build static assets with Astro
 build:
