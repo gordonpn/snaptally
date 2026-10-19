@@ -12,6 +12,7 @@ export interface OutboxItem {
   reimbursement: number;
   created_at: string;
   retry_count?: number;
+  server_retry_count?: number;
   rollback_retry_count?: number;
   next_retry_at?: number;
 }
@@ -103,12 +104,8 @@ function getFallbackDlqItems(): DeadLetterItem[] {
 
 function saveFallbackDlqItems(items: DeadLetterItem[]): void {
   memoryDlqFallback = [...items];
-  try {
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(DLQ_FALLBACK_STORAGE_KEY, JSON.stringify(items));
-    }
-  } catch {
-    // Ignore storage restriction
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem(DLQ_FALLBACK_STORAGE_KEY, JSON.stringify(items));
   }
 }
 
@@ -281,14 +278,48 @@ export async function saveDeadLetterItem(item: DeadLetterItem): Promise<void> {
   try {
     const db = await openDatabase();
     await new Promise<void>((resolve, reject) => {
+      let settled = false;
       const tx = db.transaction(DLQ_STORE_NAME, "readwrite");
       const store = tx.objectStore(DLQ_STORE_NAME);
       const req = store.put(item);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-      tx.oncomplete = () => db.close();
+      req.onsuccess = () => {
+        if (!settled) {
+          settled = true;
+          resolve();
+        }
+      };
+      req.onerror = () => {
+        if (!settled) {
+          settled = true;
+          reject(req.error);
+        }
+      };
+      tx.oncomplete = () => {
+        db.close();
+        if (!settled) {
+          settled = true;
+          resolve();
+        }
+      };
+      tx.onabort = () => {
+        db.close();
+        if (!settled) {
+          settled = true;
+          reject(tx.error ?? new Error("Transaction aborted"));
+        }
+      };
+      tx.onerror = () => {
+        db.close();
+        if (!settled) {
+          settled = true;
+          reject(tx.error ?? new Error("Transaction error"));
+        }
+      };
     });
-  } catch {
+  } catch (err) {
+    if (isIndexedDBAvailable()) {
+      throw err;
+    }
     const items = getFallbackDlqItems();
     const existingIndex = items.findIndex((i) => i.id === item.id);
     if (existingIndex >= 0) {
@@ -297,6 +328,32 @@ export async function saveDeadLetterItem(item: DeadLetterItem): Promise<void> {
       items.push(item);
     }
     saveFallbackDlqItems(items);
+  }
+}
+
+/**
+ * Quarantines an outbox transaction to the dead-letter queue and removes it from outbox.
+ * Returns true if quarantine succeeded, or false if persisting to DLQ failed.
+ */
+async function quarantineItem(
+  item: OutboxItem,
+  reason: string,
+  httpStatus?: number,
+): Promise<boolean> {
+  const dlqItem: DeadLetterItem = {
+    id: item.id,
+    payload: { ...item },
+    error_reason: reason,
+    http_status: httpStatus,
+    failed_at: new Date().toISOString(),
+    retry_count: item.server_retry_count ?? item.retry_count ?? 0,
+  };
+  try {
+    await saveDeadLetterItem(dlqItem);
+    await deleteOutboxItem(item.id);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -381,6 +438,7 @@ export async function requeueDeadLetterItem(id: string): Promise<void> {
   const restoredPayload: OutboxItem = {
     ...item.payload,
     retry_count: 0,
+    server_retry_count: 0,
     rollback_retry_count: 0,
     next_retry_at: undefined,
   };
@@ -411,19 +469,16 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
     options.onStatusChange?.(true, items.length);
 
     for (const item of items) {
-      if (item.gross_amount >= 0 && (item.retry_count ?? 0) >= MAX_SYNC_RETRIES) {
-        const dlqItem: DeadLetterItem = {
-          id: item.id,
-          payload: { ...item },
-          error_reason: "Exceeded maximum retry threshold",
-          failed_at: new Date().toISOString(),
-          retry_count: item.retry_count ?? MAX_SYNC_RETRIES,
-        };
-        await saveDeadLetterItem(dlqItem);
-        await deleteOutboxItem(item.id);
+      if (!options.force && (item.server_retry_count ?? 0) >= MAX_SYNC_RETRIES) {
+        const quarantined = await quarantineItem(item, "Exceeded maximum retry threshold");
         failedCount++;
         lastError = "Exceeded maximum retry threshold";
-        continue;
+        if (quarantined) {
+          continue;
+        }
+        item.next_retry_at = Date.now() + 60000;
+        await saveOutboxItem(item);
+        break;
       }
 
       if (
@@ -498,66 +553,46 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
           }
 
           // Permanently invalid payload; quarantine to DLQ to prevent blocking the queue and eliminate data loss
-          const dlqItem: DeadLetterItem = {
-            id: item.id,
-            payload: { ...item },
-            error_reason: errorMsg,
-            http_status: 400,
-            failed_at: new Date().toISOString(),
-            retry_count: item.retry_count ?? 0,
-          };
-          await saveDeadLetterItem(dlqItem);
-          await deleteOutboxItem(item.id);
+          const quarantined = await quarantineItem(item, errorMsg, 400);
           failedCount++;
           lastError = errorMsg;
-          continue;
+          if (quarantined) {
+            continue;
+          }
+          item.next_retry_at = Date.now() + 60000;
+          await saveOutboxItem(item);
+          break;
         }
 
         // Server error or unexpected status: apply exponential backoff (1s, 2s, 4s, capped at 60s)
-        const retryCount = (item.retry_count ?? 0) + 1;
-        item.retry_count = retryCount;
-        if (retryCount >= MAX_SYNC_RETRIES) {
-          const dlqItem: DeadLetterItem = {
-            id: item.id,
-            payload: { ...item },
-            error_reason: "Exceeded maximum retry threshold",
-            http_status: response.status,
-            failed_at: new Date().toISOString(),
-            retry_count: retryCount,
-          };
-          await saveDeadLetterItem(dlqItem);
-          await deleteOutboxItem(item.id);
+        const serverRetryCount = (item.server_retry_count ?? 0) + 1;
+        item.server_retry_count = serverRetryCount;
+        item.retry_count = (item.retry_count ?? 0) + 1;
+        if (serverRetryCount >= MAX_SYNC_RETRIES) {
+          const quarantined = await quarantineItem(
+            item,
+            "Exceeded maximum retry threshold",
+            response.status,
+          );
           failedCount++;
           lastError = "Exceeded maximum retry threshold";
-          continue;
+          if (quarantined) {
+            continue;
+          }
         }
 
-        const backoffMs = Math.min(60000, 1000 * 2 ** (retryCount - 1));
+        const backoffMs = Math.min(60000, 1000 * 2 ** (serverRetryCount - 1));
         item.next_retry_at = Date.now() + backoffMs;
         await saveOutboxItem(item);
         failedCount++;
         scheduleDueRetry(backoffMs, options, item.next_retry_at);
         transportHalted = true;
         break;
-      } catch (err) {
+      } catch {
         // Network error / offline: apply exponential backoff (1s, 2s, 4s, capped at 60s)
+        // Transport failures do not consume the server-error retry budget.
         const retryCount = (item.retry_count ?? 0) + 1;
         item.retry_count = retryCount;
-        if (retryCount >= MAX_SYNC_RETRIES) {
-          const dlqItem: DeadLetterItem = {
-            id: item.id,
-            payload: { ...item },
-            error_reason: err instanceof Error ? err.message : "Network error",
-            failed_at: new Date().toISOString(),
-            retry_count: retryCount,
-          };
-          await saveDeadLetterItem(dlqItem);
-          await deleteOutboxItem(item.id);
-          failedCount++;
-          lastError = dlqItem.error_reason;
-          continue;
-        }
-
         const backoffMs = Math.min(60000, 1000 * 2 ** (retryCount - 1));
         item.next_retry_at = Date.now() + backoffMs;
         await saveOutboxItem(item);

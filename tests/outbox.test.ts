@@ -1707,7 +1707,7 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
       gross_amount: 50.0,
       reimbursement: 0,
       created_at: "2026-10-02T10:00:00.000Z",
-      retry_count: 10, // Pre-exhausted at threshold
+      server_retry_count: 10, // Pre-exhausted at threshold
     };
 
     const healthyItem: OutboxItem = {
@@ -1773,7 +1773,7 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
       gross_amount: 60.0,
       reimbursement: 0,
       created_at: new Date().toISOString(),
-      retry_count: MAX_SYNC_RETRIES - 1, // Will reach 10 on this attempt
+      server_retry_count: MAX_SYNC_RETRIES - 1, // Will reach 10 on this attempt
     };
 
     await saveOutboxItem(item);
@@ -1804,6 +1804,126 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
       assert.strictEqual(dlq[0].retry_count, MAX_SYNC_RETRIES);
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("does not quarantine item on network error even when at MAX_SYNC_RETRIES - 1", async () => {
+    await clearOutbox();
+    await clearDeadLetterQueue();
+
+    const item: OutboxItem = {
+      id: "tx-network-near-max",
+      date: "2026-10-02",
+      card: "Chase Sapphire",
+      parent_bucket: "Fixed Costs",
+      subcategory: "Groceries",
+      merchant: "Trader Joe's",
+      gross_amount: 45.0,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+      server_retry_count: MAX_SYNC_RETRIES - 1,
+    };
+
+    await saveOutboxItem(item);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new TypeError("Failed to fetch: NetworkError");
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token" });
+      assert.strictEqual(result.syncedCount, 0);
+      assert.strictEqual(result.failedCount, 1);
+
+      // Must remain in outbox, not quarantined to DLQ
+      const outbox = await getOutbox();
+      assert.strictEqual(outbox.length, 1);
+      assert.strictEqual(outbox[0].id, "tx-network-near-max");
+      assert.strictEqual(outbox[0].server_retry_count, MAX_SYNC_RETRIES - 1);
+      assert.strictEqual(await getDeadLetterCount(), 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+      clearRetryTimer();
+    }
+  });
+
+  it("retains outbox item if saving to dead_letter_queue fails", async () => {
+    await clearOutbox();
+    await clearDeadLetterQueue();
+
+    const item: OutboxItem = {
+      id: "tx-dlq-fail-save",
+      date: "2026-10-02",
+      card: "Visa",
+      parent_bucket: "Fixed Costs",
+      subcategory: "Rent",
+      merchant: "Landlord",
+      gross_amount: 1200,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(item);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(JSON.stringify({ error: "Validation failed: invalid amount" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    const mockDb = {
+      objectStoreNames: {
+        contains: (_name: string) => true,
+      },
+      transaction: () => ({
+        objectStore: () => ({
+          put: () => {
+            const req: { onerror?: () => void; error?: Error } = {
+              error: new Error("QuotaExceededError"),
+            };
+            setTimeout(() => req.onerror?.(), 0);
+            return req;
+          },
+        }),
+        onabort: () => {},
+        onerror: (cb: () => void) => cb(),
+        oncomplete: () => {},
+      }),
+      close: () => {},
+    };
+
+    const originalIDB = globalThis.indexedDB;
+    Object.defineProperty(globalThis, "indexedDB", {
+      value: {
+        open: () => {
+          const req: { result: typeof mockDb; onsuccess?: () => void } = { result: mockDb };
+          setTimeout(() => req.onsuccess?.(), 0);
+          return req;
+        },
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    try {
+      const result = await syncOutbox({ token: "test-token" });
+      assert.strictEqual(result.failedCount, 1);
+
+      // Because DLQ save failed, the outbox record must NOT be deleted
+      const remaining = await getOutbox();
+      assert.strictEqual(remaining.length, 1);
+      assert.strictEqual(remaining[0].id, "tx-dlq-fail-save");
+    } finally {
+      Object.defineProperty(globalThis, "indexedDB", {
+        value: originalIDB,
+        writable: true,
+        configurable: true,
+      });
+      globalThis.fetch = originalFetch;
+      clearRetryTimer();
     }
   });
 
