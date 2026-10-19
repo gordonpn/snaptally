@@ -282,12 +282,6 @@ export async function saveDeadLetterItem(item: DeadLetterItem): Promise<void> {
       const tx = db.transaction(DLQ_STORE_NAME, "readwrite");
       const store = tx.objectStore(DLQ_STORE_NAME);
       const req = store.put(item);
-      req.onsuccess = () => {
-        if (!settled) {
-          settled = true;
-          resolve();
-        }
-      };
       req.onerror = () => {
         if (!settled) {
           settled = true;
@@ -317,7 +311,7 @@ export async function saveDeadLetterItem(item: DeadLetterItem): Promise<void> {
       };
     });
   } catch (err) {
-    if (isIndexedDBAvailable()) {
+    if (isIndexedDBAvailable() && typeof localStorage === "undefined") {
       throw err;
     }
     const items = getFallbackDlqItems();

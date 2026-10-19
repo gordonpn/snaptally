@@ -2089,12 +2089,15 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
           string,
           OutboxItem | DeadLetterItem
         >;
-        return {
+        const txObj = {
           objectStore: (_name: string) => ({
             put: (item: OutboxItem | DeadLetterItem) => {
               storeMap.set(item.id, item);
               const req: { onsuccess?: () => void; onerror?: () => void } = {};
-              setTimeout(() => req.onsuccess?.(), 0);
+              setTimeout(() => {
+                req.onsuccess?.();
+                txObj.oncomplete?.();
+              }, 0);
               return req;
             },
             getAll: () => {
@@ -2105,24 +2108,34 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
               } = {
                 result: Array.from(storeMap.values()),
               };
-              setTimeout(() => req.onsuccess?.(), 0);
+              setTimeout(() => {
+                req.onsuccess?.();
+                txObj.oncomplete?.();
+              }, 0);
               return req;
             },
             delete: (id: string) => {
               storeMap.delete(id);
               const req: { onsuccess?: () => void; onerror?: () => void } = {};
-              setTimeout(() => req.onsuccess?.(), 0);
+              setTimeout(() => {
+                req.onsuccess?.();
+                txObj.oncomplete?.();
+              }, 0);
               return req;
             },
             clear: () => {
               storeMap.clear();
               const req: { onsuccess?: () => void; onerror?: () => void } = {};
-              setTimeout(() => req.onsuccess?.(), 0);
+              setTimeout(() => {
+                req.onsuccess?.();
+                txObj.oncomplete?.();
+              }, 0);
               return req;
             },
           }),
           oncomplete: () => {},
         };
+        return txObj;
       },
       close: () => {},
     };
@@ -2249,6 +2262,67 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
         writable: true,
         configurable: true,
       });
+    }
+  });
+
+  it("retains outbox item if saving to dead_letter_queue fails in localStorage fallback", async () => {
+    await clearOutbox();
+    await clearDeadLetterQueue();
+
+    const item: OutboxItem = {
+      id: "tx-ls-fail-dlq",
+      date: "2026-10-02",
+      card: "Visa",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Failing Storage",
+      gross_amount: 10,
+      reimbursement: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    await saveOutboxItem(item);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(JSON.stringify({ error: "Invalid payload format" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    const failingStorage = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+      removeItem: () => {},
+      clear: () => {},
+    };
+
+    const originalLocalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, "localStorage", {
+      value: failingStorage,
+      writable: true,
+      configurable: true,
+    });
+
+    try {
+      const result = await syncOutbox({ token: "test-token" });
+      assert.strictEqual(result.failedCount, 1);
+
+      // Must remain in outbox because DLQ write failed
+      const remaining = await getOutbox();
+      assert.strictEqual(remaining.length, 1);
+      assert.strictEqual(remaining[0].id, "tx-ls-fail-dlq");
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", {
+        value: originalLocalStorage,
+        writable: true,
+        configurable: true,
+      });
+      globalThis.fetch = originalFetch;
+      clearRetryTimer();
     }
   });
 });
