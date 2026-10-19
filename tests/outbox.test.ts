@@ -678,26 +678,38 @@ describe("IndexedDB Native Storage Branch", () => {
             put: (item: OutboxItem) => {
               store.set(item.id, item);
               const req: { onsuccess?: () => void; onerror?: () => void } = {};
-              setTimeout(() => req.onsuccess?.(), 0);
+              setTimeout(() => {
+                req.onsuccess?.();
+                txObj.oncomplete?.();
+              }, 0);
               return req;
             },
             getAll: () => {
               const req: { result?: OutboxItem[]; onsuccess?: () => void; onerror?: () => void } = {
                 result: Array.from(store.values()),
               };
-              setTimeout(() => req.onsuccess?.(), 0);
+              setTimeout(() => {
+                req.onsuccess?.();
+                txObj.oncomplete?.();
+              }, 0);
               return req;
             },
             delete: (id: string) => {
               store.delete(id);
               const req: { onsuccess?: () => void; onerror?: () => void } = {};
-              setTimeout(() => req.onsuccess?.(), 0);
+              setTimeout(() => {
+                req.onsuccess?.();
+                txObj.oncomplete?.();
+              }, 0);
               return req;
             },
             clear: () => {
               store.clear();
               const req: { onsuccess?: () => void; onerror?: () => void } = {};
-              setTimeout(() => req.onsuccess?.(), 0);
+              setTimeout(() => {
+                req.onsuccess?.();
+                txObj.oncomplete?.();
+              }, 0);
               return req;
             },
           }),
@@ -966,16 +978,22 @@ describe("Sync Listeners (Scenario 2)", () => {
       createObjectStore: (name: string, _opts: unknown) => {
         createdStoreNames.push(name);
       },
-      transaction: () => ({
-        objectStore: () => ({
-          put: () => {
-            const req: { onsuccess?: () => void } = {};
-            setTimeout(() => req.onsuccess?.(), 0);
-            return req;
-          },
-        }),
-        oncomplete: () => {},
-      }),
+      transaction: () => {
+        const txObj = {
+          objectStore: () => ({
+            put: () => {
+              const req: { onsuccess?: () => void } = {};
+              setTimeout(() => {
+                req.onsuccess?.();
+                txObj.oncomplete?.();
+              }, 0);
+              return req;
+            },
+          }),
+          oncomplete: () => {},
+        };
+        return txObj;
+      },
       close: () => {},
     };
 
@@ -1971,6 +1989,174 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
     await requeueDeadLetterItem("non-existent-id");
     assert.strictEqual(await getDeadLetterCount(), 0);
     assert.strictEqual(await getOutboxCount(), 0);
+  });
+
+  it("retains item in DLQ if requeue outbox transaction aborts or fails in IndexedDB", async () => {
+    await clearOutbox();
+    await clearDeadLetterQueue();
+
+    const dlqItem: DeadLetterItem = {
+      id: "tx-requeue-abort",
+      payload: {
+        id: "tx-requeue-abort",
+        date: "2026-10-02",
+        card: "Visa",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
+        merchant: "Cafe",
+        gross_amount: 15.0,
+        reimbursement: 0,
+        created_at: new Date().toISOString(),
+      },
+      error_reason: "Exceeded maximum retry threshold",
+      http_status: 500,
+      failed_at: new Date().toISOString(),
+      retry_count: 10,
+    };
+
+    const dlqStore = new Map<string, DeadLetterItem>([["tx-requeue-abort", dlqItem]]);
+
+    const mockDb = {
+      objectStoreNames: {
+        contains: (name: string) => name === STORE_NAME || name === DLQ_STORE_NAME,
+      },
+      transaction: (storeName: string) => {
+        if (storeName === DLQ_STORE_NAME) {
+          const txObj = {
+            objectStore: () => ({
+              getAll: () => {
+                const req: { result?: DeadLetterItem[]; onsuccess?: () => void } = {
+                  result: Array.from(dlqStore.values()),
+                };
+                setTimeout(() => {
+                  req.onsuccess?.();
+                  txObj.oncomplete?.();
+                }, 0);
+                return req;
+              },
+              delete: (id: string) => {
+                dlqStore.delete(id);
+                const req: { onsuccess?: () => void } = {};
+                setTimeout(() => {
+                  req.onsuccess?.();
+                  txObj.oncomplete?.();
+                }, 0);
+                return req;
+              },
+            }),
+            oncomplete: () => {},
+          };
+          return txObj;
+        }
+        const txObj = {
+          objectStore: () => ({
+            put: () => {
+              const req: { onerror?: () => void; error?: Error } = {
+                error: new Error("QuotaExceededError"),
+              };
+              setTimeout(() => {
+                req.onerror?.();
+                txObj.onabort?.();
+              }, 0);
+              return req;
+            },
+          }),
+          onabort: () => {},
+          onerror: () => {},
+          oncomplete: () => {},
+        };
+        return txObj;
+      },
+      close: () => {},
+    };
+
+    const originalIDB = globalThis.indexedDB;
+    Object.defineProperty(globalThis, "indexedDB", {
+      value: {
+        open: () => {
+          const req: { result: typeof mockDb; onsuccess?: () => void } = { result: mockDb };
+          setTimeout(() => req.onsuccess?.(), 0);
+          return req;
+        },
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    try {
+      await requeueDeadLetterItem("tx-requeue-abort");
+
+      // Because outbox write failed, item must remain in DLQ
+      assert.strictEqual(dlqStore.has("tx-requeue-abort"), true);
+    } finally {
+      Object.defineProperty(globalThis, "indexedDB", {
+        value: originalIDB,
+        writable: true,
+        configurable: true,
+      });
+    }
+  });
+
+  it("skips exhausted item during threshold pre-check when next_retry_at is in the future, allowing tail items to sync", async () => {
+    await clearOutbox();
+    await clearDeadLetterQueue();
+
+    const exhaustedWithBackoff: OutboxItem = {
+      id: "tx-exhausted-backed-off",
+      date: "2026-10-02",
+      card: "Chase Sapphire",
+      parent_bucket: "Fixed Costs",
+      subcategory: "Groceries",
+      merchant: "Trader Joe's",
+      gross_amount: 50.0,
+      reimbursement: 0,
+      created_at: "2026-10-02T10:00:00.000Z",
+      server_retry_count: 10,
+      next_retry_at: Date.now() + 60000,
+    };
+
+    const validTailItem: OutboxItem = {
+      id: "tx-valid-tail-sync",
+      date: "2026-10-02",
+      card: "Amex Gold",
+      parent_bucket: "Guilt-Free",
+      subcategory: "Dining",
+      merchant: "Chipotle",
+      gross_amount: 15.0,
+      reimbursement: 0,
+      created_at: "2026-10-02T10:05:00.000Z",
+    };
+
+    await saveOutboxItem(exhaustedWithBackoff);
+    await saveOutboxItem(validTailItem);
+
+    const originalFetch = globalThis.fetch;
+    const syncedIds: string[] = [];
+
+    globalThis.fetch = (async (_url: unknown, options: { body?: string }) => {
+      if (options?.body) {
+        const payload = JSON.parse(options.body) as { id: string };
+        syncedIds.push(payload.id);
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await syncOutbox({ token: "test-token" });
+
+      // Valid tail item must sync while backed-off exhausted item is deferred
+      assert.strictEqual(result.syncedCount, 1);
+      assert.deepStrictEqual(syncedIds, ["tx-valid-tail-sync"]);
+
+      const outbox = await getOutbox();
+      assert.strictEqual(outbox.length, 1);
+      assert.strictEqual(outbox[0].id, "tx-exhausted-backed-off");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("deletes a dead-letter item permanently", async () => {

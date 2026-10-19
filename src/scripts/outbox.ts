@@ -150,7 +150,7 @@ export function normalizeOutboxSubcategory(parentBucket: string, subcategory: st
 /**
  * Saves a transaction to the local IndexedDB outbox.
  */
-export async function saveOutboxItem(item: OutboxItem): Promise<void> {
+export async function saveOutboxItem(item: OutboxItem): Promise<boolean> {
   const normalizedItem: OutboxItem = {
     ...item,
     subcategory: normalizeOutboxSubcategory(item.parent_bucket, item.subcategory),
@@ -158,13 +158,39 @@ export async function saveOutboxItem(item: OutboxItem): Promise<void> {
   try {
     const db = await openDatabase();
     await new Promise<void>((resolve, reject) => {
+      let settled = false;
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
       const req = store.put(normalizedItem);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-      tx.oncomplete = () => db.close();
+      req.onerror = () => {
+        if (!settled) {
+          settled = true;
+          reject(req.error);
+        }
+      };
+      tx.oncomplete = () => {
+        db.close();
+        if (!settled) {
+          settled = true;
+          resolve();
+        }
+      };
+      tx.onabort = () => {
+        db.close();
+        if (!settled) {
+          settled = true;
+          reject(tx.error ?? new Error("Outbox transaction aborted"));
+        }
+      };
+      tx.onerror = () => {
+        db.close();
+        if (!settled) {
+          settled = true;
+          reject(tx.error ?? new Error("Outbox transaction error"));
+        }
+      };
     });
+    return true;
   } catch {
     const items = getFallbackItems();
     const existingIndex = items.findIndex((i) => i.id === normalizedItem.id);
@@ -174,6 +200,7 @@ export async function saveOutboxItem(item: OutboxItem): Promise<void> {
       items.push(normalizedItem);
     }
     saveFallbackItems(items);
+    return false;
   }
 }
 
@@ -275,45 +302,10 @@ export async function clearOutbox(): Promise<void> {
  * Saves or updates a transaction in the local dead-letter queue.
  */
 export async function saveDeadLetterItem(item: DeadLetterItem): Promise<void> {
+  let db: IDBDatabase;
   try {
-    const db = await openDatabase();
-    await new Promise<void>((resolve, reject) => {
-      let settled = false;
-      const tx = db.transaction(DLQ_STORE_NAME, "readwrite");
-      const store = tx.objectStore(DLQ_STORE_NAME);
-      const req = store.put(item);
-      req.onerror = () => {
-        if (!settled) {
-          settled = true;
-          reject(req.error);
-        }
-      };
-      tx.oncomplete = () => {
-        db.close();
-        if (!settled) {
-          settled = true;
-          resolve();
-        }
-      };
-      tx.onabort = () => {
-        db.close();
-        if (!settled) {
-          settled = true;
-          reject(tx.error ?? new Error("Transaction aborted"));
-        }
-      };
-      tx.onerror = () => {
-        db.close();
-        if (!settled) {
-          settled = true;
-          reject(tx.error ?? new Error("Transaction error"));
-        }
-      };
-    });
-  } catch (err) {
-    if (isIndexedDBAvailable() && typeof localStorage === "undefined") {
-      throw err;
-    }
+    db = await openDatabase();
+  } catch {
     const items = getFallbackDlqItems();
     const existingIndex = items.findIndex((i) => i.id === item.id);
     if (existingIndex >= 0) {
@@ -322,7 +314,42 @@ export async function saveDeadLetterItem(item: DeadLetterItem): Promise<void> {
       items.push(item);
     }
     saveFallbackDlqItems(items);
+    return;
   }
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const tx = db.transaction(DLQ_STORE_NAME, "readwrite");
+    const store = tx.objectStore(DLQ_STORE_NAME);
+    const req = store.put(item);
+    req.onerror = () => {
+      if (!settled) {
+        settled = true;
+        reject(req.error);
+      }
+    };
+    tx.oncomplete = () => {
+      db.close();
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    };
+    tx.onabort = () => {
+      db.close();
+      if (!settled) {
+        settled = true;
+        reject(tx.error ?? new Error("Transaction aborted"));
+      }
+    };
+    tx.onerror = () => {
+      db.close();
+      if (!settled) {
+        settled = true;
+        reject(tx.error ?? new Error("Transaction error"));
+      }
+    };
+  });
 }
 
 /**
@@ -437,8 +464,10 @@ export async function requeueDeadLetterItem(id: string): Promise<void> {
     next_retry_at: undefined,
   };
 
-  await saveOutboxItem(restoredPayload);
-  await deleteDeadLetterItem(id);
+  const savedInIndexedDB = await saveOutboxItem(restoredPayload);
+  if (savedInIndexedDB || !isIndexedDBAvailable()) {
+    await deleteDeadLetterItem(id);
+  }
 }
 
 let isSyncInProgress = false;
@@ -463,7 +492,11 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
     options.onStatusChange?.(true, items.length);
 
     for (const item of items) {
-      if (!options.force && (item.server_retry_count ?? 0) >= MAX_SYNC_RETRIES) {
+      if (
+        !options.force &&
+        (item.server_retry_count ?? 0) >= MAX_SYNC_RETRIES &&
+        !(item.next_retry_at && Date.now() < item.next_retry_at)
+      ) {
         const quarantined = await quarantineItem(item, "Exceeded maximum retry threshold");
         failedCount++;
         lastError = "Exceeded maximum retry threshold";
