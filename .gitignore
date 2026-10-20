@@ -14,4 +14,5 @@ coverage/
 data/
 *.csv
 !tests/fixtures/backfill/*.csv
+.backups/
 .agent/HANDOFF.md
