@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -43,30 +43,43 @@ describe("Database Backup Script (scripts/db-backup.sh)", () => {
     assert.match(result.stdout, /Usage: .*db-backup\.sh/);
   });
 
+  it("fails when neither --remote nor --local is specified", () => {
+    const result = runScript([]);
+    assert.strictEqual(result.status, 1);
+    assert.match(result.stderr, /Target is required: specify either --remote or --local/);
+  });
+
+  it("fails when both --remote and --local are specified", () => {
+    const result = runScript(["--remote", "--local"]);
+    assert.strictEqual(result.status, 1);
+    assert.match(result.stderr, /Cannot specify both --remote and --local/);
+  });
+
   it("fails when an unknown option is passed", () => {
-    const result = runScript(["--unknown-flag"]);
+    const result = runScript(["--local", "--unknown-flag"]);
     assert.strictEqual(result.status, 1);
     assert.match(result.stderr, /Unknown argument: --unknown-flag/);
   });
 
   it("fails when --db is missing its argument", () => {
-    const result = runScript(["--db"]);
+    const result = runScript(["--local", "--db"]);
     assert.strictEqual(result.status, 1);
     assert.match(result.stderr, /--db requires a database name/);
   });
 
   it("fails when --output-dir is missing its argument", () => {
-    const result = runScript(["--output-dir"]);
+    const result = runScript(["--local", "--output-dir"]);
     assert.strictEqual(result.status, 1);
     assert.match(result.stderr, /--output-dir requires a directory path/);
   });
 
-  it("fails when an invalid database name is provided", () => {
+  it("fails with informative error when an invalid database name is provided", () => {
     const result = runScript(["--local", "--db", "nonexistent-db", "--output-dir", tempDir]);
     assert.strictEqual(result.status, 1);
+    assert.match(result.stderr, /nonexistent-db/);
   });
 
-  it("exports local D1 database snapshot cleanly into target directory", () => {
+  it("exports local D1 database snapshot cleanly with restrictive permissions", () => {
     const result = runScript(["--local", "--db", "budget-db", "--output-dir", tempDir]);
     assert.strictEqual(result.status, 0);
     assert.match(result.stdout, /Backup created successfully:/);
@@ -78,6 +91,12 @@ describe("Database Backup Script (scripts/db-backup.sh)", () => {
     const content = readFileSync(backupFile, "utf-8");
 
     assert.ok(content.length > 0);
-    assert.match(content, /(CREATE TABLE|PRAGMA|INSERT INTO)/);
+    assert.match(content, /CREATE TABLE.*transactions/);
+
+    const fileStat = statSync(backupFile);
+    assert.strictEqual(fileStat.mode & 0o777, 0o600);
+
+    const dirStat = statSync(tempDir);
+    assert.strictEqual(dirStat.mode & 0o777, 0o700);
   });
 });
