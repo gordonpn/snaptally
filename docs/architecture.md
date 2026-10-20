@@ -77,8 +77,8 @@ The application uses native IndexedDB (`snaptally_db`, object store `outbox`) wi
 
 The header queue badges open a native Sync Status dialog. Queue contents render
 only while it is open. Pending records can be synced immediately; quarantined
-records expose their rejection reason and can be retried or discarded after
-confirmation. Authentication and failed-item warnings remain separate from form
+records expose their rejection reason and can be retried immediately or
+discarded after confirmation. Authentication and failed-item warnings remain separate from form
 status messages. Intake sync requests run sequentially and refresh both queue
 counts after completion.
 
