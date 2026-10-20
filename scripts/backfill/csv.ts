@@ -13,7 +13,7 @@ export function parseCsv(content: string): string[][] {
     const char = normalizedContent[i];
 
     if (char === '"') {
-      if (inQuotes && content[i + 1] === '"') {
+      if (inQuotes && normalizedContent[i + 1] === '"') {
         currentField += '"';
         i++;
       } else {
@@ -23,7 +23,7 @@ export function parseCsv(content: string): string[][] {
       currentRow.push(currentField.trim());
       currentField = "";
     } else if ((char === "\r" || char === "\n") && !inQuotes) {
-      if (char === "\r" && content[i + 1] === "\n") {
+      if (char === "\r" && normalizedContent[i + 1] === "\n") {
         i++;
       }
       currentRow.push(currentField.trim());

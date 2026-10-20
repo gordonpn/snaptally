@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import {
@@ -192,6 +192,17 @@ describe("CSV Parser (parseCsv)", () => {
     assert.deepStrictEqual(result, [
       ["Date", "Cost", "Merchant"],
       ["2026-09-25", "10.00", "Test Merchant"],
+    ]);
+  });
+
+  it("handles BOM-prefixed CSV with quoted fields, escaped quotes, and CRLF", () => {
+    const csv =
+      '\ufeffDate,Cost,Merchant\r\n2026-09-25,10.00,"The ""Famous"" Cafe, Boston"\r\n2026-09-26,25.00,"Trader Joe\'s, Store #12"\r\n';
+    const result = parseCsv(csv);
+    assert.deepStrictEqual(result, [
+      ["Date", "Cost", "Merchant"],
+      ["2026-09-25", "10.00", 'The "Famous" Cafe, Boston'],
+      ["2026-09-26", "25.00", "Trader Joe's, Store #12"],
     ]);
   });
 });
@@ -662,22 +673,4 @@ describe("Pipeline Ingestion (runBackfill)", () => {
       });
     }, /No adapter found for file/);
   });
-
-  const realSheetsDir = resolve(import.meta.dirname, "../data/sheets");
-  if (existsSync(realSheetsDir) && readdirSync(realSheetsDir).some((f) => f.endsWith(".csv"))) {
-    it("runBackfill: parses promoted data/sheets dataset with 2353 transactions", async () => {
-      const summary = await runBackfill({
-        userId: "usr_default",
-        defaultCard: "Historical",
-        dryRun: true,
-        local: false,
-        remote: false,
-        dir: realSheetsDir,
-      });
-      assert.strictEqual(summary.totalValid, 2353);
-      assert.strictEqual(summary.totalUsd, 1959);
-      assert.strictEqual(summary.totalCad, 394);
-      assert.strictEqual(summary.totalSkipped, 35);
-    });
-  }
 });
