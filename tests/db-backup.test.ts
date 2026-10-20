@@ -75,6 +75,12 @@ describe("Database Backup Script (scripts/db-backup.sh)", () => {
     assert.match(result.stderr, /--db requires a database name/);
   });
 
+  it("fails when --database is missing its argument", () => {
+    const result = runScript(["--local", "--database"]);
+    assert.strictEqual(result.status, 1);
+    assert.match(result.stderr, /--database requires a database name/);
+  });
+
   it("fails when --output-dir is missing its argument", () => {
     const result = runScript(["--local", "--output-dir"]);
     assert.strictEqual(result.status, 1);
@@ -82,13 +88,13 @@ describe("Database Backup Script (scripts/db-backup.sh)", () => {
   });
 
   it("fails with informative error when an invalid database name is provided", () => {
-    const result = runScript(["--local", "--db", "nonexistent-db", "--output-dir", tempDir]);
+    const result = runScript(["--local", "--database", "nonexistent-db", "--output-dir", tempDir]);
     assert.strictEqual(result.status, 1);
     assert.match(result.stderr, /nonexistent-db/);
   });
 
   it("exports local D1 database snapshot cleanly with restrictive permissions", () => {
-    const result = runScript(["--local", "--db", "budget-db", "--output-dir", tempDir]);
+    const result = runScript(["--local", "--database", "budget-db", "--output-dir", tempDir]);
     assert.strictEqual(result.status, 0);
     assert.match(result.stdout, /Backup created successfully:/);
 
@@ -106,5 +112,16 @@ describe("Database Backup Script (scripts/db-backup.sh)", () => {
 
     const dirStat = statSync(tempDir);
     assert.strictEqual(dirStat.mode & 0o777, 0o700);
+  });
+
+  it("preserves previous snapshots without overwriting when multiple backups run", () => {
+    const result1 = runScript(["--local", "--db", "budget-db", "--output-dir", tempDir]);
+    assert.strictEqual(result1.status, 0);
+
+    const result2 = runScript(["--local", "--db", "budget-db", "--output-dir", tempDir]);
+    assert.strictEqual(result2.status, 0);
+
+    const files = readdirSync(tempDir).filter((f) => f.endsWith(".sql"));
+    assert.strictEqual(files.length, 2);
   });
 });

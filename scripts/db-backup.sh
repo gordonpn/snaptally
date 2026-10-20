@@ -30,9 +30,9 @@ while [[ $# -gt 0 ]]; do
       TARGET="--local"
       shift
       ;;
-    --db)
+    --db|--database)
       if [[ -z "${2:-}" ]]; then
-        echo "Error: --db requires a database name" >&2
+        echo "Error: $1 requires a database name" >&2
         exit 1
       fi
       DB_NAME="$2"
@@ -65,13 +65,9 @@ fi
 mkdir -p "$OUTPUT_DIR"
 chmod 0700 "$OUTPUT_DIR"
 
-TIMESTAMP="$(date +"%Y%m%d_%H%M%S")"
+TIMESTAMP="$(date -u +"%Y%m%d_%H%M%S")"
 OUTPUT_FILE="${OUTPUT_DIR}/${DB_NAME}_${TIMESTAMP}.sql"
-if [[ -f "$OUTPUT_FILE" ]]; then
-  OUTPUT_FILE="${OUTPUT_DIR}/${DB_NAME}_${TIMESTAMP}_$$.sql"
-fi
-
-TMP_FILE="${OUTPUT_FILE}.tmp.$$"
+TMP_FILE="${OUTPUT_DIR}/${DB_NAME}_${TIMESTAMP}_$$.tmp"
 trap 'rm -f "$TMP_FILE"' EXIT INT TERM
 
 echo "Exporting Cloudflare D1 database '${DB_NAME}' (${TARGET})..."
@@ -94,6 +90,14 @@ if ! grep -q -E 'CREATE TABLE.*transactions' "$TMP_FILE"; then
 fi
 
 # Atomically move the validated export into place
+if [[ -e "$OUTPUT_FILE" ]]; then
+  COUNTER=1
+  while [[ -e "${OUTPUT_DIR}/${DB_NAME}_${TIMESTAMP}_${COUNTER}.sql" ]]; do
+    ((COUNTER++))
+  done
+  OUTPUT_FILE="${OUTPUT_DIR}/${DB_NAME}_${TIMESTAMP}_${COUNTER}.sql"
+fi
+
 mv "$TMP_FILE" "$OUTPUT_FILE"
 chmod 0600 "$OUTPUT_FILE"
 trap - EXIT INT TERM
