@@ -85,20 +85,39 @@ if [[ ! -s "$TMP_FILE" ]]; then
 fi
 
 if ! grep -q -E 'CREATE TABLE.*transactions' "$TMP_FILE"; then
-  echo "Error: Backup file is missing required application schema ('transactions' table): $OUTPUT_FILE" >&2
+  echo "Error: Export of '${DB_NAME}' (${TARGET}) is missing required application schema ('transactions' table)" >&2
   exit 1
 fi
 
-# Atomically move the validated export into place
-if [[ -e "$OUTPUT_FILE" ]]; then
-  COUNTER=1
-  while [[ -e "${OUTPUT_DIR}/${DB_NAME}_${TIMESTAMP}_${COUNTER}.sql" ]]; do
-    ((COUNTER++))
-  done
-  OUTPUT_FILE="${OUTPUT_DIR}/${DB_NAME}_${TIMESTAMP}_${COUNTER}.sql"
-fi
+# Atomically reserve and publish a collision-free filename
+COUNTER=0
+while :; do
+  if (( COUNTER == 0 )); then
+    CANDIDATE="$OUTPUT_FILE"
+  else
+    CANDIDATE="${OUTPUT_DIR}/${DB_NAME}_${TIMESTAMP}_${COUNTER}.sql"
+  fi
 
-mv "$TMP_FILE" "$OUTPUT_FILE"
+  if ln "$TMP_FILE" "$CANDIDATE" 2>/dev/null; then
+    OUTPUT_FILE="$CANDIDATE"
+    rm -f "$TMP_FILE"
+    break
+  fi
+
+  if [[ -e "$CANDIDATE" ]]; then
+    ((COUNTER += 1))
+    continue
+  fi
+
+  if mv "$TMP_FILE" "$CANDIDATE" 2>/dev/null; then
+    OUTPUT_FILE="$CANDIDATE"
+    break
+  fi
+
+  echo "Error: Could not reserve backup file: $CANDIDATE" >&2
+  exit 1
+done
+
 chmod 0600 "$OUTPUT_FILE"
 trap - EXIT INT TERM
 
