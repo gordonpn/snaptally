@@ -474,6 +474,10 @@ just backfill-local
 Only after the local results are reviewed and the source sheets are final, ingest into production:
 
 ```bash
+# 3. Take pre-flight snapshot backup of production D1
+just db-backup-remote
+
+# 4. Ingest into production
 node scripts/backfill.ts --remote
 ```
 

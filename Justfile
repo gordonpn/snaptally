@@ -35,6 +35,14 @@ db-migrate-local:
 db-list-local:
     pnpm wrangler d1 execute budget-db --local --command "SELECT * FROM transactions"
 
+# Export pre-flight snapshot of production Cloudflare D1 database
+db-backup-remote:
+    bash scripts/db-backup.sh --remote
+
+# Export pre-flight snapshot of local D1 database
+db-backup-local:
+    bash scripts/db-backup.sh --local
+
 # Run dry-run backfill simulation across historical Google Sheets
 backfill-dry-run:
     node scripts/backfill.ts --dry-run
