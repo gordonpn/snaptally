@@ -1,38 +1,33 @@
 # Project Execution Queue
 
-- **Last Refined:** 2026-10-20 14:25 EDT
+- **Last Refined:** 2026-10-20 14:46 EDT
 - **Repository:** gordonpn/snaptally
 - **GitHub Backlog:** https://github.com/gordonpn/snaptally/issues
 
 ## NOW - Recommended Next Task
 
-### [#107: Data: Categorize and ingest 7 held international FX transactions ($538.28 USD)](https://github.com/gordonpn/snaptally/issues/107)
-- **Priority:** P1
-- **Effort:** XS
+### [#96: Feat: Implement Outbox and Sync Status Drawer in mobile intake UI](https://github.com/gordonpn/snaptally/issues/96)
+- **Priority:** P0
+- **Effort:** S
 - **Readiness:** READY
-- **Why this task is next:** Captures $538.28 USD of converted CAD expenses (Klarna Walmart Canada, Sapporo Stellar Place, Don Quijote) into `data/sheets/`, bringing verified transactions from 2,353 to 2,360 before the production backfill (#101) is executed.
-- **First implementation action:** Append the 7 rows into their target CSV sheets (`Budgeting - Canada food expenses.csv` and `Budgeting - Stuff.csv`).
-- **Definition of Done:** `just backfill-dry-run` reports exactly 2,360 valid transactions with zero duplicate IDs and 35 skipped rows.
-- **Unblocks:** Ingesting the complete 2,360-transaction ledger in [#101: Ops: Execute historical Google Sheets backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101).
+- **Why this task is next:** Completes the high-priority mobile sync status workflow and closes Epic #94; its prerequisite #95 is complete.
+- **First implementation action:** Inspect the intake badge and outbox/DLQ APIs, then map the remaining UI behavior to the existing tests.
+- **Definition of Done:** The drawer, retry/discard actions, and persistent failure banner meet the issue acceptance criteria with tests and mobile UI verification.
+- **Unblocks:** Closes [Epic #94](https://github.com/gordonpn/snaptally/issues/94).
 
 ## NEXT - Upcoming Work
 
-1. **[#101: Ops: Execute historical Google Sheets backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101)**
-   - **Priority:** P0 | **Effort:** S | **Readiness:** READY (unblocked by #103)
-   - **Dependencies:** #103 (Merged in PR #110), optionally #107 (to include all 2,360 transactions)
-   - **Reason:** Ingests the complete verified transaction dataset into production D1 using `just db-backup-remote` pre-flight snapshot, establishing SnapTally's live ledger.
+1. **[#108: Data: Triage and resolve 121 statement items in batch-4 reconciliation review queue](https://github.com/gordonpn/snaptally/issues/108)**
+   - **Priority:** P2 | **Effort:** M | **Readiness:** READY (unblocked by #107)
+   - **Dependencies:** #106 and #107 (dataset promotion and held FX transactions are complete)
+   - **Reason:** Resolves 84 candidate matches and 37 unmatched debits/refunds from statement extracts.
 
-2. **[#96: Feat: Implement Outbox and Sync Status Drawer in mobile intake UI](https://github.com/gordonpn/snaptally/issues/96)**
-   - **Priority:** P0 | **Effort:** S | **Readiness:** READY
-   - **Dependencies:** #95 (Completed in PR #102)
-   - **Reason:** Closes [Epic #94](https://github.com/gordonpn/snaptally/issues/94). Exposes Dead-Letter Queue items, retry actions, and manual sync controls directly to the mobile user.
+2. **[#101: Ops: Execute historical Google Sheets backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101)**
+   - **Priority:** P0 | **Effort:** S | **Readiness:** BLOCKED (requires explicit authorization for production writes)
+   - **Dependencies:** #103, #106, and #107 (all completed)
+   - **Reason:** Populates production D1 after a pre-flight backup; the verified active dataset now has 2,360 rows (1,966 USD, 394 CAD, 35 skipped).
 
-3. **[#108: Data: Triage and resolve 121 statement items in batch-4 reconciliation review queue](https://github.com/gordonpn/snaptally/issues/108)**
-   - **Priority:** P2 | **Effort:** M | **Readiness:** BLOCKED (by #107)
-   - **Dependencies:** #107
-   - **Reason:** Resolves 84 candidate matches and 37 unmatched debits/refunds from statement extracts (PayPal, Capital One, Discover).
-
-4. **[#78: Ops: Codify automated dependency maintenance and vulnerability remediation (.github/dependabot.yml)](https://github.com/gordonpn/snaptally/issues/78)**
+3. **[#78: Ops: Codify automated dependency maintenance and vulnerability remediation (.github/dependabot.yml)](https://github.com/gordonpn/snaptally/issues/78)**
    - **Priority:** P1 | **Effort:** S | **Readiness:** READY
    - **Dependencies:** None
    - **Reason:** Remediates active security vulnerabilities reported by `pnpm audit` (undici/miniflare/wrangler) and automates monthly maintenance.
@@ -41,10 +36,11 @@
 
 - **[#103: Ops: Codify automated pre-flight D1 snapshot and backup recipe](https://github.com/gordonpn/snaptally/issues/103)**: Resolved in PR #110. Created `scripts/db-backup.sh`, added `just db-backup-remote` and `just db-backup-local`, gitignored `.backups/`, and updated backfill runbook.
 - **[#106: Data: Promote reconciled batch-4 budget CSVs (2,353 transactions) to primary backfill source](https://github.com/gordonpn/snaptally/issues/106)**: Resolved in PR #109. Primary backfill dataset promoted to 2,353 valid transactions across 12 sheets with BOM-hardened CSV parsing.
+- **[#107: Data: Categorize and ingest 7 held international FX transactions ($538.28 USD)](https://github.com/gordonpn/snaptally/issues/107)**: Appended seven converted transactions to the ignored active Stuff sheet; dry-run reports 2,360 valid transactions and a direct parse confirmed unique IDs. Issue remains open for maintainer review.
 
 ## BLOCKERS
 
-- None. (Issue #101 is now unblocked following the merge of #103 in PR #110.)
+- Production execution in #101 requires explicit authorization before writing to Cloudflare D1.
 
 ## LATER
 
