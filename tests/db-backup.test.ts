@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, beforeEach, describe, it } from "node:test";
+import { afterEach, before, beforeEach, describe, it } from "node:test";
 
 const SCRIPT_PATH = resolve(import.meta.dirname, "../scripts/db-backup.sh");
 
@@ -26,6 +26,14 @@ function runScript(args: readonly string[]): { status: number; stdout: string; s
 
 describe("Database Backup Script (scripts/db-backup.sh)", () => {
   let tempDir: string;
+
+  before(() => {
+    execFileSync("pnpm", ["wrangler", "d1", "migrations", "apply", "budget-db", "--local"], {
+      input: "y\n",
+      encoding: "utf-8",
+      env: { ...process.env, NODE_V8_COVERAGE: "" },
+    });
+  });
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "snaptally-backup-test-"));
