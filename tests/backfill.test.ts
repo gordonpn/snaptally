@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import {
@@ -184,6 +184,15 @@ describe("CSV Parser (parseCsv)", () => {
     assert.strictEqual(result.length, 3);
     assert.deepStrictEqual(result[1], ["2026-09-25", "10.00"]);
     assert.deepStrictEqual(result[2], ["2026-09-26", "20.00"]);
+  });
+
+  it("strips UTF-8 byte order mark (BOM) from content transparently", () => {
+    const csv = "\ufeffDate,Cost,Merchant\n2026-09-25,10.00,Test Merchant";
+    const result = parseCsv(csv);
+    assert.deepStrictEqual(result, [
+      ["Date", "Cost", "Merchant"],
+      ["2026-09-25", "10.00", "Test Merchant"],
+    ]);
   });
 });
 
@@ -653,4 +662,22 @@ describe("Pipeline Ingestion (runBackfill)", () => {
       });
     }, /No adapter found for file/);
   });
+
+  const realSheetsDir = resolve(import.meta.dirname, "../data/sheets");
+  if (existsSync(realSheetsDir) && readdirSync(realSheetsDir).some((f) => f.endsWith(".csv"))) {
+    it("runBackfill: parses promoted data/sheets dataset with 2353 transactions", async () => {
+      const summary = await runBackfill({
+        userId: "usr_default",
+        defaultCard: "Historical",
+        dryRun: true,
+        local: false,
+        remote: false,
+        dir: realSheetsDir,
+      });
+      assert.strictEqual(summary.totalValid, 2353);
+      assert.strictEqual(summary.totalUsd, 1959);
+      assert.strictEqual(summary.totalCad, 394);
+      assert.strictEqual(summary.totalSkipped, 35);
+    });
+  }
 });
