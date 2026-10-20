@@ -3,16 +3,17 @@
  * Throws if a quoted field is unterminated.
  */
 export function parseCsv(content: string): string[][] {
+  const normalizedContent = content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
   const rows: string[][] = [];
   let currentRow: string[] = [];
   let currentField = "";
   let inQuotes = false;
 
-  for (let i = 0; i < content.length; i++) {
-    const char = content[i];
+  for (let i = 0; i < normalizedContent.length; i++) {
+    const char = normalizedContent[i];
 
     if (char === '"') {
-      if (inQuotes && content[i + 1] === '"') {
+      if (inQuotes && normalizedContent[i + 1] === '"') {
         currentField += '"';
         i++;
       } else {
@@ -22,7 +23,7 @@ export function parseCsv(content: string): string[][] {
       currentRow.push(currentField.trim());
       currentField = "";
     } else if ((char === "\r" || char === "\n") && !inQuotes) {
-      if (char === "\r" && content[i + 1] === "\n") {
+      if (char === "\r" && normalizedContent[i + 1] === "\n") {
         i++;
       }
       currentRow.push(currentField.trim());

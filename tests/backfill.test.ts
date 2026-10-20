@@ -185,6 +185,26 @@ describe("CSV Parser (parseCsv)", () => {
     assert.deepStrictEqual(result[1], ["2026-09-25", "10.00"]);
     assert.deepStrictEqual(result[2], ["2026-09-26", "20.00"]);
   });
+
+  it("strips UTF-8 byte order mark (BOM) from content transparently", () => {
+    const csv = "\ufeffDate,Cost,Merchant\n2026-09-25,10.00,Test Merchant";
+    const result = parseCsv(csv);
+    assert.deepStrictEqual(result, [
+      ["Date", "Cost", "Merchant"],
+      ["2026-09-25", "10.00", "Test Merchant"],
+    ]);
+  });
+
+  it("handles BOM-prefixed CSV with quoted fields, escaped quotes, and CRLF", () => {
+    const csv =
+      '\ufeffDate,Cost,Merchant\r\n2026-09-25,10.00,"The ""Famous"" Cafe, Boston"\r\n2026-09-26,25.00,"Trader Joe\'s, Store #12"\r\n';
+    const result = parseCsv(csv);
+    assert.deepStrictEqual(result, [
+      ["Date", "Cost", "Merchant"],
+      ["2026-09-25", "10.00", 'The "Famous" Cafe, Boston'],
+      ["2026-09-26", "25.00", "Trader Joe's, Store #12"],
+    ]);
+  });
 });
 
 describe("Helper Functions", () => {
