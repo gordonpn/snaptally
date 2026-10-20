@@ -42,6 +42,7 @@ export interface SyncResult {
   failedCount: number;
   unauthorized: boolean;
   lastError?: string;
+  retryError?: string;
 }
 
 const DB_NAME = "snaptally_db";
@@ -485,6 +486,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
   let failedCount = 0;
   let unauthorized = false;
   let lastError: string | undefined;
+  let retryError: string | undefined;
   let transportHalted = false;
 
   try {
@@ -592,6 +594,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         }
 
         // Server error or unexpected status: apply exponential backoff (1s, 2s, 4s, capped at 60s)
+        retryError = `Server returned HTTP ${response.status}. Saved transactions will retry.`;
         const serverRetryCount = (item.server_retry_count ?? 0) + 1;
         item.server_retry_count = serverRetryCount;
         item.retry_count = (item.retry_count ?? 0) + 1;
@@ -615,8 +618,9 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         scheduleDueRetry(backoffMs, options, item.next_retry_at);
         transportHalted = true;
         break;
-      } catch {
+      } catch (error: unknown) {
         // Network error / offline: apply exponential backoff (1s, 2s, 4s, capped at 60s)
+        retryError = `Sync interrupted: ${error instanceof Error ? error.message : "request or local storage failure"}. Saved transactions will retry.`;
         // Transport failures do not consume the server-error retry budget.
         const retryCount = (item.retry_count ?? 0) + 1;
         item.retry_count = retryCount;
@@ -696,7 +700,13 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
     options.onStatusChange?.(false, remainingCount);
   }
 
-  return { syncedCount, failedCount, unauthorized, lastError };
+  return {
+    syncedCount,
+    failedCount,
+    unauthorized,
+    lastError,
+    ...(retryError ? { retryError } : {}),
+  };
 }
 
 function scheduleDueRetry(delayMs: number, options: SyncOptions, targetDeadline?: number): void {

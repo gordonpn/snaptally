@@ -7,7 +7,7 @@ import {
   intakeForm,
   TOKEN_STORAGE_KEY,
 } from "../src/scripts/intake-form.ts";
-import { clearOutbox, clearRetryTimer } from "../src/scripts/outbox.ts";
+import { clearDeadLetterQueue, clearOutbox, clearRetryTimer } from "../src/scripts/outbox.ts";
 
 class MockLocalStorage {
   private store: Map<string, string> = new Map();
@@ -856,10 +856,13 @@ describe("intakeForm Submission Validation and Error Handling", () => {
     try {
       const result = await form.submitTransaction();
       assert.strictEqual(result, false);
-      assert.strictEqual(form.isError, true);
-      assert.strictEqual(form.statusMessage, "Error: Validation failed");
+      assert.strictEqual(form.syncError, "Validation failed");
+      assert.strictEqual(form.deadLetterCount, 1);
+      assert.match(form.persistentSyncMessage, /failed transaction/);
+      assert.strictEqual(form.statusMessage, "Saved $1.50 at Trader Joe's");
     } finally {
       globalThis.fetch = originalFetch;
+      await clearDeadLetterQueue();
     }
   });
 

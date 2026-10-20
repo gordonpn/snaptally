@@ -1,7 +1,12 @@
 import { BUCKET_SUBCATEGORIES, DEFAULT_FREQUENT_MERCHANTS } from "../config/intake.ts";
 import {
+  type DeadLetterItem,
+  deleteDeadLetterItem,
+  getDeadLetterQueue,
+  getOutbox,
   getOutboxCount,
   type OutboxItem,
+  requeueDeadLetterItem,
   type SyncResult,
   saveOutboxItem,
   setupSyncListeners,
@@ -81,6 +86,16 @@ export function intakeForm() {
     // Outbox & background sync state
     outboxCount: 0,
     isSyncing: false,
+    isOutboxOpen: false,
+    activeOutboxTab: "pending" as "pending" | "failed",
+    outboxItems: [] as OutboxItem[],
+    deadLetterItems: [] as DeadLetterItem[],
+    deadLetterCount: 0,
+    isQueueActionPending: false,
+    authenticationFailed: false,
+    syncError: "",
+    queueError: "",
+    syncTask: undefined as Promise<SyncResult> | undefined,
 
     // Form status
     loading: false,
@@ -90,6 +105,16 @@ export function intakeForm() {
     // Getters
     get formattedAmount(): string {
       return `$${(this.amountCents / 100).toFixed(2)}`;
+    },
+
+    get persistentSyncMessage(): string {
+      if (this.authenticationFailed) {
+        return "Authentication failed. Check your API Bearer Token in Settings.";
+      }
+      if (this.deadLetterCount > 0) {
+        return `${this.deadLetterCount} failed transaction${this.deadLetterCount === 1 ? " needs" : "s need"} attention in Sync Status.`;
+      }
+      return "";
     },
 
     get grossAmount(): number {
@@ -323,9 +348,12 @@ export function intakeForm() {
         const response = await fetch("/api/merchants?limit=8", {
           headers: { Authorization: `Bearer ${requestToken}` },
         });
+        if (this.token === requestToken && response.status === 401)
+          this.authenticationFailed = true;
         if (!response.ok || this.token !== requestToken) {
           return;
         }
+        this.authenticationFailed = false;
         const data = (await response.json()) as { merchants?: string[] };
         if (this.token !== requestToken) {
           return;
@@ -364,9 +392,12 @@ export function intakeForm() {
         const response = await fetch("/api/transactions?limit=5", {
           headers: { Authorization: `Bearer ${requestToken}` },
         });
+        if (this.token === requestToken && response.status === 401)
+          this.authenticationFailed = true;
         if (!response.ok || this.token !== requestToken) {
           return;
         }
+        this.authenticationFailed = false;
         const data = (await response.json()) as { transactions?: RecentTransaction[] };
         if (this.token !== requestToken) {
           return;
@@ -409,8 +440,77 @@ export function intakeForm() {
       }
     },
 
+    async recheckSyncStatus(): Promise<void> {
+      const [pending, failed] = await Promise.all([getOutbox(), getDeadLetterQueue()]);
+      this.outboxCount = pending.length;
+      this.deadLetterCount = failed.length;
+      if (this.isOutboxOpen) {
+        this.outboxItems = pending;
+        this.deadLetterItems = failed;
+      }
+    },
+
+    async openOutboxDrawer(tab: "pending" | "failed" = "pending"): Promise<void> {
+      this.activeOutboxTab = tab;
+      this.isOutboxOpen = true;
+      await this.recheckSyncStatus();
+    },
+
+    closeOutboxDrawer(): void {
+      this.isOutboxOpen = false;
+      this.outboxItems = [];
+      this.deadLetterItems = [];
+    },
+
+    async retryDLQItem(id: string): Promise<void> {
+      if (this.isQueueActionPending || this.isSyncing) return;
+      this.isQueueActionPending = true;
+      this.queueError = "";
+      try {
+        await requeueDeadLetterItem(id);
+        await this.syncPendingOutbox(true);
+      } catch (error: unknown) {
+        this.queueError =
+          error instanceof Error ? error.message : "Unable to retry this transaction.";
+      } finally {
+        await this.recheckSyncStatus();
+        this.isQueueActionPending = false;
+      }
+    },
+
+    async discardDLQItem(id: string): Promise<void> {
+      if (this.isQueueActionPending || this.isSyncing) return;
+      if (!confirm("Permanently discard this failed transaction? This cannot be undone.")) return;
+      this.isQueueActionPending = true;
+      this.queueError = "";
+      try {
+        await deleteDeadLetterItem(id);
+      } catch (error: unknown) {
+        this.queueError =
+          error instanceof Error ? error.message : "Unable to discard this transaction.";
+      } finally {
+        await this.recheckSyncStatus();
+        this.isQueueActionPending = false;
+      }
+    },
+
     // Background sync
     async syncPendingOutbox(force = false): Promise<SyncResult> {
+      const previous = this.syncTask;
+      const task = (async () => {
+        if (previous) await previous;
+        return this.performOutboxSync(force);
+      })();
+      this.syncTask = task;
+      try {
+        return await task;
+      } finally {
+        if (this.syncTask === task) this.syncTask = undefined;
+      }
+    },
+
+    async performOutboxSync(force: boolean): Promise<SyncResult> {
+      const requestToken = this.token;
       this.isSyncing = true;
       try {
         const result = await syncOutbox({
@@ -435,24 +535,20 @@ export function intakeForm() {
               ...this.recentTransactions.filter((t) => t.id !== item.id),
             ].slice(0, 5);
           },
-          onStatusChange: (syncing, count) => {
-            this.isSyncing = syncing;
+          onStatusChange: (_syncing, count) => {
             this.outboxCount = count;
           },
         });
 
-        this.outboxCount = await getOutboxCount();
-
-        if (result.lastError) {
-          this.isError = true;
-          this.statusMessage = `Error: ${result.lastError}`;
-        } else if (result.unauthorized) {
-          this.isError = true;
-          this.statusMessage = "Authentication failed: Check API Bearer Token";
+        this.syncError = result.lastError ?? result.retryError ?? "";
+        if (this.token === requestToken) {
+          if (result.unauthorized) this.authenticationFailed = true;
+          else if (result.syncedCount > 0) this.authenticationFailed = false;
         }
 
         return result;
       } finally {
+        await this.recheckSyncStatus();
         this.isSyncing = false;
       }
     },
@@ -505,9 +601,7 @@ export function intakeForm() {
         this.autoCustomCard = true;
       }
 
-      getOutboxCount().then((count) => {
-        this.outboxCount = count;
-      });
+      void this.recheckSyncStatus();
 
       setupSyncListeners((force) => {
         this.syncPendingOutbox(force);
