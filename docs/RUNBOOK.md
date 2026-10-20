@@ -533,6 +533,13 @@ Review the rejection reason before retrying; an unchanged invalid payload can be
 quarantined again. Failed-item counts and warnings are restored from browser storage on reload.
 These records are local to the device and browser, so clearing site data removes them.
 
+Retry resets the selected record's retry state without bypassing other pending
+records' backoff. The drawer shows the full retry total and any recorded HTTP
+status. IndexedDB recovery moves a failed record into the outbox in one transaction;
+an aborted move or discard reports an error and retains the failed record.
+Web Locks coordinate sync across tabs in supported browsers. Runtimes without
+Web Locks retain only per-tab synchronization.
+
 For an authentication warning, open **Settings**, correct the bearer token, and
 save it. The warning clears after a successful authenticated request. The warning
 and failed-item count are independent of transient amount or save messages.

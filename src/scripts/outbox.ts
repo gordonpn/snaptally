@@ -54,6 +54,13 @@ export const DLQ_FALLBACK_STORAGE_KEY = "snaptally_dlq_fallback";
 export const MAX_ROLLBACK_RETRIES = 10;
 export const MAX_SYNC_RETRIES = 10;
 
+/** Returns the total transport, server and rollback retries recorded for a transaction. */
+export function getRetryCount(item: OutboxItem): number {
+  return (
+    Math.max(item.retry_count ?? 0, item.server_retry_count ?? 0) + (item.rollback_retry_count ?? 0)
+  );
+}
+
 // In-memory fallbacks for environments without IndexedDB or localStorage
 let memoryFallback: OutboxItem[] = [];
 let memoryDlqFallback: DeadLetterItem[] = [];
@@ -368,7 +375,7 @@ async function quarantineItem(
     error_reason: reason,
     http_status: httpStatus,
     failed_at: new Date().toISOString(),
-    retry_count: item.server_retry_count ?? item.retry_count ?? 0,
+    retry_count: getRetryCount(item),
   };
   try {
     await saveDeadLetterItem(dlqItem);
@@ -412,20 +419,24 @@ export async function getDeadLetterCount(): Promise<number> {
  * Permanently removes a transaction from the dead-letter queue.
  */
 export async function deleteDeadLetterItem(id: string): Promise<void> {
-  try {
-    const db = await openDatabase();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(DLQ_STORE_NAME, "readwrite");
-      const store = tx.objectStore(DLQ_STORE_NAME);
-      const req = store.delete(id);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-      tx.oncomplete = () => db.close();
-    });
-  } catch {
+  if (!isIndexedDBAvailable()) {
     const items = getFallbackDlqItems().filter((i) => i.id !== id);
     saveFallbackDlqItems(items);
+    return;
   }
+  const db = await openDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(DLQ_STORE_NAME, "readwrite");
+    tx.objectStore(DLQ_STORE_NAME).delete(id);
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onabort = tx.onerror = () => {
+      db.close();
+      reject(tx.error ?? new Error("Discard transaction aborted"));
+    };
+  });
 }
 
 /**
@@ -451,24 +462,59 @@ export async function clearDeadLetterQueue(): Promise<void> {
  * Restores a quarantined dead-letter transaction back to the active outbox for retry.
  */
 export async function requeueDeadLetterItem(id: string): Promise<void> {
+  const db = isIndexedDBAvailable() ? await openDatabase() : undefined;
   const queue = await getDeadLetterQueue();
   const item = queue.find((entry) => entry.id === id);
   if (!item) {
+    db?.close();
     return;
   }
 
   const restoredPayload: OutboxItem = {
     ...item.payload,
+    subcategory: normalizeOutboxSubcategory(item.payload.parent_bucket, item.payload.subcategory),
     retry_count: 0,
     server_retry_count: 0,
     rollback_retry_count: 0,
     next_retry_at: undefined,
   };
 
-  const savedInIndexedDB = await saveOutboxItem(restoredPayload);
-  if (savedInIndexedDB || !isIndexedDBAvailable()) {
-    await deleteDeadLetterItem(id);
+  if (!db) {
+    const original = getFallbackItems();
+    const pending = [...original.filter((entry) => entry.id !== id), restoredPayload];
+    const failed = getFallbackDlqItems().filter((entry) => entry.id !== id);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(FALLBACK_STORAGE_KEY, JSON.stringify(pending));
+      try {
+        localStorage.setItem(DLQ_FALLBACK_STORAGE_KEY, JSON.stringify(failed));
+      } catch (error: unknown) {
+        localStorage.setItem(FALLBACK_STORAGE_KEY, JSON.stringify(original));
+        throw error;
+      }
+    }
+    memoryFallback = pending;
+    memoryDlqFallback = failed;
+    return;
   }
+
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction([STORE_NAME, DLQ_STORE_NAME], "readwrite");
+    const failed = tx.objectStore(DLQ_STORE_NAME);
+    const request = failed.get(id);
+    request.onsuccess = () => {
+      if (request.result === undefined) return;
+      tx.objectStore(STORE_NAME).put(restoredPayload);
+      failed.delete(id);
+    };
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onabort = tx.onerror = () => {
+      db.close();
+      reject(tx.error ?? new Error("Requeue transaction aborted"));
+    };
+  });
 }
 
 let isSyncInProgress = false;
@@ -480,8 +526,19 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
   if (isSyncInProgress) {
     return { syncedCount: 0, failedCount: 0, unauthorized: false };
   }
-
   isSyncInProgress = true;
+  try {
+    if (typeof navigator !== "undefined" && navigator.locks) {
+      return await navigator.locks.request("snaptally-outbox-sync", () => flushOutbox(options));
+    }
+    // shortcut: Without Web Locks, sync is per-tab; add a lease if legacy multi-tab support is required.
+    return await flushOutbox(options);
+  } finally {
+    isSyncInProgress = false;
+  }
+}
+
+async function flushOutbox(options: SyncOptions): Promise<SyncResult> {
   let syncedCount = 0;
   let failedCount = 0;
   let unauthorized = false;
@@ -634,7 +691,6 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
       }
     }
   } finally {
-    isSyncInProgress = false;
     const remaining = await getOutbox();
     const remainingCount = remaining.length;
     if (remainingCount === 0 || unauthorized) {

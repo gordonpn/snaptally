@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it, mock } from "node:test";
+import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { intakeForm } from "../src/scripts/intake-form.ts";
 import {
   clearDeadLetterQueue,
@@ -47,12 +47,19 @@ function sentTransactionId(body: string): string {
   return payload.id;
 }
 
+const indexedDBDescriptor = Object.getOwnPropertyDescriptor(globalThis, "indexedDB");
+beforeEach(() => {
+  Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: undefined });
+});
+
 afterEach(async () => {
   mock.restoreAll();
   clearRetryTimer();
   await clearOutbox();
   await clearDeadLetterQueue();
   Reflect.deleteProperty(globalThis, "confirm");
+  if (indexedDBDescriptor) Object.defineProperty(globalThis, "indexedDB", indexedDBDescriptor);
+  else Reflect.deleteProperty(globalThis, "indexedDB");
 });
 
 describe("outbox sync drawer", () => {
@@ -288,6 +295,8 @@ describe("sync status recovery", () => {
       async () => new Response('{"transactions":[]}', { status: 200 }),
     );
 
+    await form.syncPendingOutbox();
+    assert.equal(form.authenticationFailed, true);
     await form.loadRecentTransactions();
 
     assert.equal(form.authenticationFailed, false);
@@ -426,4 +435,79 @@ describe("sync and intake status isolation", () => {
       assert.equal(form.deadLetterCount, status === 400 ? 1 : 0);
     });
   }
+});
+
+describe("review regressions", () => {
+  it("retries the selected failed record without bypassing another record's backoff", async () => {
+    const waiting = createItem({
+      id: "waiting",
+      next_retry_at: Date.now() + 60000,
+      server_retry_count: 4,
+    });
+    await saveOutboxItem(waiting);
+    await saveDeadLetterItem(createFailure());
+    const form = intakeForm();
+    const requests: string[] = [];
+    mock.method(globalThis, "fetch", async (_url: unknown, options?: RequestInit) => {
+      requests.push(sentTransactionId(String(options?.body)));
+      return new Response("{}", { status: 201 });
+    });
+
+    await form.retryDLQItem("failed-1");
+
+    assert.deepEqual(requests, ["failed-1"]);
+    assert.deepEqual(await getOutbox(), [waiting]);
+    assert.deepEqual(await getDeadLetterQueue(), []);
+  });
+
+  it("shows the current retry interruption after an earlier validation rejection", async () => {
+    await saveOutboxItem(createItem({ id: "invalid" }));
+    await saveOutboxItem(createItem({ id: "retrying", created_at: "2026-10-20T12:01:00Z" }));
+    const form = intakeForm();
+    mock.method(globalThis, "fetch", async (_url: unknown, options?: RequestInit) =>
+      sentTransactionId(String(options?.body)) === "invalid"
+        ? new Response('{"error":"Invalid category"}', { status: 400 })
+        : new Response("{}", { status: 503 }),
+    );
+
+    await form.syncPendingOutbox();
+
+    assert.match(form.syncError, /HTTP 503/);
+    assert.equal(form.deadLetterCount, 1);
+    assert.deepEqual(
+      (await getDeadLetterQueue()).map((item) => item.error_reason),
+      ["Invalid category"],
+    );
+    assert.deepEqual(
+      (await getOutbox()).map((item) => item.id),
+      ["retrying"],
+    );
+  });
+
+  for (const [counters, expected] of [
+    [{ retry_count: undefined }, 0],
+    [{ retry_count: undefined, rollback_retry_count: 3 }, 3],
+    [{ retry_count: 7, server_retry_count: 4, rollback_retry_count: 2 }, 9],
+    [{ retry_count: undefined, server_retry_count: 4, rollback_retry_count: 2 }, 6],
+  ] as const) {
+    it(`reports the complete retry total ${expected} for ${JSON.stringify(counters)}`, () => {
+      const form = intakeForm();
+
+      assert.equal(form.retryCount(createItem(counters)), expected);
+    });
+  }
+
+  it("stores transport, server and rollback attempts in quarantined retry totals", async () => {
+    await saveOutboxItem(
+      createItem({ retry_count: 15, server_retry_count: 9, rollback_retry_count: 2 }),
+    );
+    const form = intakeForm();
+    mock.method(globalThis, "fetch", async () => new Response("{}", { status: 503 }));
+
+    await form.syncPendingOutbox(true);
+
+    const failed = await getDeadLetterQueue();
+    assert.equal(failed[0].retry_count, 18);
+    assert.equal(failed[0].http_status, 503);
+  });
 });

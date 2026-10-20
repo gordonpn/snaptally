@@ -2020,7 +2020,7 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
       objectStoreNames: {
         contains: (name: string) => name === STORE_NAME || name === DLQ_STORE_NAME,
       },
-      transaction: (storeName: string) => {
+      transaction: (storeName: string | string[]) => {
         if (storeName === DLQ_STORE_NAME) {
           const txObj = {
             objectStore: () => ({
@@ -2050,6 +2050,14 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
         }
         const txObj = {
           objectStore: () => ({
+            get: (id: string) => {
+              const req: { result?: DeadLetterItem; onsuccess?: () => void } = {
+                result: dlqStore.get(id),
+              };
+              queueMicrotask(() => req.onsuccess?.());
+              return req;
+            },
+            delete: () => ({}),
             put: () => {
               const req: { onerror?: () => void; error?: Error } = {
                 error: new Error("QuotaExceededError"),
@@ -2084,7 +2092,7 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
     });
 
     try {
-      await requeueDeadLetterItem("tx-requeue-abort");
+      await assert.rejects(requeueDeadLetterItem("tx-requeue-abort"), /aborted/);
 
       // Because outbox write failed, item must remain in DLQ
       assert.strictEqual(dlqStore.has("tx-requeue-abort"), true);

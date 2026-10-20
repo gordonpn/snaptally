@@ -5,6 +5,7 @@ import {
   getDeadLetterQueue,
   getOutbox,
   getOutboxCount,
+  getRetryCount,
   type OutboxItem,
   requeueDeadLetterItem,
   type SyncResult,
@@ -43,6 +44,7 @@ export function getTodayDate(): string {
   return `${year}-${month}-${day}`;
 }
 
+/** Creates state and actions for local transaction entry and queue recovery. */
 export function intakeForm() {
   return {
     // Keypad and amount state
@@ -96,6 +98,7 @@ export function intakeForm() {
     syncError: "",
     queueError: "",
     syncTask: undefined as Promise<SyncResult> | undefined,
+    retryCount: getRetryCount,
 
     // Form status
     loading: false,
@@ -468,7 +471,7 @@ export function intakeForm() {
       this.queueError = "";
       try {
         await requeueDeadLetterItem(id);
-        await this.syncPendingOutbox(true);
+        await this.syncPendingOutbox();
       } catch (error: unknown) {
         this.queueError =
           error instanceof Error ? error.message : "Unable to retry this transaction.";
@@ -540,7 +543,7 @@ export function intakeForm() {
           },
         });
 
-        this.syncError = result.lastError ?? result.retryError ?? "";
+        this.syncError = result.retryError ?? result.lastError ?? "";
         if (this.token === requestToken) {
           if (result.unauthorized) this.authenticationFailed = true;
           else if (result.syncedCount > 0) this.authenticationFailed = false;

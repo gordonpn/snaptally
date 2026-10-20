@@ -417,7 +417,7 @@ import Layout from "../layouts/Layout.astro";
                     <span class="break-words min-w-0" x-text="item.merchant"></span>
                     <span class="font-mono whitespace-nowrap" x-text="item.gross_amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })"></span>
                   </div>
-                  <p class="text-xs text-neu-text mt-1"><span x-text="item.date"></span> · Retries: <span x-text="item.retry_count || 0"></span></p>
+                  <p class="text-xs text-neu-text mt-1"><span x-text="item.date"></span> · Retries: <span x-text="retryCount(item)"></span></p>
                 </article>
               </template>
             </section>
@@ -429,7 +429,10 @@ import Layout from "../layouts/Layout.astro";
                     <span class="break-words min-w-0" x-text="item.payload.merchant"></span>
                     <span class="font-mono whitespace-nowrap" x-text="item.payload.gross_amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })"></span>
                   </div>
-                  <p class="text-xs text-neu-text mt-1"><span x-text="item.payload.date"></span> · Retries: <span x-text="item.retry_count"></span></p>
+                  <p class="text-xs text-neu-text mt-1"><span x-text="item.payload.date"></span> · Retries: <span x-text="Math.max(item.retry_count, retryCount(item.payload))"></span></p>
+                  <template x-if="item.http_status !== undefined">
+                    <p class="text-xs text-neu-text mt-1">HTTP <span x-text="item.http_status"></span></p>
+                  </template>
                   <p class="text-neu-text font-semibold text-xs break-words mt-2" x-text="item.error_reason"></p>
                   <div class="flex gap-2 mt-2">
                     <button type="button" class="neu-raised-sm flex-1 rounded-lg min-h-[44px] text-primary font-semibold disabled:opacity-50"
