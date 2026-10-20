@@ -1,6 +1,6 @@
 # Project Execution Queue
 
-- **Last Refined:** 2026-10-20 14:46 EDT
+- **Last Refined:** 2026-10-20 15:08 EDT
 - **Repository:** gordonpn/snaptally
 - **GitHub Backlog:** https://github.com/gordonpn/snaptally/issues
 
@@ -9,9 +9,9 @@
 ### [#96: Feat: Implement Outbox and Sync Status Drawer in mobile intake UI](https://github.com/gordonpn/snaptally/issues/96)
 - **Priority:** P0
 - **Effort:** S
-- **Readiness:** READY
+- **Readiness:** IN REVIEW ([draft PR #111](https://github.com/gordonpn/snaptally/pull/111))
 - **Why this task is next:** Completes the high-priority mobile sync status workflow and closes Epic #94; its prerequisite #95 is complete.
-- **First implementation action:** Inspect the intake badge and outbox/DLQ APIs, then map the remaining UI behavior to the existing tests.
+- **Next action:** Review PR #111 and its checks. Implementation is verified locally with 376 passing tests and mobile browser interaction checks; merge remains with the maintainer.
 - **Definition of Done:** The drawer, retry/discard actions, and persistent failure banner meet the issue acceptance criteria with tests and mobile UI verification.
 - **Unblocks:** Closes [Epic #94](https://github.com/gordonpn/snaptally/issues/94).
 
