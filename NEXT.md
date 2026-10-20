@@ -1,6 +1,6 @@
 # Project Execution Queue
 
-- **Last Refined:** 2026-10-20 10:55 EDT
+- **Last Refined:** 2026-10-20 12:20 EDT
 - **Repository:** gordonpn/snaptally
 - **GitHub Backlog:** https://github.com/gordonpn/snaptally/issues
 
@@ -20,40 +20,38 @@
 
 ## NEXT - Upcoming Work
 
-1. **[#106: Data: Promote reconciled batch-4 budget CSVs (2,353 transactions) to primary backfill source](https://github.com/gordonpn/snaptally/issues/106)**
-   - **Priority:** P0 | **Effort:** S | **Readiness:** READY
-   - **Dependencies:** None
-   - **Reason:** Replaces the incomplete 1,680-row baseline with the reconciled 2,353-row dataset from `data/sheets/updated/budget_csvs/` (+673 valid transactions across 12 sheets).
+1. **[#107: Data: Categorize and ingest 7 held international FX transactions ($538.28 USD)](https://github.com/gordonpn/snaptally/issues/107)**
+   - **Priority:** P1 | **Effort:** XS | **Readiness:** READY
+   - **Dependencies:** None (#106 resolved in PR #109)
+   - **Reason:** Ingests $538.28 USD of converted CAD expenses (Klarna Walmart Canada, Sapporo Stellar Place, Don Quijote) held for non-Boston category review, bringing verified transactions from 2,353 to 2,360 before production ingestion.
 
-2. **[#107: Data: Categorize and ingest 7 held international FX transactions ($538.28 USD)](https://github.com/gordonpn/snaptally/issues/107)**
-   - **Priority:** P1 | **Effort:** XS | **Readiness:** BLOCKED (by #106)
-   - **Dependencies:** #106
-   - **Reason:** Ingests $538.28 USD of converted CAD expenses (Klarna Walmart Canada, Sapporo Stellar Place, Don Quijote) held for non-Boston category review.
-
-3. **[#101: Ops: Execute historical Google Sheets backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101)**
-   - **Priority:** P0 | **Effort:** S | **Readiness:** BLOCKED (by #103, #106)
-   - **Dependencies:** #103, #106
+2. **[#101: Ops: Execute historical Google Sheets backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101)**
+   - **Priority:** P0 | **Effort:** S | **Readiness:** BLOCKED (by #103)
+   - **Dependencies:** #103 (Backup recipe required before remote execution)
    - **Reason:** Ingests the complete 2,353+ verified transactions into production D1, establishing SnapTally's live financial ledger.
 
-4. **[#96: Feat: Implement Outbox and Sync Status Drawer in mobile intake UI](https://github.com/gordonpn/snaptally/issues/96)**
+3. **[#96: Feat: Implement Outbox and Sync Status Drawer in mobile intake UI](https://github.com/gordonpn/snaptally/issues/96)**
    - **Priority:** P0 | **Effort:** S | **Readiness:** READY (can run in parallel with backfill)
    - **Dependencies:** #95 (Completed in PR #102)
    - **Reason:** Closes [Epic #94](https://github.com/gordonpn/snaptally/issues/94). Exposes Dead-Letter Queue items, retry actions, and manual sync controls directly to the mobile user.
 
-5. **[#108: Data: Triage and resolve 121 statement items in batch-4 reconciliation review queue](https://github.com/gordonpn/snaptally/issues/108)**
-   - **Priority:** P2 | **Effort:** M | **Readiness:** BLOCKED (by #106)
-   - **Dependencies:** #106, #107
+4. **[#108: Data: Triage and resolve 121 statement items in batch-4 reconciliation review queue](https://github.com/gordonpn/snaptally/issues/108)**
+   - **Priority:** P2 | **Effort:** M | **Readiness:** BLOCKED (by #107)
+   - **Dependencies:** #107
    - **Reason:** Resolves 84 candidate matches and 37 unmatched debits/refunds from statement extracts (PayPal, Capital One, Discover).
 
-6. **[#78: Ops: Codify automated dependency maintenance and vulnerability remediation (.github/dependabot.yml)](https://github.com/gordonpn/snaptally/issues/78)**
+5. **[#78: Ops: Codify automated dependency maintenance and vulnerability remediation (.github/dependabot.yml)](https://github.com/gordonpn/snaptally/issues/78)**
    - **Priority:** P1 | **Effort:** S | **Readiness:** READY
    - **Dependencies:** None
-   - **Reason:** Remediates 12 active security vulnerabilities reported by `pnpm audit` (undici/miniflare/wrangler) and automates monthly maintenance.
+   - **Reason:** Remediates active security vulnerabilities reported by `pnpm audit` (undici/miniflare/wrangler) and automates monthly maintenance.
+
+## COMPLETED RECENTLY
+
+- **[#106: Data: Promote reconciled batch-4 budget CSVs (2,353 transactions) to primary backfill source](https://github.com/gordonpn/snaptally/issues/106)**: Resolved in PR #109. Primary backfill dataset promoted to 2,353 valid transactions across 12 sheets with BOM-hardened CSV parsing.
 
 ## BLOCKERS
 
 - **Execution Safety for #101:** Issue #101 must not be executed against the remote production database until #103 is implemented and verified.
-- **Backfill Ingestion Accuracy:** Issue #101 should execute only after #106 promotes the reconciled 2,353 records to `data/sheets/`.
 
 ## LATER
 
