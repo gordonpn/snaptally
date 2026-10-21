@@ -537,6 +537,8 @@ Retry resets the selected record's retry state without bypassing other pending
 records' backoff. The drawer shows the full retry total and any recorded HTTP
 status. IndexedDB recovery moves a failed record into the outbox in one transaction;
 an aborted move or discard reports an error and retains the failed record.
+If IndexedDB cannot open, recovery can still act on a matching fallback record;
+without that fallback copy, the drawer reports the database error.
 Web Locks coordinate sync across tabs in supported browsers. Runtimes without
 Web Locks retain only per-tab synchronization.
 

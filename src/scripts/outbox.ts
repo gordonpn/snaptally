@@ -415,16 +415,26 @@ export async function getDeadLetterCount(): Promise<number> {
   return items.length;
 }
 
+async function openRecoveryDatabase(id: string): Promise<IDBDatabase | undefined> {
+  if (!isIndexedDBAvailable()) return undefined;
+  try {
+    return await openDatabase();
+  } catch (error: unknown) {
+    if (!getFallbackDlqItems().some((item) => item.id === id)) throw error;
+    return undefined;
+  }
+}
+
 /**
  * Permanently removes a transaction from the dead-letter queue.
  */
 export async function deleteDeadLetterItem(id: string): Promise<void> {
-  if (!isIndexedDBAvailable()) {
+  const db = await openRecoveryDatabase(id);
+  if (!db) {
     const items = getFallbackDlqItems().filter((i) => i.id !== id);
     saveFallbackDlqItems(items);
     return;
   }
-  const db = await openDatabase();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(DLQ_STORE_NAME, "readwrite");
     tx.objectStore(DLQ_STORE_NAME).delete(id);
@@ -462,7 +472,7 @@ export async function clearDeadLetterQueue(): Promise<void> {
  * Restores a quarantined dead-letter transaction back to the active outbox for retry.
  */
 export async function requeueDeadLetterItem(id: string): Promise<void> {
-  const db = isIndexedDBAvailable() ? await openDatabase() : undefined;
+  const db = await openRecoveryDatabase(id);
   const queue = await getDeadLetterQueue();
   const item = queue.find((entry) => entry.id === id);
   if (!item) {

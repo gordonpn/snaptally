@@ -6,6 +6,8 @@ import {
   DLQ_STORE_NAME,
   deleteDeadLetterItem,
   FALLBACK_STORAGE_KEY,
+  getDeadLetterQueue,
+  getOutbox,
   type OutboxItem,
   requeueDeadLetterItem,
   STORE_NAME,
@@ -141,6 +143,39 @@ function installDatabase(abortOperation?: "put" | "delete"): DatabaseFixture {
 }
 const indexedDBDescriptor = Object.getOwnPropertyDescriptor(globalThis, "indexedDB");
 const localStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+function installUnavailableDatabase(): void {
+  Object.defineProperty(globalThis, "indexedDB", {
+    configurable: true,
+    value: {
+      open: () => {
+        const request = {
+          error: new Error("Database unavailable"),
+          onerror: undefined as (() => void) | undefined,
+        };
+        queueMicrotask(() => request.onerror?.());
+        return request;
+      },
+    },
+  });
+}
+
+function installFallback(failed: DeadLetterItem): Map<string, string> {
+  const persisted = new Map([
+    [FALLBACK_STORAGE_KEY, JSON.stringify([])],
+    [DLQ_FALLBACK_STORAGE_KEY, JSON.stringify([failed])],
+  ]);
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string): string | null => persisted.get(key) ?? null,
+      setItem: (key: string, value: string): void => {
+        persisted.set(key, value);
+      },
+    },
+  });
+  return persisted;
+}
+
 afterEach(() => {
   if (indexedDBDescriptor) Object.defineProperty(globalThis, "indexedDB", indexedDBDescriptor);
   else Reflect.deleteProperty(globalThis, "indexedDB");
@@ -240,6 +275,45 @@ for (const failingKey of [FALLBACK_STORAGE_KEY, DLQ_FALLBACK_STORAGE_KEY]) {
     });
 
     await assert.rejects(requeueDeadLetterItem(failed.id), /Storage unavailable/);
+
+    assert.deepEqual(persisted, original);
+  });
+}
+
+for (const action of [deleteDeadLetterItem, requeueDeadLetterItem]) {
+  it(`${action.name} recovers a fallback-owned record when IndexedDB cannot open`, async () => {
+    const failed = createFailure();
+    const other = { ...failed, id: "other", payload: { ...failed.payload, id: "other" } };
+    const persisted = installFallback(failed);
+    persisted.set(DLQ_FALLBACK_STORAGE_KEY, JSON.stringify([failed, other]));
+    installUnavailableDatabase();
+
+    await action(failed.id);
+
+    assert.deepEqual(await getDeadLetterQueue(), [other]);
+    assert.deepEqual(
+      (await getOutbox()).map((item) => ({ ...item, next_retry_at: item.next_retry_at })),
+      action === requeueDeadLetterItem
+        ? [
+            {
+              ...failed.payload,
+              retry_count: 0,
+              server_retry_count: 0,
+              rollback_retry_count: 0,
+              next_retry_at: undefined,
+            },
+          ]
+        : [],
+    );
+  });
+
+  it(`${action.name} propagates open failure without a matching fallback record`, async () => {
+    const failed = createFailure();
+    const persisted = installFallback(failed);
+    const original = new Map(persisted);
+    installUnavailableDatabase();
+
+    await assert.rejects(action("missing"), /Database unavailable/);
 
     assert.deepEqual(persisted, original);
   });
