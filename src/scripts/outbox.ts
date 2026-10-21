@@ -661,7 +661,6 @@ async function flushOutbox(options: SyncOptions): Promise<SyncResult> {
         }
 
         // Server error or unexpected status: apply exponential backoff (1s, 2s, 4s, capped at 60s)
-        retryError = `Server returned HTTP ${response.status}. Saved transactions will retry.`;
         const serverRetryCount = (item.server_retry_count ?? 0) + 1;
         item.server_retry_count = serverRetryCount;
         item.retry_count = (item.retry_count ?? 0) + 1;
@@ -678,6 +677,7 @@ async function flushOutbox(options: SyncOptions): Promise<SyncResult> {
           }
         }
 
+        retryError = `Server returned HTTP ${response.status}. Saved transactions will retry.`;
         const backoffMs = Math.min(60000, 1000 * 2 ** (serverRetryCount - 1));
         item.next_retry_at = Date.now() + backoffMs;
         await saveOutboxItem(item);

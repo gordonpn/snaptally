@@ -1810,6 +1810,7 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
       assert.strictEqual(result.syncedCount, 0);
       assert.strictEqual(result.failedCount, 1);
       assert.strictEqual(result.lastError, "Exceeded maximum retry threshold");
+      assert.strictEqual(result.retryError, undefined);
 
       // Quarantined to DLQ
       assert.strictEqual(await getOutboxCount(), 0);
