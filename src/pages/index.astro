@@ -16,7 +16,7 @@ import Layout from "../layouts/Layout.astro";
     x-data="intakeForm"
   >
     <!-- Header -->
-    <header class="flex-none flex items-center justify-between pb-1.5 border-b border-base-content/10">
+    <header class="flex-none flex flex-wrap gap-2 items-center justify-between pb-1.5 border-b border-base-content/10">
       <div class="flex items-center gap-2">
         <div class="w-8 h-8 rounded-xl neu-raised-sm flex items-center justify-center text-primary">
           <IconReceipt2 class="w-5 h-5" />
@@ -50,12 +50,23 @@ import Layout from "../layouts/Layout.astro";
           x-show="outboxCount > 0"
           x-transition
           class="badge badge-warning gap-1 font-mono cursor-pointer min-h-[44px] min-w-[44px] px-2.5 neu-pressed"
-          @click="syncPendingOutbox(true)"
+          @click="openOutboxDrawer('pending')"
           aria-label="Pending offline transactions"
-          title="Pending offline transactions. Click to sync."
+          title="Open pending transactions"
         >
           <span x-show="isSyncing" class="loading loading-spinner loading-xs"></span>
           <span x-text="outboxCount"></span>
+        </button>
+        <button
+          type="button"
+          x-show="deadLetterCount > 0"
+          class="badge badge-error gap-1 font-mono min-h-[44px] min-w-[44px] px-2.5 neu-pressed"
+          @click="openOutboxDrawer('failed')"
+          aria-label="Failed transactions"
+          title="Open failed transactions"
+        >
+          <span aria-hidden="true">!</span>
+          <span x-text="deadLetterCount"></span>
         </button>
         <button
           type="button"
@@ -79,6 +90,18 @@ import Layout from "../layouts/Layout.astro";
         </button>
       </div>
     </header>
+
+    <div
+      x-show="persistentSyncMessage"
+      class="flex-none rounded-xl neu-inset border-l-4 border-error p-2 text-xs text-neu-text flex items-center gap-2"
+      role="status"
+      aria-live="polite"
+    >
+      <span class="flex-1" x-text="persistentSyncMessage"></span>
+      <button type="button" class="neu-raised-sm rounded-lg px-2 min-h-[44px] font-semibold"
+        @click="authenticationFailed ? openSettings() : openOutboxDrawer('failed')"
+        x-text="authenticationFailed ? 'Settings' : 'Review'"></button>
+    </div>
 
     <!-- Scrollable content area -->
     <main class="flex-1 flex flex-col justify-between overflow-y-auto overflow-x-hidden w-full max-w-full no-scrollbar py-1">
@@ -352,6 +375,81 @@ import Layout from "../layouts/Layout.astro";
         <span x-show="loading" class="loading loading-spinner loading-sm"></span>
       </button>
     </footer>
+
+    <dialog
+      class="modal modal-bottom sm:modal-middle"
+      aria-labelledby="sync-status-title"
+      x-effect="isOutboxOpen ? $el.showModal() : $el.close()"
+      @cancel="closeOutboxDrawer()"
+      @close="closeOutboxDrawer()"
+    >
+      <template x-if="isOutboxOpen">
+        <div class="modal-box p-4 pb-safe max-w-sm rounded-t-2xl sm:rounded-2xl max-h-[85dvh] flex flex-col neu-raised">
+          <div class="flex items-center justify-between gap-2">
+            <h2 id="sync-status-title" class="font-bold text-lg text-neu-text">Sync Status</h2>
+            <span x-show="isSyncing" class="loading loading-spinner loading-sm" role="status" aria-label="Syncing transactions"></span>
+            <button type="button" class="neu-raised-sm rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center"
+              @click="closeOutboxDrawer()" aria-label="Close Sync Status" autofocus>
+              <IconX class="w-5 h-5" />
+            </button>
+          </div>
+          <div class="flex gap-2 my-3" role="group" aria-label="Transaction queues">
+            <button type="button" class="flex-1 rounded-xl min-h-[44px] text-sm font-semibold"
+              :class="activeOutboxTab === 'pending' ? 'neu-inset text-primary' : 'neu-raised-sm text-neu-text'"
+              :aria-pressed="activeOutboxTab === 'pending'" @click="activeOutboxTab = 'pending'">
+              Pending (<span x-text="outboxCount"></span>)
+            </button>
+            <button type="button" class="flex-1 rounded-xl min-h-[44px] text-sm font-semibold"
+              :class="activeOutboxTab === 'failed' ? 'neu-inset text-neu-text' : 'neu-raised-sm text-neu-text'"
+              :aria-pressed="activeOutboxTab === 'failed'" @click="activeOutboxTab = 'failed'">
+              Failed (<span x-text="deadLetterCount"></span>)
+            </button>
+          </div>
+          <p x-show="authenticationFailed" class="text-neu-text text-sm mb-2" x-text="persistentSyncMessage"></p>
+          <p x-show="syncError" class="text-neu-text text-sm mb-2 break-words" role="status" x-text="syncError"></p>
+          <p x-show="queueError" class="text-neu-text text-sm mb-2 break-words" role="alert" x-text="queueError"></p>
+          <div class="overflow-y-auto flex-1 min-h-0">
+            <section x-show="activeOutboxTab === 'pending'" aria-label="Pending transactions">
+              <p x-show="outboxItems.length === 0" class="text-sm text-neu-text text-center py-6">No pending transactions.</p>
+              <template x-for="item in outboxItems" :key="item.id">
+                <article class="neu-inset rounded-xl p-3 mb-2 text-sm">
+                  <div class="flex justify-between gap-2 font-semibold">
+                    <span class="break-words min-w-0" x-text="item.merchant"></span>
+                    <span class="font-mono whitespace-nowrap" x-text="item.gross_amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })"></span>
+                  </div>
+                  <p class="text-xs text-neu-text mt-1"><span x-text="item.date"></span> · Retries: <span x-text="retryCount(item)"></span></p>
+                </article>
+              </template>
+            </section>
+            <section x-show="activeOutboxTab === 'failed'" aria-label="Failed transactions">
+              <p x-show="deadLetterItems.length === 0" class="text-sm text-neu-text text-center py-6">No failed transactions.</p>
+              <template x-for="item in deadLetterItems" :key="item.id">
+                <article class="neu-inset rounded-xl p-3 mb-2 text-sm">
+                  <div class="flex justify-between gap-2 font-semibold">
+                    <span class="break-words min-w-0" x-text="item.payload.merchant"></span>
+                    <span class="font-mono whitespace-nowrap" x-text="item.payload.gross_amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })"></span>
+                  </div>
+                  <p class="text-xs text-neu-text mt-1"><span x-text="item.payload.date"></span> · Retries: <span x-text="Math.max(item.retry_count, retryCount(item.payload))"></span></p>
+                  <template x-if="item.http_status !== undefined">
+                    <p class="text-xs text-neu-text mt-1">HTTP <span x-text="item.http_status"></span></p>
+                  </template>
+                  <p class="text-neu-text font-semibold text-xs break-words mt-2" x-text="item.error_reason"></p>
+                  <div class="flex gap-2 mt-2">
+                    <button type="button" class="neu-raised-sm flex-1 rounded-lg min-h-[44px] text-primary font-semibold disabled:opacity-50"
+                      :disabled="isQueueActionPending || isSyncing" @click="retryDLQItem(item.id)">Retry</button>
+                    <button type="button" class="neu-raised-sm flex-1 rounded-lg min-h-[44px] text-neu-text font-semibold disabled:opacity-50"
+                      :disabled="isQueueActionPending || isSyncing" @click="discardDLQItem(item.id)">Discard</button>
+                  </div>
+                </article>
+              </template>
+            </section>
+          </div>
+          <button type="button" class="neu-convex rounded-xl min-h-[44px] mt-3 text-primary font-bold disabled:opacity-50"
+            x-show="activeOutboxTab === 'pending'" :disabled="isSyncing || isQueueActionPending || outboxCount === 0"
+            @click="syncPendingOutbox(true)">Sync Now</button>
+        </div>
+      </template>
+    </dialog>
 
     <!-- Settings Modal -->
     <dialog class="modal" :class="{ 'modal-open': isSettingsOpen }">
