@@ -32,7 +32,7 @@ function createPending(): OutboxItem {
 }
 
 for (const status of [undefined, 201, 400]) {
-  it(`releases the sync lock after a stalled ${status ?? "request"} and preserves the payload`, async (t) => {
+  it(`releases the sync lock after a stalled ${status ?? "request"} and respects committed responses`, async (t) => {
     await clearOutbox();
     await clearDeadLetterQueue();
     const item = createPending();
@@ -83,6 +83,14 @@ for (const status of [undefined, 201, 400]) {
       const result = await syncOutbox({ force: true });
 
       assert.equal(held, false);
+      if (status === 201) {
+        assert.equal(result.syncedCount, 1);
+        assert.equal(result.failedCount, 0);
+        assert.equal(result.retryError, undefined);
+        assert.deepEqual(await getOutbox(), []);
+        assert.deepEqual(await getDeadLetterQueue(), []);
+        return;
+      }
       assert.equal(result.syncedCount, 0);
       assert.equal(result.failedCount, 1);
       assert.match(result.retryError ?? "", /timed out/);

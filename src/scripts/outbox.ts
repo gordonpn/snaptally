@@ -614,7 +614,6 @@ async function flushOutbox(options: SyncOptions): Promise<SyncResult> {
 
         if (response.status === 201) {
           const data = (await response.json().catch(() => null)) as unknown;
-          signal.throwIfAborted();
           await deleteOutboxItem(item.id);
           syncedCount++;
           options.onItemSynced?.(item, data);
