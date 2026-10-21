@@ -604,14 +604,17 @@ async function flushOutbox(options: SyncOptions): Promise<SyncResult> {
       }
 
       try {
+        const signal = AbortSignal.timeout(30000);
         const response = await fetch("/api/transactions", {
           method: "POST",
           headers,
           body: JSON.stringify(payload),
+          signal,
         });
 
         if (response.status === 201) {
           const data = (await response.json().catch(() => null)) as unknown;
+          signal.throwIfAborted();
           await deleteOutboxItem(item.id);
           syncedCount++;
           options.onItemSynced?.(item, data);
@@ -626,6 +629,7 @@ async function flushOutbox(options: SyncOptions): Promise<SyncResult> {
 
         if (response.status === 400) {
           const data = (await response.json().catch(() => null)) as { error?: string } | null;
+          signal.throwIfAborted();
           const errorMsg = data?.error || response.statusText || "Validation failed";
 
           // If the item is a credit/reimbursement (gross_amount < 0) and the backend rejects it

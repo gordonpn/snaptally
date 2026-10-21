@@ -541,6 +541,8 @@ If IndexedDB cannot open, recovery can still act on a matching fallback record;
 without that fallback copy, the drawer reports the database error.
 Web Locks coordinate sync across tabs in supported browsers. Runtimes without
 Web Locks retain only per-tab synchronization.
+Each sync request has a 30-second timeout, including response-body reads. A timeout
+retains the transaction for retry and releases the shared sync lock.
 
 For an authentication warning, open **Settings**, correct the bearer token, and
 save it. The warning clears after a successful authenticated request. The warning
