@@ -25,7 +25,7 @@
 2. **[#101: Ops: Execute historical Google Sheets backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101)**
    - **Priority:** P0 | **Effort:** S | **Readiness:** BLOCKED (requires explicit authorization for production writes)
    - **Dependencies:** #103, #106, and #107 (all completed)
-   - **Reason:** Populates production D1 after a pre-flight backup; the verified active dataset now has 2,360 rows (1,966 USD, 394 CAD, 35 skipped).
+   - **Reason:** Populates production D1 after a pre-flight backup; the verified active dataset now has 2,372 rows (1,971 USD, 401 CAD, 35 skipped, 0 duplicate IDs) across 13 sheets including RSU income and held FX transactions.
 
 3. **[#78: Ops: Codify automated dependency maintenance and vulnerability remediation (.github/dependabot.yml)](https://github.com/gordonpn/snaptally/issues/78)**
    - **Priority:** P1 | **Effort:** S | **Readiness:** READY
