@@ -3,6 +3,7 @@ import childProcess from "node:child_process";
 import {
   copyFileSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -13,7 +14,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it, type TestContext } from "node:test";
-import { executeD1Batch, runBackfill } from "../scripts/backfill/pipeline.ts";
+import { executeD1Batch, resolveTargetDir, runBackfill } from "../scripts/backfill/pipeline.ts";
 import type { BackfillOptions } from "../scripts/backfill/types.ts";
 import { createTestDatabase } from "./helpers/db.ts";
 
@@ -115,6 +116,47 @@ describe("Backfill file discovery", () => {
       categoryBreakdown: { "Fixed Costs -> Transit": 1 },
     });
   });
+
+  it("resolves nested dated folder with 01_CURRENT_BUDGETS when base directory contains dated subdirectories", async (t) => {
+    const rootDir = createDirectory(t);
+    const dateDir = join(rootDir, "2026-10-22");
+    const currentBudgetsDir = join(dateDir, "01_CURRENT_BUDGETS");
+    mkdirSync(currentBudgetsDir, { recursive: true });
+
+    const filename = "Budgeting - Bikeshare.csv";
+    copyFileSync(join(FIXTURES_DIR, filename), join(currentBudgetsDir, filename));
+
+    const resolved = resolveTargetDir(rootDir);
+    assert.strictEqual(resolved, currentBudgetsDir);
+
+    const summary = await runBackfill(createOptions({ dir: rootDir }));
+    assert.strictEqual(summary.sheets.length, 1);
+    assert.strictEqual(summary.sheets[0].file, filename);
+  });
+
+  it("resolves dated folder directly when base directory is dated directory with 01_CURRENT_BUDGETS", async (t) => {
+    const rootDir = createDirectory(t);
+    const currentBudgetsDir = join(rootDir, "01_CURRENT_BUDGETS");
+    mkdirSync(currentBudgetsDir, { recursive: true });
+
+    const filename = "Budgeting - Bikeshare.csv";
+    copyFileSync(join(FIXTURES_DIR, filename), join(currentBudgetsDir, filename));
+
+    const resolved = resolveTargetDir(rootDir);
+    assert.strictEqual(resolved, currentBudgetsDir);
+  });
+
+  it("resolves direct dated directory when date folder contains CSVs directly", async (t) => {
+    const rootDir = createDirectory(t);
+    const dateDir = join(rootDir, "2026-10-20");
+    mkdirSync(dateDir, { recursive: true });
+
+    const filename = "Budgeting - Bikeshare.csv";
+    copyFileSync(join(FIXTURES_DIR, filename), join(dateDir, filename));
+
+    const resolved = resolveTargetDir(rootDir);
+    assert.strictEqual(resolved, dateDir);
+  });
 });
 
 describe("Backfill execution", () => {
@@ -197,7 +239,7 @@ describe("Backfill execution", () => {
 
     assert.deepEqual(
       summaries.map((summary) => summary.totalValid),
-      [19, 19, 19, 0],
+      [21, 21, 21, 0],
     );
   });
 

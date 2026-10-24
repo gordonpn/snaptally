@@ -456,6 +456,41 @@ export const salaryAdapter: SheetAdapter = {
   },
 };
 
+export const rsuAdapter: SheetAdapter = {
+  name: "RSU Income",
+  match: (file) => /Budgeting - RSU-related income\.csv$/i.test(file),
+  parse: (rows, filename, options) => {
+    const transactions: BackfillTransaction[] = [];
+    const dataRows = rows.slice(1);
+
+    for (let i = 0; i < dataRows.length; i++) {
+      const row = dataRows[i];
+      const sourceRow = i + 2;
+      const date = cleanDate(row[0]);
+      const grossAmount = cleanAmount(row[1]);
+      if (!date || grossAmount === null) continue;
+
+      const currency: "USD" | "CAD" = row[2]?.trim().toUpperCase() === "CAD" ? "CAD" : "USD";
+
+      transactions.push(
+        createTransaction(
+          date,
+          options.defaultCard,
+          "Income",
+          "Salary",
+          "Employer",
+          grossAmount,
+          currency,
+          filename,
+          sourceRow,
+          options.userId,
+        ),
+      );
+    }
+    return transactions;
+  },
+};
+
 export const stuffAdapter: SheetAdapter = {
   name: "Stuff",
   match: (file) => /Budgeting - Stuff\.csv$/i.test(file),
@@ -603,6 +638,7 @@ export const ALL_ADAPTERS: readonly SheetAdapter[] = [
   mentalTherapyAdapter,
   montrealGasAdapter,
   rideHailAdapter,
+  rsuAdapter,
   salaryAdapter,
   stuffAdapter,
   utilitiesAdapter,

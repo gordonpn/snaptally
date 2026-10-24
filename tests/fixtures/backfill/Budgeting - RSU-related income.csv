@@ -1,0 +1,3 @@
+Pay date,Amount,Currency,Category,Description,Deposit account (masked),Verification note,Source pay stub link
+2024-07-16,44.86,USD,Off-cycle RSU-related payroll cash,ADP stock-related off-cycle statement,9088,Pay stub,https://example.com/stub1
+2026-05-18,153.00,USD,Off-cycle RSU-related payroll cash,ADP stock-related off-cycle statement,0444,Fidelity deposit,https://example.com/stub2

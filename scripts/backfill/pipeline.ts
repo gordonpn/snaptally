@@ -57,8 +57,61 @@ export function executeD1Batch(
   }
 }
 
+export function resolveTargetDir(baseDir: string): string {
+  const resolved = resolve(baseDir);
+  if (!existsSync(resolved)) {
+    return resolved;
+  }
+
+  const directCsvs = readdirSync(resolved).filter(
+    (f) => f.endsWith(".csv") && !f.toLowerCase().includes("general"),
+  );
+  if (directCsvs.length > 0) {
+    return resolved;
+  }
+
+  const entries = readdirSync(resolved, { withFileTypes: true });
+  const dateDirs = entries
+    .filter((e) => e.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(e.name))
+    .map((e) => e.name)
+    .sort()
+    .reverse();
+
+  for (const dateDir of dateDirs) {
+    const candidatePath = join(resolved, dateDir, "01_CURRENT_BUDGETS");
+    if (existsSync(candidatePath)) {
+      const budgetCsvs = readdirSync(candidatePath).filter(
+        (f) => f.endsWith(".csv") && !f.toLowerCase().includes("general"),
+      );
+      if (budgetCsvs.length > 0) {
+        return candidatePath;
+      }
+    }
+
+    const directDatePath = join(resolved, dateDir);
+    const dateCsvs = readdirSync(directDatePath).filter(
+      (f) => f.endsWith(".csv") && !f.toLowerCase().includes("general"),
+    );
+    if (dateCsvs.length > 0) {
+      return directDatePath;
+    }
+  }
+
+  const subCurrentBudgets = join(resolved, "01_CURRENT_BUDGETS");
+  if (existsSync(subCurrentBudgets)) {
+    const budgetCsvs = readdirSync(subCurrentBudgets).filter(
+      (f) => f.endsWith(".csv") && !f.toLowerCase().includes("general"),
+    );
+    if (budgetCsvs.length > 0) {
+      return subCurrentBudgets;
+    }
+  }
+
+  return resolved;
+}
+
 export async function runBackfill(options: BackfillOptions): Promise<BackfillSummary> {
-  const targetDir = resolve(options.dir ?? "data/sheets");
+  const targetDir = resolveTargetDir(options.dir ?? "data/sheets");
   let filePaths: string[] = [];
 
   if (options.file) {

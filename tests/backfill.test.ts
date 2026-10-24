@@ -15,6 +15,7 @@ import {
   mentalTherapyAdapter,
   montrealGasAdapter,
   rideHailAdapter,
+  rsuAdapter,
   salaryAdapter,
   stuffAdapter,
   utilitiesAdapter,
@@ -513,6 +514,71 @@ describe("Sheet Adapters", () => {
     );
   });
 
+  it("rsuAdapter: maps RSU income rows to Income -> Salary and Employer", () => {
+    const rows = [
+      [
+        "Pay date",
+        "Amount",
+        "Currency",
+        "Category",
+        "Description",
+        "Deposit account (masked)",
+        "Verification note",
+        "Source pay stub link",
+      ],
+      [
+        "2024-07-16",
+        "44.86",
+        "USD",
+        "Off-cycle RSU-related payroll cash",
+        "ADP statement",
+        "9088",
+        "Note",
+        "https://example.com/stub1",
+      ],
+      [
+        "2026-05-18",
+        "153.00",
+        "USD",
+        "Off-cycle RSU-related payroll cash",
+        "ADP statement",
+        "0444",
+        "Note",
+        "https://example.com/stub2",
+      ],
+      [
+        "2026-06-01",
+        "100.00",
+        "CAD",
+        "Off-cycle RSU-related payroll cash",
+        "ADP statement",
+        "0444",
+        "CAD note",
+        "https://example.com/stub3",
+      ],
+    ];
+    const txs = rsuAdapter.parse(rows, "Budgeting - RSU-related income.csv", options);
+    assert.strictEqual(txs.length, 3);
+
+    assert.strictEqual(txs[0].parentBucket, "Income");
+    assert.strictEqual(txs[0].subcategory, "Salary");
+    assert.strictEqual(txs[0].merchant, "Employer");
+    assert.strictEqual(txs[0].grossAmount, 44.86);
+    assert.strictEqual(txs[0].currency, "USD");
+
+    assert.strictEqual(txs[1].parentBucket, "Income");
+    assert.strictEqual(txs[1].subcategory, "Salary");
+    assert.strictEqual(txs[1].merchant, "Employer");
+    assert.strictEqual(txs[1].grossAmount, 153.0);
+    assert.strictEqual(txs[1].currency, "USD");
+
+    assert.strictEqual(txs[2].parentBucket, "Income");
+    assert.strictEqual(txs[2].subcategory, "Salary");
+    assert.strictEqual(txs[2].merchant, "Employer");
+    assert.strictEqual(txs[2].grossAmount, 100.0);
+    assert.strictEqual(txs[2].currency, "CAD");
+  });
+
   it("stuffAdapter: normalizes climbing gyms into Fitness and handles USD/CAD", () => {
     const rows = [
       ["Date", "Cost (US$)", "Cost (CA$)", "Unified US$", "Merchant", "Description"],
@@ -554,13 +620,13 @@ describe("Sheet Adapters", () => {
     assert.strictEqual(txs[1].subcategory, "Utilities");
   });
 
-  it("covers all 12 sheet adapters in ALL_ADAPTERS registry", () => {
-    assert.strictEqual(ALL_ADAPTERS.length, 12);
+  it("covers all 13 sheet adapters in ALL_ADAPTERS registry", () => {
+    assert.strictEqual(ALL_ADAPTERS.length, 13);
   });
 });
 
 describe("Pipeline Ingestion (runBackfill)", () => {
-  it("runs dry-run across all 12 sheets and produces exact metrics without DB writes", async () => {
+  it("runs dry-run across all 13 sheets and produces exact metrics without DB writes", async () => {
     const summary = await runBackfill({
       userId: "usr_default",
       defaultCard: "Historical",
@@ -581,14 +647,15 @@ describe("Pipeline Ingestion (runBackfill)", () => {
         "Budgeting - Hydro QC.csv",
         "Budgeting - Mental therapy.csv",
         "Budgeting - Montreal gas expenses.csv",
+        "Budgeting - RSU-related income.csv",
         "Budgeting - Ride-hail.csv",
         "Budgeting - Salary.csv",
         "Budgeting - Stuff.csv",
         "Budgeting - Utilities.csv",
       ],
     );
-    assert.strictEqual(summary.totalValid, 19);
-    assert.strictEqual(summary.totalUsd, 12);
+    assert.strictEqual(summary.totalValid, 21);
+    assert.strictEqual(summary.totalUsd, 14);
     assert.strictEqual(summary.totalCad, 7);
     assert.strictEqual(summary.totalSkipped, 3);
     assert.deepStrictEqual(summary.categoryBreakdown, {
@@ -600,7 +667,7 @@ describe("Pipeline Ingestion (runBackfill)", () => {
       "Savings -> Travel Fund": 1,
       "Fixed Costs -> Utilities": 2,
       "Fixed Costs -> Healthcare": 1,
-      "Income -> Salary": 2,
+      "Income -> Salary": 4,
       "Guilt-Free -> Shopping": 1,
       "Fixed Costs -> Fitness": 1,
     });

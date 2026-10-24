@@ -115,6 +115,7 @@ describe("Merchant Normalizer", () => {
         ["Kim Phat", "Kim Phat"],
         ["IGA", "IGA"],
         ["Maxi", "Maxi"],
+        ["Walmart", "Walmart"],
       ];
 
       for (const [raw, canonical] of cases) {

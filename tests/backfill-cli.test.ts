@@ -24,7 +24,7 @@ describe("Backfill CLI", () => {
 
     assert.equal(result.status, 0);
     assert.match(result.stdout, /DRY RUN \(no DB writes\)/);
-    assert.match(result.stdout, /Total Valid Transactions : 19/);
+    assert.match(result.stdout, /Total Valid Transactions : 21/);
     assert.match(result.stdout, /Zero database writes executed/);
     assert.equal(result.stderr, "");
   });

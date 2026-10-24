@@ -108,6 +108,12 @@ export const DEFAULT_CANONICAL_RULES: Readonly<Record<string, CategoryRule>> = {
     subcategory: "Groceries",
     rewardMultiplierCategory: "Wholesale",
   },
+  WALMART: {
+    canonicalName: "Walmart",
+    parentBucket: "Fixed Costs",
+    subcategory: "Groceries",
+    rewardMultiplierCategory: "Groceries",
+  },
   "STOP & SHOP": {
     canonicalName: "Stop & Shop",
     parentBucket: "Fixed Costs",
