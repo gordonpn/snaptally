@@ -1,6 +1,6 @@
 # Project Execution Queue
 
-- **Last Refined:** 2026-10-20 15:08 EDT
+- **Last Refined:** 2026-10-26 19:50 EDT
 - **Repository:** gordonpn/snaptally
 - **GitHub Backlog:** https://github.com/gordonpn/snaptally/issues
 
@@ -17,20 +17,40 @@
 
 ## NEXT - Upcoming Work
 
-1. **[#108: Data: Triage and resolve 121 statement items in batch-4 reconciliation review queue](https://github.com/gordonpn/snaptally/issues/108)**
+1. **[#115: Feat: Infer category and card defaults from merchant transaction history](https://github.com/gordonpn/snaptally/issues/115)**
+   - **Priority:** P1 | **Effort:** S | **Readiness:** READY
+   - **Dependencies:** None
+   - **Reason:** Automatically infers category, subcategory, and card from canonical rules (`normalizeMerchant`) and user history (`recentTransactions`), eliminating 2 to 3 redundant taps per transaction.
+
+2. **[#113: Fix: Disable native keyboard suggestions and autocomplete for card and merchant inputs](https://github.com/gordonpn/snaptally/issues/113)**
+   - **Priority:** P2 | **Effort:** XS | **Readiness:** READY
+   - **Dependencies:** None
+   - **Reason:** Prevents mobile keyboard autocorrect, auto-capitalization, and browser autofill overlays on merchant, card label, and token inputs.
+
+3. **[#114: Feat: Interactive merchant autocomplete dropdown from transaction history](https://github.com/gordonpn/snaptally/issues/114)**
+   - **Priority:** P2 | **Effort:** S | **Readiness:** READY
+   - **Dependencies:** #113 (clean input without keyboard suggestion conflicts)
+   - **Reason:** Replaces clumsy mobile `<datalist>` with a responsive floating dropdown over `allMerchants` with keyboard and touch selection.
+
+4. **[#108: Data: Triage and resolve 121 statement items in batch-4 reconciliation review queue](https://github.com/gordonpn/snaptally/issues/108)**
    - **Priority:** P2 | **Effort:** M | **Readiness:** READY (unblocked by #107)
    - **Dependencies:** #106 and #107 (dataset promotion and held FX transactions are complete)
    - **Reason:** Resolves 84 candidate matches and 37 unmatched debits/refunds from statement extracts.
 
-2. **[#101: Ops: Execute historical Google Sheets backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101)**
+5. **[#101: Ops: Execute historical Google Sheets backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101)**
    - **Priority:** P0 | **Effort:** S | **Readiness:** BLOCKED (requires explicit authorization for production writes)
    - **Dependencies:** #103, #106, and #107 (all completed)
    - **Reason:** Populates production D1 after a pre-flight backup; the verified active dataset now has 2,372 rows (1,971 USD, 401 CAD, 35 skipped, 0 duplicate IDs) across 13 sheets including RSU income and held FX transactions.
 
-3. **[#78: Ops: Codify automated dependency maintenance and vulnerability remediation (.github/dependabot.yml)](https://github.com/gordonpn/snaptally/issues/78)**
+6. **[#78: Ops: Codify automated dependency maintenance and vulnerability remediation (.github/dependabot.yml)](https://github.com/gordonpn/snaptally/issues/78)**
    - **Priority:** P1 | **Effort:** S | **Readiness:** READY
    - **Dependencies:** None
    - **Reason:** Remediates active security vulnerabilities reported by `pnpm audit` (undici/miniflare/wrangler) and automates monthly maintenance.
+
+7. **[#116: Docs: Clarify income category pill versus credit toggle and align form interaction model](https://github.com/gordonpn/snaptally/issues/116)**
+   - **Priority:** P3 | **Effort:** XS | **Readiness:** READY
+   - **Dependencies:** None
+   - **Reason:** Renames credit badge to "Refund / Category Credit" to avoid collision with `Income -> Reimbursement`, and guards `isNegative` against `Income`.
 
 ## COMPLETED RECENTLY
 
