@@ -32,6 +32,33 @@ export const CATEGORIES_BY_BUCKET = BUCKET_SUBCATEGORIES;
 export const TOKEN_STORAGE_KEY = "snaptally_api_token";
 export const CARDS_STORAGE_KEY = "snaptally_cards";
 export const MERCHANTS_STORAGE_KEY = "snaptally_merchants";
+const FREQUENT_MERCHANT_LIMIT = 8;
+// Case variants occupy separate API rows, so fetch headroom before collapsing labels.
+const MERCHANT_FETCH_LIMIT = FREQUENT_MERCHANT_LIMIT * 3;
+
+function normalizeLabel(value: string): string {
+  return value.toLowerCase();
+}
+
+function findCaseInsensitiveMatch(values: readonly string[], value: string): string | undefined {
+  const normalizedValue = normalizeLabel(value.trim());
+  return values.find((candidate) => normalizeLabel(candidate.trim()) === normalizedValue);
+}
+
+function dedupeCaseInsensitive(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const uniqueValues: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    const key = normalizeLabel(trimmed);
+    if (key === "" || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    uniqueValues.push(trimmed);
+  }
+  return uniqueValues;
+}
 
 /**
  * Returns today's date in local YYYY-MM-DD calendar format.
@@ -351,7 +378,7 @@ export function intakeForm() {
       }
       const requestToken = this.token;
       try {
-        const response = await fetch("/api/merchants?limit=8", {
+        const response = await fetch(`/api/merchants?limit=${MERCHANT_FETCH_LIMIT}`, {
           headers: { Authorization: `Bearer ${requestToken}` },
         });
         if (this.token === requestToken && response.status === 401)
@@ -360,29 +387,35 @@ export function intakeForm() {
           return;
         }
         this.authenticationFailed = false;
-        const data = (await response.json()) as { merchants?: string[] };
+        const data = (await response.json()) as unknown;
         if (this.token !== requestToken) {
           return;
         }
-        if (data.merchants && data.merchants.length > 0) {
-          this.frequentMerchants = data.merchants.slice(0, 8);
+        if (
+          data === null ||
+          typeof data !== "object" ||
+          !("merchants" in data) ||
+          !Array.isArray(data.merchants)
+        ) {
+          return;
+        }
+        const rawMerchants: unknown[] = data.merchants;
+        const merchants = dedupeCaseInsensitive(
+          rawMerchants.filter((merchant): merchant is string => typeof merchant === "string"),
+        );
+        if (merchants.length === 0) {
+          return;
+        }
+        this.frequentMerchants = merchants.slice(0, FREQUENT_MERCHANT_LIMIT);
 
-          // Merge distinct merchants into autocomplete cache
-          const merged = [...this.allMerchants];
-          for (const m of data.merchants) {
-            if (!merged.includes(m)) {
-              merged.push(m);
-            }
-          }
-          this.allMerchants = merged;
-          this.persistMerchants();
+        // Merge distinct merchants into autocomplete cache
+        const merged = dedupeCaseInsensitive([...this.allMerchants, ...merchants]);
+        this.allMerchants = merged;
+        this.persistMerchants();
 
-          if (
-            !this.isCustomMerchant &&
-            (!this.merchant || !this.frequentMerchants.includes(this.merchant))
-          ) {
-            this.merchant = this.frequentMerchants[0];
-          }
+        if (!this.isCustomMerchant) {
+          const existingMerchant = findCaseInsensitiveMatch(this.frequentMerchants, this.merchant);
+          this.merchant = existingMerchant ?? this.frequentMerchants[0];
         }
       } catch {
         // Silently preserve default merchants on network or parse failures
@@ -416,27 +449,22 @@ export function intakeForm() {
           });
 
           // Dynamically extract distinct cards from recent transactions
-          const extractedCards: string[] = [];
-          for (const tx of data.transactions) {
-            const cardName = tx.card?.trim();
-            if (cardName && !extractedCards.includes(cardName)) {
-              extractedCards.push(cardName);
-            }
-          }
+          const extractedCards = dedupeCaseInsensitive(
+            data.transactions.flatMap((tx) => {
+              const cardName = tx.card?.trim();
+              return cardName ? [cardName] : [];
+            }),
+          );
           if (extractedCards.length > 0) {
-            const merged = [...this.cards];
-            for (const c of extractedCards) {
-              if (!merged.includes(c)) {
-                merged.push(c);
-              }
-            }
+            const merged = dedupeCaseInsensitive([...this.cards, ...extractedCards]);
             this.cards = merged;
             if (this.autoCustomCard) {
               this.isCustomCard = false;
               this.autoCustomCard = false;
             }
-            if (!this.isCustomCard && (!this.card || !this.cards.includes(this.card))) {
-              this.card = this.cards[0];
+            if (!this.isCustomCard) {
+              const existingCard = findCaseInsensitiveMatch(this.cards, this.card);
+              this.card = existingCard ?? this.cards[0];
             }
             this.persistCards();
           }
@@ -575,9 +603,13 @@ export function intakeForm() {
               Array.isArray(parsed) &&
               parsed.every((item): item is string => typeof item === "string")
             ) {
-              this.cards = parsed;
-              if (parsed.length > 0) {
-                this.card = parsed[0];
+              const cards = dedupeCaseInsensitive(parsed);
+              this.cards = cards;
+              if (cards.length > 0) {
+                this.card = cards[0];
+                this.persistCards();
+              } else {
+                localStorage.removeItem(CARDS_STORAGE_KEY);
               }
             }
           }
@@ -588,13 +620,8 @@ export function intakeForm() {
               Array.isArray(parsed) &&
               parsed.every((item): item is string => typeof item === "string")
             ) {
-              const merged = [...parsed];
-              for (const def of DEFAULT_FREQUENT_MERCHANTS) {
-                if (!merged.includes(def)) {
-                  merged.push(def);
-                }
-              }
-              this.allMerchants = merged;
+              this.allMerchants = dedupeCaseInsensitive([...parsed, ...DEFAULT_FREQUENT_MERCHANTS]);
+              this.persistMerchants();
             }
           }
         }
@@ -687,7 +714,8 @@ export function intakeForm() {
         this.resetDateToToday();
 
         // Add merchant to local autocomplete cache
-        if (!this.allMerchants.includes(trimmedMerchant)) {
+        const existingMerchant = findCaseInsensitiveMatch(this.allMerchants, trimmedMerchant);
+        if (existingMerchant === undefined) {
           this.allMerchants.push(trimmedMerchant);
           this.persistMerchants();
         }
@@ -699,14 +727,15 @@ export function intakeForm() {
         }
 
         if (this.isCustomCard) {
-          if (!this.cards.includes(trimmedCard)) {
+          const existingCard = findCaseInsensitiveMatch(this.cards, trimmedCard);
+          if (existingCard === undefined) {
             this.cards.unshift(trimmedCard);
             this.persistCards();
           }
           this.isCustomCard = false;
           this.autoCustomCard = false;
           this.customCardInput = "";
-          this.card = trimmedCard;
+          this.card = existingCard ?? trimmedCard;
         }
 
         // 3. Trigger background sync
