@@ -1,66 +1,59 @@
 # Project Execution Queue
 
-- **Last Refined:** 2026-10-26 19:50 EDT
+- **Last Refined:** 2026-10-26 21:59 EDT
 - **Repository:** gordonpn/snaptally
 - **GitHub Backlog:** https://github.com/gordonpn/snaptally/issues
 
 ## NOW - Recommended Next Task
 
-### [#96: Feat: Implement Outbox and Sync Status Drawer in mobile intake UI](https://github.com/gordonpn/snaptally/issues/96)
-- **Priority:** P0
+### [#115: feat(intake): infer category and card defaults from merchant transaction history](https://github.com/gordonpn/snaptally/issues/115)
+- **Priority:** P1
 - **Effort:** S
-- **Readiness:** IN REVIEW ([draft PR #111](https://github.com/gordonpn/snaptally/pull/111))
-- **Why this task is next:** Completes the high-priority mobile sync status workflow and closes Epic #94; its prerequisite #95 is complete.
-- **Next action:** Review PR #111 and its checks. Implementation is verified locally with 376 passing tests and mobile browser interaction checks; merge remains with the maintainer.
-- **Definition of Done:** The drawer, retry/discard actions, and persistent failure banner meet the issue acceptance criteria with tests and mobile UI verification.
-- **Unblocks:** Closes [Epic #94](https://github.com/gordonpn/snaptally/issues/94).
+- **Readiness:** READY
+- **Why this task is next:** PRs #111 and #117 merged, closing #96 and #116. #115 is the next implementation-ready P1 story; #107's data work is reported complete and is awaiting maintainer review.
+- **First action:** Trace merchant selection, canonical rules in `normalizeMerchant`, and loaded `recentTransactions` in `src/scripts/intake-form.ts`.
+- **Definition of Done:** Canonical merchant rules and transaction history infer category, subcategory, and card; manual category choices override inference; tests cover canonical rules, historical frequency, and overrides.
+- **Unblocks:** No direct downstream issue; reduces repeated selection steps for returning merchants.
 
 ## NEXT - Upcoming Work
 
-1. **[#115: Feat: Infer category and card defaults from merchant transaction history](https://github.com/gordonpn/snaptally/issues/115)**
+1. **[#107: Data: Categorize and ingest 7 held international FX transactions ($538.28 USD)](https://github.com/gordonpn/snaptally/issues/107)**
+   - **Priority:** P1 | **Effort:** XS | **Readiness:** AWAITING MAINTAINER REVIEW
+   - **Dependencies:** None
+   - **Reason:** The latest issue comment reports the seven rows and dry-run verification are complete; the issue remains open and has no active PR.
+   - **Next action:** Review the reported data and verification before deciding whether the issue is complete.
+
+2. **[#78: Ops: Codify automated dependency maintenance and vulnerability remediation (.github/dependabot.yml)](https://github.com/gordonpn/snaptally/issues/78)**
    - **Priority:** P1 | **Effort:** S | **Readiness:** READY
    - **Dependencies:** None
-   - **Reason:** Automatically infers category, subcategory, and card from canonical rules (`normalizeMerchant`) and user history (`recentTransactions`), eliminating 2 to 3 redundant taps per transaction.
+   - **Reason:** Adds automated dependency and security update PRs with the repository's existing CI checks.
 
-2. **[#113: Fix: Disable native keyboard suggestions and autocomplete for card and merchant inputs](https://github.com/gordonpn/snaptally/issues/113)**
+3. **[#113: Fix: Disable native keyboard suggestions and autocomplete for card and merchant inputs](https://github.com/gordonpn/snaptally/issues/113)**
    - **Priority:** P2 | **Effort:** XS | **Readiness:** READY
    - **Dependencies:** None
-   - **Reason:** Prevents mobile keyboard autocorrect, auto-capitalization, and browser autofill overlays on merchant, card label, and token inputs.
+   - **Reason:** Prevents mobile autocorrect, auto-capitalization, and autofill overlays on merchant, card, and token inputs.
 
-3. **[#114: Feat: Interactive merchant autocomplete dropdown from transaction history](https://github.com/gordonpn/snaptally/issues/114)**
-   - **Priority:** P2 | **Effort:** S | **Readiness:** READY
-   - **Dependencies:** #113 (clean input without keyboard suggestion conflicts)
-   - **Reason:** Replaces clumsy mobile `<datalist>` with a responsive floating dropdown over `allMerchants` with keyboard and touch selection.
+4. **[#114: Feat: Interactive merchant autocomplete dropdown from transaction history](https://github.com/gordonpn/snaptally/issues/114)**
+   - **Priority:** P2 | **Effort:** S | **Readiness:** BLOCKED on #113
+   - **Dependencies:** #113
+   - **Reason:** Adds touch and keyboard suggestions after native autocomplete behavior is disabled.
 
-4. **[#108: Data: Triage and resolve 121 statement items in batch-4 reconciliation review queue](https://github.com/gordonpn/snaptally/issues/108)**
-   - **Priority:** P2 | **Effort:** M | **Readiness:** READY (unblocked by #107)
-   - **Dependencies:** #106 and #107 (dataset promotion and held FX transactions are complete)
-   - **Reason:** Resolves 84 candidate matches and 37 unmatched debits/refunds from statement extracts.
-
-5. **[#101: Ops: Execute historical Google Sheets backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101)**
-   - **Priority:** P0 | **Effort:** S | **Readiness:** BLOCKED (requires explicit authorization for production writes)
-   - **Dependencies:** #103, #106, and #107 (all completed)
-   - **Reason:** Populates production D1 after a pre-flight backup; the verified active dataset now has 2,372 rows (1,971 USD, 401 CAD, 35 skipped, 0 duplicate IDs) across 13 sheets including RSU income and held FX transactions.
-
-6. **[#78: Ops: Codify automated dependency maintenance and vulnerability remediation (.github/dependabot.yml)](https://github.com/gordonpn/snaptally/issues/78)**
-   - **Priority:** P1 | **Effort:** S | **Readiness:** READY
-   - **Dependencies:** None
-   - **Reason:** Remediates active security vulnerabilities reported by `pnpm audit` (undici/miniflare/wrangler) and automates monthly maintenance.
-
-7. **[#116: Refactor: Remove Reimbursement from Income and simplify to Salary and Other](https://github.com/gordonpn/snaptally/issues/116)**
-   - **Priority:** P3 | **Effort:** XS | **Readiness:** READY
-   - **Dependencies:** None
-   - **Reason:** Eliminates Reimbursement from Income in favor of the +/- credit toggle, simplifies Income subcategories to Salary and Other, renames credit badge to "Refund / Credit", and guards isNegative against Income.
+5. **[#108: Data: Triage and resolve 121 statement items in batch-4 reconciliation review queue](https://github.com/gordonpn/snaptally/issues/108)**
+   - **Priority:** P2 | **Effort:** M | **Readiness:** BLOCKED on maintainer review of #107
+   - **Dependencies:** #106 and #107
+   - **Reason:** Resolves candidate matches and unmatched statement debits/refunds once #107 is accepted as complete.
 
 ## COMPLETED RECENTLY
 
+- **[#96: Feat: Implement Outbox and Sync Status Drawer in mobile intake UI](https://github.com/gordonpn/snaptally/issues/96)**: Resolved in merged PR #111.
+- **[#116: Refactor: Remove Reimbursement from Income and simplify to Salary and Other](https://github.com/gordonpn/snaptally/issues/116)**: Resolved in merged PR #117; Income is now Salary or Other, expense credits stay in their original categories, and historical records remain unchanged.
 - **[#103: Ops: Codify automated pre-flight D1 snapshot and backup recipe](https://github.com/gordonpn/snaptally/issues/103)**: Resolved in PR #110. Created `scripts/db-backup.sh`, added `just db-backup-remote` and `just db-backup-local`, gitignored `.backups/`, and updated backfill runbook.
 - **[#106: Data: Promote reconciled batch-4 budget CSVs (2,353 transactions) to primary backfill source](https://github.com/gordonpn/snaptally/issues/106)**: Resolved in PR #109. Primary backfill dataset promoted to 2,353 valid transactions across 12 sheets with BOM-hardened CSV parsing.
-- **[#107: Data: Categorize and ingest 7 held international FX transactions ($538.28 USD)](https://github.com/gordonpn/snaptally/issues/107)**: Appended seven converted transactions to the ignored active Stuff sheet; dry-run reports 2,360 valid transactions and a direct parse confirmed unique IDs. Issue remains open for maintainer review.
 
 ## BLOCKERS
 
-- Production execution in #101 requires explicit authorization before writing to Cloudflare D1.
+- [#101: Execute historical backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101) requires explicit authorization before production writes.
+- [#108: Triage batch-4 reconciliation items](https://github.com/gordonpn/snaptally/issues/108) depends on maintainer review of #107.
 
 ## LATER
 
