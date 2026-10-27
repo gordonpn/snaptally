@@ -48,13 +48,3 @@ jobs:
           fail_ci_if_error: false
           slug: gordonpn/snaptally
           use_oidc: ${{ secrets.CODECOV_TOKEN == '' }}
-
-      - name: Report code coverage
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: zgosalvez/github-actions-report-lcov@v4
-        with:
-          coverage-files: coverage/lcov.info
-          minimum-coverage: 80
-          artifact-name: code-coverage-report
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          update-comment: true
