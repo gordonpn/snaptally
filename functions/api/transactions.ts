@@ -174,6 +174,11 @@ export function isValidPayload(body: unknown): body is TransactionPayload {
     return false;
   }
 
+  if (normalizeText(parent_bucket) === "Income" && gross_amount < 0) {
+    logger.warn("Validation failed: Income gross_amount must be positive");
+    return false;
+  }
+
   if (typeof subcategory !== "string" || subcategory.trim().length === 0) {
     logger.warn("Validation failed: subcategory must be a non-empty string");
     return false;

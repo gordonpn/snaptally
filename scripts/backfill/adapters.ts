@@ -437,14 +437,12 @@ export const salaryAdapter: SheetAdapter = {
       const grossAmount = cleanAmount(row[1]);
       if (!date || grossAmount === null) continue;
 
-      const subcategory = grossAmount > 1000 ? "Salary" : "Reimbursement";
-
       transactions.push(
         createTransaction(
           date,
           options.defaultCard,
           "Income",
-          subcategory,
+          "Salary",
           "Employer",
           grossAmount,
           "USD",

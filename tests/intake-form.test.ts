@@ -202,7 +202,23 @@ describe("intakeForm Dynamic Subcategory Switching (Scenario 2)", () => {
     form.selectBucket("Income");
     assert.strictEqual(form.parentBucket, "Income");
     assert.strictEqual(form.subcategory, "Salary");
-    assert.deepStrictEqual(form.subcategories, ["Salary", "Reimbursement"]);
+    assert.deepStrictEqual(form.subcategories, ["Salary", "Other"]);
+  });
+
+  it("keeps Income positive and turns off credit mode when Income is selected", () => {
+    const form = intakeForm();
+
+    form.selectBucket("Income");
+    form.toggleNegative();
+    assert.strictEqual(form.isNegative, false);
+
+    form.selectBucket("Guilt-Free");
+    form.toggleNegative();
+    assert.strictEqual(form.isNegative, true);
+
+    form.selectBucket("Income");
+    assert.strictEqual(form.parentBucket, "Income");
+    assert.strictEqual(form.isNegative, false);
   });
 
   it("allows selecting a specific subcategory within the active bucket", () => {
@@ -1231,6 +1247,44 @@ describe("intakeForm Credit and Reimbursement Workflows (Issue #89)", () => {
     }
   });
 
+  it("submits standalone non-salary inflow as positive Income -> Other", async () => {
+    const form = intakeForm();
+    form.selectBucket("Income");
+    form.selectSubcategory("Other");
+    form.pressDigit(4);
+    form.pressDigit(0);
+    form.pressDigit(0);
+    form.toggleNegative();
+    form.card = "Amex Gold";
+    form.merchant = "Allowance";
+
+    const originalFetch = globalThis.fetch;
+    let submittedPayload: unknown;
+    globalThis.fetch = (async (_url: unknown, options: { body?: string }) => {
+      if (options?.body) {
+        submittedPayload = JSON.parse(options.body);
+      }
+      return new Response(JSON.stringify({ ok: true, id: "tx-income-other" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await form.submitTransaction();
+
+      assert.strictEqual(result, true);
+      assert.strictEqual(form.isNegative, false);
+      const payload = submittedPayload as Record<string, unknown>;
+      assert.strictEqual(payload.parent_bucket, "Income");
+      assert.strictEqual(payload.subcategory, "Other");
+      assert.strictEqual(payload.gross_amount, 4);
+      assert.strictEqual(payload.reimbursement, 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("supports two-step reimbursement workflow where reimbursement offsets expense", async () => {
     const form = intakeForm();
     const originalFetch = globalThis.fetch;
@@ -1279,8 +1333,12 @@ describe("intakeForm Credit and Reimbursement Workflows (Issue #89)", () => {
 
       assert.strictEqual(submittedPayloads.length, 2);
       assert.strictEqual(submittedPayloads[0].gross_amount, 120.0);
+      assert.strictEqual(submittedPayloads[0].parent_bucket, "Guilt-Free");
+      assert.strictEqual(submittedPayloads[0].subcategory, "Dining");
       assert.strictEqual(submittedPayloads[0].reimbursement, 0.0);
       assert.strictEqual(submittedPayloads[1].gross_amount, -60.0);
+      assert.strictEqual(submittedPayloads[1].parent_bucket, "Guilt-Free");
+      assert.strictEqual(submittedPayloads[1].subcategory, "Dining");
       assert.strictEqual(submittedPayloads[1].reimbursement, 0.0);
 
       // Verify net spend impact

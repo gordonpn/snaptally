@@ -480,27 +480,37 @@ describe("Sheet Adapters", () => {
     assert.strictEqual(txs[2].merchant, "Lyft");
   });
 
-  it("salaryAdapter: splits Salary (> 1000) vs Reimbursement (<= 1000)", () => {
+  it("salaryAdapter: maps payroll amounts on either side of 1000 to Salary", () => {
     const rows = [
       ["Date", "Amount"],
       ["2024-04-30", "6921.10"],
-      ["2024-05-13", "55.53"],
-      ["2024-08-12", "50.00"],
+      ["2024-05-13", "1000.00"],
+      ["2024-08-12", "999.99"],
     ];
-    const txs = salaryAdapter.parse(rows, "Budgeting - Salary.csv", options);
+    const filename = "Budgeting - Salary.csv";
+    const txs = salaryAdapter.parse(rows, filename, options);
     assert.strictEqual(txs.length, 3);
 
-    assert.strictEqual(txs[0].parentBucket, "Income");
-    assert.strictEqual(txs[0].subcategory, "Salary");
-    assert.strictEqual(txs[0].grossAmount, 6921.1);
-
-    assert.strictEqual(txs[1].parentBucket, "Income");
-    assert.strictEqual(txs[1].subcategory, "Reimbursement");
-    assert.strictEqual(txs[1].grossAmount, 55.53);
-
-    assert.strictEqual(txs[2].parentBucket, "Income");
-    assert.strictEqual(txs[2].subcategory, "Reimbursement");
-    assert.strictEqual(txs[2].grossAmount, 50.0);
+    assert.deepStrictEqual(
+      txs.map(({ parentBucket, subcategory, grossAmount }) => ({
+        parentBucket,
+        subcategory,
+        grossAmount,
+      })),
+      [
+        { parentBucket: "Income", subcategory: "Salary", grossAmount: 6921.1 },
+        { parentBucket: "Income", subcategory: "Salary", grossAmount: 1000 },
+        { parentBucket: "Income", subcategory: "Salary", grossAmount: 999.99 },
+      ],
+    );
+    assert.deepStrictEqual(
+      txs.map(({ id }) => id),
+      [
+        "1ccb4825-f75f-41eb-8dce-31622be0828a",
+        "61f8e4bb-8b64-4aab-8eea-de41567a5cae",
+        "9023f10d-0689-42a3-ac4c-260554381689",
+      ],
+    );
   });
 
   it("stuffAdapter: normalizes climbing gyms into Fitness and handles USD/CAD", () => {
@@ -590,8 +600,7 @@ describe("Pipeline Ingestion (runBackfill)", () => {
       "Savings -> Travel Fund": 1,
       "Fixed Costs -> Utilities": 2,
       "Fixed Costs -> Healthcare": 1,
-      "Income -> Salary": 1,
-      "Income -> Reimbursement": 1,
+      "Income -> Salary": 2,
       "Guilt-Free -> Shopping": 1,
       "Fixed Costs -> Fitness": 1,
     });

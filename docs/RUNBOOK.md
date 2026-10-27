@@ -493,7 +493,7 @@ Missing input files or directories fail with a nonzero exit status. An existing 
 - Unterminated CSV quotes stop the import before any database writes.
 - Temporary SQL files are readable only by the current user and are removed after Wrangler succeeds or fails.
 - Row IDs are deterministic hashes of the source file, row position, date, gross amount, and currency, so re-running an unchanged export inserts nothing new (`ON CONFLICT(id) DO NOTHING`). Editing a row's amount or date changes its ID. Inserting or deleting a nonempty row shifts the row positions of subsequent entries, producing new IDs on re-run. Before re-ingesting a modified sheet, roll back the backfilled entries for that tenant using section 8.4.
-- `Salary.csv` entries above 1,000 map to `Income -> Salary`; smaller entries map to `Income -> Reimbursement`.
+- All valid `Salary.csv` payroll rows map to `Income -> Salary`, regardless of amount. Repayments are not inferred from row amounts.
 
 ### 8.3 Verification Queries
 
