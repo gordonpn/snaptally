@@ -505,13 +505,11 @@ describe("Sheet Adapters", () => {
     );
     assert.deepStrictEqual(
       txs.map(({ id }) => id),
-      rows
-        .slice(1)
-        .map((row, index) =>
-          generateDeterministicId(
-            `${options.userId}|${filename}|${index + 2}|${row[0]}|${row[1]}|USD`,
-          ),
-        ),
+      [
+        "1ccb4825-f75f-41eb-8dce-31622be0828a",
+        "61f8e4bb-8b64-4aab-8eea-de41567a5cae",
+        "9023f10d-0689-42a3-ac4c-260554381689",
+      ],
     );
   });
 

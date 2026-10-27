@@ -94,6 +94,43 @@ describe("isValidPayload", () => {
     assert.strictEqual(isValidPayload({ ...omittedReimbursement, gross_amount: -25.5 }), true);
   });
 
+  it("accepts positive Income and rejects negative Income payloads", () => {
+    assert.strictEqual(
+      isValidPayload({
+        ...validPayload,
+        parent_bucket: "Income",
+        subcategory: "Salary",
+        reimbursement: 0,
+      }),
+      true,
+    );
+    for (const parent_bucket of ["Income", " Income\t "]) {
+      assert.strictEqual(
+        isValidPayload({
+          ...validPayload,
+          parent_bucket,
+          subcategory: "Salary",
+          gross_amount: -25.5,
+          reimbursement: 0,
+        }),
+        false,
+      );
+    }
+  });
+
+  it("accepts queued transactions with a legacy Income subcategory", () => {
+    assert.strictEqual(
+      isValidPayload({
+        ...validPayload,
+        id: "legacy-outbox-id",
+        parent_bucket: "Income",
+        subcategory: "Reimbursement",
+        reimbursement: 0,
+      }),
+      true,
+    );
+  });
+
   it("rejects non-finite or zero gross_amount", () => {
     assert.strictEqual(isValidPayload({ ...validPayload, gross_amount: 0 }), false);
     assert.strictEqual(isValidPayload({ ...validPayload, gross_amount: Number.NaN }), false);
@@ -1397,6 +1434,34 @@ describe("GET /api/transactions onRequestGet", () => {
 });
 
 describe("Recent Transactions SQLite Query Integration", () => {
+  it("keeps legacy Income reimbursement categories readable", () => {
+    const db = createTestDatabase();
+    db.prepare(insertTransactionQuery).run(
+      "tx-legacy-income-reimbursement",
+      "2026-09-25",
+      "Amex",
+      "Income",
+      "Reimbursement",
+      "Employer",
+      50,
+      0,
+      "USD",
+    );
+
+    const [row] = db.prepare(selectRecentTransactionsQuery).all(5) as Array<{
+      id: string;
+      parent_bucket: string;
+      subcategory: string;
+    }>;
+
+    assert.ok(row);
+    assert.strictEqual(row.id, "tx-legacy-income-reimbursement");
+    assert.strictEqual(row.parent_bucket, "Income");
+    assert.strictEqual(row.subcategory, "Reimbursement");
+
+    db.close();
+  });
+
   it("orders transactions by date descending, then created_at descending", () => {
     const db = createTestDatabase();
 
