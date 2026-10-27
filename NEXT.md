@@ -1,41 +1,42 @@
 # Project Execution Queue
 
-- **Last Refined:** 2026-10-26 22:21 EDT
+- **Last Refined:** 2026-10-26 22:42 EDT
 - **Repository:** gordonpn/snaptally
 - **GitHub Backlog:** https://github.com/gordonpn/snaptally/issues
 
 ## NOW - Recommended Next Task
 
-### [#115: feat(intake): infer category and card defaults from merchant transaction history](https://github.com/gordonpn/snaptally/issues/115)
-- **Priority:** P1
-- **Effort:** S
-- **Readiness:** READY
-- **Why this task is next:** PRs #111 and #117 merged, closing #96 and #116. #107's local data ingestion is complete and the issue is closed. #115 is the next implementation-ready P1 story.
-- **First action:** Trace merchant selection, canonical rules in `normalizeMerchant`, and loaded `recentTransactions` in `src/scripts/intake-form.ts`.
-- **Definition of Done:** Canonical merchant rules and transaction history infer category, subcategory, and card; manual category choices override inference; tests cover canonical rules, historical frequency, and overrides.
-- **Unblocks:** No direct downstream issue; reduces repeated selection steps for returning merchants.
+### [#108: Data: Triage and resolve 121 statement items in batch-4 reconciliation review queue](https://github.com/gordonpn/snaptally/issues/108)
+- **Priority:** P2
+- **Effort:** M
+- **Readiness:** BLOCKED on transaction-specific confirmation for the remaining 117 items; four exact duplicate matches identified.
+- **Why this task is next:** The user requested #108 before #101, and dependencies #106 and #107 are closed. The 121 statement items still need explicit dispositions before historical backfill.
+- **First action:** Confirm the remaining possible matches, purchase purposes, and refund links against the local statement exports.
+- **Definition of Done:** All 121 items have explicit dispositions; only confirmed purchases and linked refunds are appended to local budget CSVs; a local audit is complete; `just backfill-dry-run` reports unique IDs.
+- **Unblocks:** Final review of the historical source for #101; production writes remain separately gated by backup and explicit authorization.
 
 ## NEXT - Upcoming Work
 
-1. **[#78: Ops: Codify automated dependency maintenance and vulnerability remediation (.github/dependabot.yml)](https://github.com/gordonpn/snaptally/issues/78)**
+1. **[#115: feat(intake): infer category and card defaults from merchant transaction history](https://github.com/gordonpn/snaptally/issues/115)**
+   - **Priority:** P1 | **Effort:** S | **Readiness:** READY
+   - **Dependencies:** None
+   - **Reason:** Infers category, subcategory, and card from canonical rules and past transactions while preserving manual overrides.
+
+2. **[#78: Ops: Codify automated dependency maintenance and vulnerability remediation (.github/dependabot.yml)](https://github.com/gordonpn/snaptally/issues/78)**
    - **Priority:** P1 | **Effort:** S | **Readiness:** READY
    - **Dependencies:** None
    - **Reason:** Adds automated dependency and security update PRs with the repository's existing CI checks.
 
-2. **[#113: Fix: Disable native keyboard suggestions and autocomplete for card and merchant inputs](https://github.com/gordonpn/snaptally/issues/113)**
+3. **[#113: Fix: Disable native keyboard suggestions and autocomplete for card and merchant inputs](https://github.com/gordonpn/snaptally/issues/113)**
    - **Priority:** P2 | **Effort:** XS | **Readiness:** READY
    - **Dependencies:** None
    - **Reason:** Prevents mobile autocorrect, auto-capitalization, and autofill overlays on merchant, card, and token inputs.
 
-3. **[#114: Feat: Interactive merchant autocomplete dropdown from transaction history](https://github.com/gordonpn/snaptally/issues/114)**
+4. **[#114: Feat: Interactive merchant autocomplete dropdown from transaction history](https://github.com/gordonpn/snaptally/issues/114)**
    - **Priority:** P2 | **Effort:** S | **Readiness:** BLOCKED on #113
    - **Dependencies:** #113
    - **Reason:** Adds touch and keyboard suggestions after native autocomplete behavior is disabled.
 
-4. **[#108: Data: Triage and resolve 121 statement items in batch-4 reconciliation review queue](https://github.com/gordonpn/snaptally/issues/108)**
-   - **Priority:** P2 | **Effort:** M | **Readiness:** READY
-   - **Dependencies:** #106 and #107
-   - **Reason:** Dependencies #106 and #107 are complete; this issue is ready for statement-item triage.
 
 ## COMPLETED RECENTLY
 
@@ -47,7 +48,7 @@
 
 ## BLOCKERS
 
-- [#101: Execute historical backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101) is blocked on finalizing the review-draft source data (including #108's 121 statement items and coverage gaps), reconciling the local dated-folder/RSU adapter with latest `main` and its Salary taxonomy, refreshing expected counts, taking the pre-flight backup, and receiving explicit production-write authorization.
+- [#101: Execute historical backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101) remains blocked on #108's 121 statement-item dispositions and coverage gaps, reconciling the local dated-folder/RSU adapter with latest `main` and its Salary taxonomy, refreshing expected counts, taking the pre-flight backup, and receiving explicit production-write authorization.
 
 ## LATER
 
