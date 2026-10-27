@@ -1,42 +1,38 @@
 # Project Execution Queue
 
-- **Last Refined:** 2026-10-27
+- **Last Refined:** 2026-10-28
 - **Repository:** gordonpn/snaptally
 - **GitHub Backlog:** https://github.com/gordonpn/snaptally/issues
 
 ## NOW - Recommended Next Task
 
-### [#115: Infer category and card defaults from merchant transaction history](https://github.com/gordonpn/snaptally/issues/115)
-- **Priority:** P1 | **Effort:** S | **Readiness:** IN PROGRESS
-- **Why this task is next:** The user selected this intake improvement.
-- **First action:** Finish review and publish the isolated implementation for review.
-- **Definition of Done:** Merchant-based category and card defaults preserve manual choices and pass the relevant checks; the pull request is reviewed and merged.
-- **Unblocks:** Faster repeat-merchant entry.
+### [#78: Codify automated dependency maintenance and vulnerability remediation](https://github.com/gordonpn/snaptally/issues/78)
+- **Priority:** P1 | **Effort:** S | **Readiness:** READY
+- **Why this task is next:** The merchant defaults work is merged, and dependency maintenance remains the highest-priority ready task.
+- **First action:** Inspect existing dependency workflows, then add the Dependabot configuration described in the issue.
+- **Definition of Done:** Grouped npm and GitHub Actions updates validate against the Dependabot schema, run through CI, and have a documented review process.
+- **Unblocks:** Routine dependency and security update pull requests.
 
 ## NEXT - Upcoming Work
 
-1. **[#78: Ops: Codify automated dependency maintenance and vulnerability remediation (.github/dependabot.yml)](https://github.com/gordonpn/snaptally/issues/78)**
-   - **Priority:** P1 | **Effort:** S | **Readiness:** READY
-   - **Dependencies:** None
-   - **Reason:** Adds automated dependency and security update PRs with the repository's existing CI checks.
-
-2. **[#80: Codify Playwright end-to-end browser and offline PWA test suites](https://github.com/gordonpn/snaptally/issues/80)**
+1. **[#80: Codify Playwright end-to-end browser and offline PWA test suites](https://github.com/gordonpn/snaptally/issues/80)**
    - **Priority:** P1 | **Effort:** M | **Readiness:** Review requirements before starting.
-   - **Parallel:** Independent of #115.
+   - **Parallel:** Independent of #78.
 
-3. **[#114: Interactive merchant autocomplete dropdown from transaction history](https://github.com/gordonpn/snaptally/issues/114)**
+2. **[#114: Interactive merchant autocomplete dropdown from transaction history](https://github.com/gordonpn/snaptally/issues/114)**
    - **Priority:** P2 | **Effort:** S | **Readiness:** Review ranking data availability; #113 is closed.
    - **Reason:** Adds touch and keyboard suggestions for merchant entry.
 
-4. **[#105: Hardened viewport and safe-area handling for standalone iOS PWA](https://github.com/gordonpn/snaptally/issues/105)**
+3. **[#105: Hardened viewport and safe-area handling for standalone iOS PWA](https://github.com/gordonpn/snaptally/issues/105)**
    - **Priority:** P2 | **Effort:** S | **Readiness:** Review requirements before starting.
-   - **Parallel:** Independent of #115.
+   - **Parallel:** Independent of #78.
 
 
 ## COMPLETED RECENTLY
 
+- **[#115: Infer category and card defaults from merchant transaction history](https://github.com/gordonpn/snaptally/issues/115)**: Closed after PR #119 merged; merchant rules and recent history now suggest category and card defaults while preserving manual choices.
 - **[#113: Disable native text assistance on intake inputs](https://github.com/gordonpn/snaptally/issues/113)**: Closed after PR #118 merged, with the documented iOS Safari limitation.
-- **[#108: Triage the batch-4 reconciliation queue](https://github.com/gordonpn/snaptally/issues/108)**: Closed after local review.
+- **[#108: Triage the batch-4 reconciliation queue](https://github.com/gordonpn/snaptally/issues/108)**: Closed after local review of 121 items: 19 confirmed duplicates, 91 locally appended transactions, and 11 excluded with reasons. The dry-run parsed 2,463 transactions with unique IDs and zero database writes.
 - **[#96: Feat: Implement Outbox and Sync Status Drawer in mobile intake UI](https://github.com/gordonpn/snaptally/issues/96)**: Resolved in merged PR #111.
 - **[#116: Refactor: Remove Reimbursement from Income and simplify to Salary and Other](https://github.com/gordonpn/snaptally/issues/116)**: Resolved in merged PR #117; Income is now Salary or Other, expense credits stay in their original categories, and historical records remain unchanged.
 - **[#107: Data: Categorize and ingest 7 held international FX transactions ($538.28 USD)](https://github.com/gordonpn/snaptally/issues/107)**: Local CSV ingestion completed and issue closed; seven transactions totaling $538.28 USD (CAD 753.45) were added, with no production D1 writes.
