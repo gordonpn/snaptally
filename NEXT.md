@@ -47,10 +47,10 @@
    - **Dependencies:** None
    - **Reason:** Remediates active security vulnerabilities reported by `pnpm audit` (undici/miniflare/wrangler) and automates monthly maintenance.
 
-7. **[#116: Docs: Clarify income category pill versus credit toggle and align form interaction model](https://github.com/gordonpn/snaptally/issues/116)**
+7. **[#116: Refactor: Remove Reimbursement from Income and simplify to Salary and Other](https://github.com/gordonpn/snaptally/issues/116)**
    - **Priority:** P3 | **Effort:** XS | **Readiness:** READY
    - **Dependencies:** None
-   - **Reason:** Renames credit badge to "Refund / Category Credit" to avoid collision with `Income -> Reimbursement`, and guards `isNegative` against `Income`.
+   - **Reason:** Eliminates Reimbursement from Income in favor of the +/- credit toggle, simplifies Income subcategories to Salary and Other, renames credit badge to "Refund / Credit", and guards isNegative against Income.
 
 ## COMPLETED RECENTLY
 
