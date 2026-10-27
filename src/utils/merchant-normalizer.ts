@@ -570,6 +570,12 @@ export const DEFAULT_CANONICAL_RULES: Readonly<Record<string, CategoryRule>> = {
     subcategory: "Entertainment",
     rewardMultiplierCategory: "Entertainment",
   },
+  TICKETMASTER: {
+    canonicalName: "Ticketmaster",
+    parentBucket: "Guilt-Free",
+    subcategory: "Entertainment",
+    rewardMultiplierCategory: "Entertainment",
+  },
   "CIRQUE DU SOLEIL": {
     canonicalName: "Cirque du Soleil",
     parentBucket: "Guilt-Free",

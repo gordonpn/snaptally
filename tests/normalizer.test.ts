@@ -128,6 +128,15 @@ describe("Merchant Normalizer", () => {
       }
     });
 
+    it("classifies Ticketmaster as Guilt-Free Entertainment", () => {
+      const result = normalizeMerchant("TICKETMASTER");
+
+      assert.strictEqual(result.canonicalMerchant, "Ticketmaster");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Entertainment");
+      assert.strictEqual(result.matchStrategy, "exact_rule");
+    });
+
     it("does not match grocery tokens embedded inside other words", () => {
       const result = normalizeMerchant("Bigarade");
 
