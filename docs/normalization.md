@@ -125,6 +125,7 @@ export interface NormalizedClassification {
 | `AMZN MKTP` | Amazon Marketplace | Guilt-Free | Shopping | Other |
 | `UBER TRIP` | Uber | Fixed Costs | Transit | Travel |
 | `UBER EATS` | Uber Eats | Guilt-Free | Takeout | Dining |
+| `VENMO`          | Venmo                  | Guilt-Free    | Dining          | Dining                      |
 | `DOORDASH` | DoorDash | Guilt-Free | Takeout | Dining |
 | `CHEVRON` | Chevron | Fixed Costs | Transit | Gas |
 | `DELTA AIR` | Delta Air Lines | Savings | Travel Fund | Travel |

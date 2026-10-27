@@ -576,6 +576,12 @@ export const DEFAULT_CANONICAL_RULES: Readonly<Record<string, CategoryRule>> = {
     subcategory: "Entertainment",
     rewardMultiplierCategory: "Entertainment",
   },
+  VENMO: {
+    canonicalName: "Venmo",
+    parentBucket: "Guilt-Free",
+    subcategory: "Dining",
+    rewardMultiplierCategory: "Dining",
+  },
   "CIRQUE DU SOLEIL": {
     canonicalName: "Cirque du Soleil",
     parentBucket: "Guilt-Free",

@@ -137,6 +137,15 @@ describe("Merchant Normalizer", () => {
       assert.strictEqual(result.matchStrategy, "exact_rule");
     });
 
+    it("classifies Venmo as Guilt-Free Dining", () => {
+      const result = normalizeMerchant("VENMO");
+
+      assert.strictEqual(result.canonicalMerchant, "Venmo");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Dining");
+      assert.strictEqual(result.matchStrategy, "exact_rule");
+    });
+
     it("does not match grocery tokens embedded inside other words", () => {
       const result = normalizeMerchant("Bigarade");
 
