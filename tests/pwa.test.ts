@@ -318,6 +318,17 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
     );
     assert.match(
       indexContent,
+      /:disabled="loading \|\| parentBucket === 'Income'"/,
+      "credit toggle must be disabled for Income",
+    );
+    assert.match(
+      indexContent,
+      /:disabled="isNegative && b === 'Income'"/,
+      "Income bucket must be disabled in credit mode",
+    );
+    assert.match(indexContent, /Refund \/ Credit/);
+    assert.match(
+      indexContent,
       /min-h-\[44px\][^>]*@click="selectSubcategory\(s\)"/,
       "subcategory chips must satisfy 44px touch target requirement",
     );

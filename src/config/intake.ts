@@ -10,7 +10,7 @@ export const BUCKET_SUBCATEGORIES = {
     "Fitness",
   ],
   Savings: ["Emergency Fund", "Investments", "Travel Fund"],
-  Income: ["Salary", "Reimbursement"],
+  Income: ["Salary", "Other"],
 } as const;
 
 export type ParentBucket = keyof typeof BUCKET_SUBCATEGORIES;

@@ -99,9 +99,9 @@ import Layout from "../layouts/Layout.astro";
       <div class="neu-inset rounded-2xl py-2 sm:py-2.5 px-4 flex items-center justify-between transition-all duration-75 relative">
         <button
           type="button"
-          class="neu-pressed rounded-xl w-11 h-11 min-h-[44px] min-w-[44px] flex items-center justify-center font-bold text-lg transition-all"
+          class="neu-pressed rounded-xl w-11 h-11 min-h-[44px] min-w-[44px] flex items-center justify-center font-bold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           :class="isNegative ? 'neu-inset-sm text-secondary bg-secondary/10 outline outline-1 outline-secondary/60' : 'neu-raised-sm text-neu-text-muted'"
-          :disabled="loading"
+          :disabled="loading || parentBucket === 'Income'"
           @click="toggleNegative()"
           :aria-pressed="isNegative"
           aria-label="Credit mode"
@@ -121,7 +121,7 @@ import Layout from "../layouts/Layout.astro";
             $0.00
           </div>
           <template x-if="isNegative">
-            <span class="text-[10px] font-bold uppercase tracking-wider text-secondary mt-0.5 whitespace-nowrap">Credit / Reimbursement</span>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-secondary mt-0.5 whitespace-nowrap">Refund / Credit</span>
           </template>
         </div>
         <div class="w-11 min-w-[44px] pointer-events-none" aria-hidden="true"></div>
@@ -175,9 +175,10 @@ import Layout from "../layouts/Layout.astro";
         <template x-for="b in buckets" :key="b">
           <button
             type="button"
-            class="neu-pressed rounded-full px-3 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"
+            class="neu-pressed rounded-full px-3 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             :class="parentBucket === b ? 'neu-inset-sm font-bold text-secondary bg-secondary/10 outline outline-1 outline-secondary/60' : 'neu-raised-sm font-medium text-neu-text'"
             :aria-pressed="parentBucket === b"
+            :disabled="isNegative && b === 'Income'"
             @click="selectBucket(b)"
             x-text="b"
           ></button>

@@ -175,7 +175,7 @@ export function intakeForm() {
     },
 
     toggleNegative(): void {
-      if (this.loading) {
+      if (this.loading || this.parentBucket === "Income") {
         return;
       }
       this.isNegative = !this.isNegative;
@@ -217,6 +217,9 @@ export function intakeForm() {
 
     selectBucket(bucket: string): void {
       this.parentBucket = bucket;
+      if (bucket === "Income") {
+        this.isNegative = false;
+      }
       const subcategories = BUCKET_SUBCATEGORIES[bucket];
       if (subcategories && subcategories.length > 0) {
         this.subcategory = subcategories[0];
