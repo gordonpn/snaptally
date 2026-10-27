@@ -1,6 +1,6 @@
 # Project Execution Queue
 
-- **Last Refined:** 2026-10-26 22:08 EDT
+- **Last Refined:** 2026-10-26 22:21 EDT
 - **Repository:** gordonpn/snaptally
 - **GitHub Backlog:** https://github.com/gordonpn/snaptally/issues
 
@@ -47,7 +47,7 @@
 
 ## BLOCKERS
 
-- [#101: Execute historical backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101) requires explicit authorization before production writes.
+- [#101: Execute historical backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101) is blocked on finalizing the review-draft source data (including #108's 121 statement items and coverage gaps), reconciling the local dated-folder/RSU adapter with latest `main` and its Salary taxonomy, refreshing expected counts, taking the pre-flight backup, and receiving explicit production-write authorization.
 
 ## LATER
 
