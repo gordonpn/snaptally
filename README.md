@@ -118,3 +118,12 @@ Unterminated CSV quotes stop the import before database writes.
 - [Architecture & Design](docs/architecture.md): Detailed system design, data flows, database schemas, and free-tier operational limits.
 - [Budgeting Methodology & Category Taxonomy](docs/budgeting.md): Conscious Spending Plan parent buckets, subcategories, sinking funds, travel categorization, and reimbursement rules.
 - [Operational Runbook](docs/RUNBOOK.md): Step-by-step procedures for production Cloudflare D1 provisioning, Pages configuration, deployments, and diagnostics.
+
+### Sync Status
+
+Tap the amber pending badge or red failed badge to open Sync Status. The Pending
+view shows saved transactions and retry counts, with **Sync Now** for a manual
+retry. The Failed view shows rejection details and offers **Retry** or
+**Discard**; discarding requires confirmation. These queues live in this browser.
+Authentication and failed-transaction warnings stay visible during intake until
+resolved. A failed network request keeps the transaction queued for automatic retry.

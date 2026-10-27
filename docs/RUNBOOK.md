@@ -518,3 +518,33 @@ Backfilled rows are scoped to the imported tenant (`user_id`) and default card `
 pnpm wrangler d1 execute budget-db --local \
   --command "DELETE FROM transactions WHERE user_id = 'usr_default' AND card = 'Historical';"
 ```
+
+## 9. Client Sync Status
+
+The header pending and failed badges open the local Sync Status drawer. Pending
+transactions show merchant, amount, date, and retry count. Use **Sync Now** to
+retry immediately. Network and HTTP server failures remain queued with backoff;
+the drawer distinguishes them from authentication errors and quarantined items.
+
+Failed transactions retain the original payload and rejection reason in the
+browser's dead-letter queue. **Retry** restores the selected transaction to the
+outbox and triggers sync. **Discard** permanently removes it after confirmation.
+Review the rejection reason before retrying; an unchanged invalid payload can be
+quarantined again. Failed-item counts and warnings are restored from browser storage on reload.
+These records are local to the device and browser, so clearing site data removes them.
+
+Retry resets the selected record's retry state without bypassing other pending
+records' backoff. The drawer shows the full retry total and any recorded HTTP
+status. IndexedDB recovery moves a failed record into the outbox in one transaction;
+an aborted move or discard reports an error and retains the failed record.
+If IndexedDB cannot open, recovery can still act on a matching fallback record;
+without that fallback copy, the drawer reports the database error.
+Web Locks coordinate sync across tabs in supported browsers. Runtimes without
+Web Locks retain only per-tab synchronization.
+Each sync request has a 30-second timeout, including response-body reads. A timeout
+releases the shared sync lock and retains the transaction for retry unless an HTTP
+201 response already confirmed it was committed.
+
+For an authentication warning, open **Settings**, correct the bearer token, and
+save it. The warning clears after a successful authenticated request. The warning
+and failed-item count are independent of transient amount or save messages.

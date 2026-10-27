@@ -71,9 +71,16 @@ The application uses native IndexedDB (`snaptally_db`, object store `outbox`) wi
 3. The UI resets the input fields immediately and provides instant feedback with 0ms perceived latency.
 4. The background sync runner flushes queued items sequentially to `POST /api/transactions` with the pre-shared Bearer token.
 5. Upon receiving an HTTP 201 response, the record is removed from IndexedDB and prepended to the local recent activity feed.
-6. On HTTP 400 validation failure, invalid records are evicted from the queue to prevent blocking subsequent transactions.
+6. On HTTP 400 validation failure, invalid records are quarantined in the local dead-letter queue so later transactions can sync without losing the rejected payload.
 7. On HTTP 401 unauthorized, the sync loop pauses to prevent spamming unauthenticated requests until the user updates the token in settings.
 8. If the device is offline or the network fails, items remain queued in IndexedDB with exponential retry tracking. Window event listeners for `online` and `visibilitychange` automatically resume background flushing once connectivity returns.
+
+The header queue badges open a native Sync Status dialog. Queue contents render
+only while it is open. Pending records can be synced immediately; quarantined
+records expose their rejection reason and can be retried immediately or
+discarded after confirmation. Authentication and failed-item warnings remain separate from form
+status messages. Intake sync requests run sequentially and refresh both queue
+counts after completion.
 
 ## Compute Layer (Cloudflare Pages Functions + Hono)
 

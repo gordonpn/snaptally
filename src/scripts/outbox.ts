@@ -42,6 +42,7 @@ export interface SyncResult {
   failedCount: number;
   unauthorized: boolean;
   lastError?: string;
+  retryError?: string;
 }
 
 const DB_NAME = "snaptally_db";
@@ -52,6 +53,13 @@ export const FALLBACK_STORAGE_KEY = "snaptally_outbox_fallback";
 export const DLQ_FALLBACK_STORAGE_KEY = "snaptally_dlq_fallback";
 export const MAX_ROLLBACK_RETRIES = 10;
 export const MAX_SYNC_RETRIES = 10;
+
+/** Returns the total transport, server and rollback retries recorded for a transaction. */
+export function getRetryCount(item: OutboxItem): number {
+  return (
+    Math.max(item.retry_count ?? 0, item.server_retry_count ?? 0) + (item.rollback_retry_count ?? 0)
+  );
+}
 
 // In-memory fallbacks for environments without IndexedDB or localStorage
 let memoryFallback: OutboxItem[] = [];
@@ -367,7 +375,7 @@ async function quarantineItem(
     error_reason: reason,
     http_status: httpStatus,
     failed_at: new Date().toISOString(),
-    retry_count: item.server_retry_count ?? item.retry_count ?? 0,
+    retry_count: getRetryCount(item),
   };
   try {
     await saveDeadLetterItem(dlqItem);
@@ -407,24 +415,38 @@ export async function getDeadLetterCount(): Promise<number> {
   return items.length;
 }
 
+async function openRecoveryDatabase(id: string): Promise<IDBDatabase | undefined> {
+  if (!isIndexedDBAvailable()) return undefined;
+  try {
+    return await openDatabase();
+  } catch (error: unknown) {
+    if (!getFallbackDlqItems().some((item) => item.id === id)) throw error;
+    return undefined;
+  }
+}
+
 /**
  * Permanently removes a transaction from the dead-letter queue.
  */
 export async function deleteDeadLetterItem(id: string): Promise<void> {
-  try {
-    const db = await openDatabase();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(DLQ_STORE_NAME, "readwrite");
-      const store = tx.objectStore(DLQ_STORE_NAME);
-      const req = store.delete(id);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-      tx.oncomplete = () => db.close();
-    });
-  } catch {
+  const db = await openRecoveryDatabase(id);
+  if (!db) {
     const items = getFallbackDlqItems().filter((i) => i.id !== id);
     saveFallbackDlqItems(items);
+    return;
   }
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(DLQ_STORE_NAME, "readwrite");
+    tx.objectStore(DLQ_STORE_NAME).delete(id);
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onabort = tx.onerror = () => {
+      db.close();
+      reject(tx.error ?? new Error("Discard transaction aborted"));
+    };
+  });
 }
 
 /**
@@ -450,24 +472,59 @@ export async function clearDeadLetterQueue(): Promise<void> {
  * Restores a quarantined dead-letter transaction back to the active outbox for retry.
  */
 export async function requeueDeadLetterItem(id: string): Promise<void> {
+  const db = await openRecoveryDatabase(id);
   const queue = await getDeadLetterQueue();
   const item = queue.find((entry) => entry.id === id);
   if (!item) {
+    db?.close();
     return;
   }
 
   const restoredPayload: OutboxItem = {
     ...item.payload,
+    subcategory: normalizeOutboxSubcategory(item.payload.parent_bucket, item.payload.subcategory),
     retry_count: 0,
     server_retry_count: 0,
     rollback_retry_count: 0,
     next_retry_at: undefined,
   };
 
-  const savedInIndexedDB = await saveOutboxItem(restoredPayload);
-  if (savedInIndexedDB || !isIndexedDBAvailable()) {
-    await deleteDeadLetterItem(id);
+  if (!db) {
+    const original = getFallbackItems();
+    const pending = [...original.filter((entry) => entry.id !== id), restoredPayload];
+    const failed = getFallbackDlqItems().filter((entry) => entry.id !== id);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(FALLBACK_STORAGE_KEY, JSON.stringify(pending));
+      try {
+        localStorage.setItem(DLQ_FALLBACK_STORAGE_KEY, JSON.stringify(failed));
+      } catch (error: unknown) {
+        localStorage.setItem(FALLBACK_STORAGE_KEY, JSON.stringify(original));
+        throw error;
+      }
+    }
+    memoryFallback = pending;
+    memoryDlqFallback = failed;
+    return;
   }
+
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction([STORE_NAME, DLQ_STORE_NAME], "readwrite");
+    const failed = tx.objectStore(DLQ_STORE_NAME);
+    const request = failed.get(id);
+    request.onsuccess = () => {
+      if (request.result === undefined) return;
+      tx.objectStore(STORE_NAME).put(restoredPayload);
+      failed.delete(id);
+    };
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onabort = tx.onerror = () => {
+      db.close();
+      reject(tx.error ?? new Error("Requeue transaction aborted"));
+    };
+  });
 }
 
 let isSyncInProgress = false;
@@ -479,12 +536,24 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
   if (isSyncInProgress) {
     return { syncedCount: 0, failedCount: 0, unauthorized: false };
   }
-
   isSyncInProgress = true;
+  try {
+    if (typeof navigator !== "undefined" && navigator.locks) {
+      return await navigator.locks.request("snaptally-outbox-sync", () => flushOutbox(options));
+    }
+    // shortcut: Without Web Locks, sync is per-tab; add a lease if legacy multi-tab support is required.
+    return await flushOutbox(options);
+  } finally {
+    isSyncInProgress = false;
+  }
+}
+
+async function flushOutbox(options: SyncOptions): Promise<SyncResult> {
   let syncedCount = 0;
   let failedCount = 0;
   let unauthorized = false;
   let lastError: string | undefined;
+  let retryError: string | undefined;
   let transportHalted = false;
 
   try {
@@ -535,10 +604,12 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
       }
 
       try {
+        const signal = AbortSignal.timeout(30000);
         const response = await fetch("/api/transactions", {
           method: "POST",
           headers,
           body: JSON.stringify(payload),
+          signal,
         });
 
         if (response.status === 201) {
@@ -557,6 +628,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
 
         if (response.status === 400) {
           const data = (await response.json().catch(() => null)) as { error?: string } | null;
+          signal.throwIfAborted();
           const errorMsg = data?.error || response.statusText || "Validation failed";
 
           // If the item is a credit/reimbursement (gross_amount < 0) and the backend rejects it
@@ -608,6 +680,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
           }
         }
 
+        retryError = `Server returned HTTP ${response.status}. Saved transactions will retry.`;
         const backoffMs = Math.min(60000, 1000 * 2 ** (serverRetryCount - 1));
         item.next_retry_at = Date.now() + backoffMs;
         await saveOutboxItem(item);
@@ -615,8 +688,9 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
         scheduleDueRetry(backoffMs, options, item.next_retry_at);
         transportHalted = true;
         break;
-      } catch {
+      } catch (error: unknown) {
         // Network error / offline: apply exponential backoff (1s, 2s, 4s, capped at 60s)
+        retryError = `Sync interrupted: ${error instanceof Error ? error.message : "request or local storage failure"}. Saved transactions will retry.`;
         // Transport failures do not consume the server-error retry budget.
         const retryCount = (item.retry_count ?? 0) + 1;
         item.retry_count = retryCount;
@@ -630,7 +704,6 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
       }
     }
   } finally {
-    isSyncInProgress = false;
     const remaining = await getOutbox();
     const remainingCount = remaining.length;
     if (remainingCount === 0 || unauthorized) {
@@ -696,7 +769,13 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
     options.onStatusChange?.(false, remainingCount);
   }
 
-  return { syncedCount, failedCount, unauthorized, lastError };
+  return {
+    syncedCount,
+    failedCount,
+    unauthorized,
+    lastError,
+    ...(retryError ? { retryError } : {}),
+  };
 }
 
 function scheduleDueRetry(delayMs: number, options: SyncOptions, targetDeadline?: number): void {
