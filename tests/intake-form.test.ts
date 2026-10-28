@@ -343,6 +343,31 @@ describe("merchant defaults", () => {
     }
   });
 
+  it("restores the previous selection for an unmatched merchant after a save", async () => {
+    const form = intakeForm();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      throw new Error("Offline");
+    };
+    form.selectMerchant("Trader Joe's");
+    form.selectBucket("Guilt-Free");
+    form.selectSubcategory("Dining");
+    form.selectCard("Visa");
+    form.pressDigit(1);
+
+    try {
+      await form.submitTransaction();
+      form.selectMerchant("Starbucks");
+      form.selectMerchant("Unknown vendor");
+
+      assert.equal(form.parentBucket, "Guilt-Free");
+      assert.equal(form.subcategory, "Dining");
+      assert.equal(form.card, "Visa");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("ignores missing merchant and card values in history", async () => {
     const form = intakeForm();
     const originalFetch = globalThis.fetch;
