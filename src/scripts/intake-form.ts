@@ -1,5 +1,10 @@
 import { BUCKET_SUBCATEGORIES, DEFAULT_FREQUENT_MERCHANTS } from "../config/intake.ts";
 import {
+  DEFAULT_CANONICAL_RULES,
+  type NormalizedTransaction,
+  normalizeMerchant,
+} from "../utils/merchant-normalizer.ts";
+import {
   type DeadLetterItem,
   deleteDeadLetterItem,
   getDeadLetterQueue,
@@ -33,6 +38,35 @@ export const TOKEN_STORAGE_KEY = "snaptally_api_token";
 export const CARDS_STORAGE_KEY = "snaptally_cards";
 export const MERCHANTS_STORAGE_KEY = "snaptally_merchants";
 
+const CANONICAL_MERCHANT_RULES = new Map(
+  Object.values(DEFAULT_CANONICAL_RULES).map((rule) => [rule.canonicalName.toLowerCase(), rule]),
+);
+
+function normalizeIntakeMerchant(value: string): NormalizedTransaction {
+  const normalized = normalizeMerchant(value);
+  const rule = CANONICAL_MERCHANT_RULES.get(normalized.cleanedDescription.toLowerCase());
+  if (!rule) return normalized;
+  return {
+    ...normalized,
+    canonicalMerchant: rule.canonicalName,
+    parentBucket: rule.parentBucket,
+    subcategory: rule.subcategory,
+    rewardCategory: rule.rewardMultiplierCategory ?? null,
+    confidence: 0.98,
+    matchStrategy: "exact_rule",
+    requiresLLM: false,
+  };
+}
+
+function isExactIntakeRule(normalized: NormalizedTransaction): boolean {
+  // Avoid applying a rule token embedded in an unrelated merchant name.
+  return (
+    normalized.matchStrategy === "exact_rule" &&
+    (normalized.canonicalMerchant.toLowerCase() === normalized.cleanedDescription.toLowerCase() ||
+      Object.hasOwn(DEFAULT_CANONICAL_RULES, normalized.cleanedDescription))
+  );
+}
+
 /**
  * Returns today's date in local YYYY-MM-DD calendar format.
  */
@@ -65,6 +99,13 @@ export function intakeForm() {
     buckets: Object.keys(BUCKET_SUBCATEGORIES),
     parentBucket: "Guilt-Free",
     subcategory: BUCKET_SUBCATEGORIES["Guilt-Free"][0],
+    categoryManuallySelected: false,
+    cardManuallySelected: false,
+    merchantInferenceRequested: false,
+    merchantUserSelected: false,
+    recentRequestSequence: 0,
+    inferredCategoryBaseline: undefined as { bucket: string; subcategory: string } | undefined,
+    inferredCardBaseline: undefined as { card: string; custom: boolean; auto: boolean } | undefined,
 
     // Merchant selection and autocomplete cache
     frequentMerchants: [...DEFAULT_FREQUENT_MERCHANTS],
@@ -211,12 +252,16 @@ export function intakeForm() {
 
     // Selectors
     selectCard(card: string): void {
+      this.cardManuallySelected = true;
+      this.inferredCardBaseline = undefined;
       this.card = card;
       this.isCustomCard = false;
       this.autoCustomCard = false;
     },
 
     toggleCustomCard(): void {
+      this.cardManuallySelected = true;
+      this.inferredCardBaseline = undefined;
       this.isCustomCard = !this.isCustomCard;
       this.autoCustomCard = false;
       if (this.isCustomCard) {
@@ -229,6 +274,8 @@ export function intakeForm() {
     },
 
     updateCustomCard(value: string): void {
+      this.cardManuallySelected = true;
+      this.inferredCardBaseline = undefined;
       this.customCardInput = value;
       this.card = value;
     },
@@ -244,6 +291,8 @@ export function intakeForm() {
     },
 
     selectBucket(bucket: string): void {
+      this.categoryManuallySelected = true;
+      this.inferredCategoryBaseline = undefined;
       this.parentBucket = bucket;
       if (bucket === "Income") {
         this.isNegative = false;
@@ -255,28 +304,134 @@ export function intakeForm() {
     },
 
     selectSubcategory(sub: string): void {
+      this.categoryManuallySelected = true;
+      this.inferredCategoryBaseline = undefined;
       this.subcategory = sub;
     },
 
     selectMerchant(merchant: string): void {
+      this.clearInferredDefaults();
+      this.merchantInferenceRequested = true;
+      this.merchantUserSelected = true;
       this.merchant = merchant;
       this.isCustomMerchant = false;
+      this.applyMerchantDefaults();
+    },
+
+    clearInferredDefaults(): void {
+      if (this.inferredCategoryBaseline) {
+        if (this.isNegative && this.inferredCategoryBaseline.bucket === "Income") {
+          this.parentBucket = "Guilt-Free";
+          this.subcategory = BUCKET_SUBCATEGORIES["Guilt-Free"][0];
+        } else {
+          this.parentBucket = this.inferredCategoryBaseline.bucket;
+          this.subcategory = this.inferredCategoryBaseline.subcategory;
+        }
+        this.inferredCategoryBaseline = undefined;
+      }
+      if (this.inferredCardBaseline) {
+        this.card = this.inferredCardBaseline.card;
+        this.isCustomCard = this.inferredCardBaseline.custom;
+        this.autoCustomCard = this.inferredCardBaseline.auto;
+        this.inferredCardBaseline = undefined;
+      }
+    },
+
+    applyMerchantDefaults(result?: NormalizedTransaction): void {
+      const merchant = this.merchant.trim();
+      if (!merchant) return;
+      const normalized = result ?? normalizeIntakeMerchant(merchant);
+      const exactMatch = isExactIntakeRule(normalized);
+      const canonical = exactMatch ? normalized.canonicalMerchant.toLowerCase() : "";
+      const matches = this.recentTransactions.filter(
+        (tx) =>
+          tx &&
+          typeof tx.merchant === "string" &&
+          (tx.merchant.trim().toLowerCase() === merchant.toLowerCase() ||
+            (canonical !== "" && tx.merchant.trim().toLowerCase() === canonical)),
+      );
+      const counts = new Map<string, { tx: RecentTransaction; count: number }>();
+      for (const tx of matches) {
+        const key = JSON.stringify([tx.parent_bucket, tx.subcategory, tx.card]);
+        const existing = counts.get(key);
+        counts.set(key, { tx, count: (existing?.count ?? 0) + 1 });
+      }
+      const history = [...counts.values()].sort((a, b) => b.count - a.count)[0]?.tx;
+      const useRule = normalized.matchStrategy !== "exact_rule" || exactMatch;
+      const bucket = (useRule ? normalized.parentBucket : null) ?? history?.parent_bucket;
+      const subcategory = (useRule ? normalized.subcategory : null) ?? history?.subcategory;
+      if (
+        !this.categoryManuallySelected &&
+        bucket &&
+        subcategory &&
+        !(this.isNegative && bucket === "Income")
+      ) {
+        const options = Object.hasOwn(CATEGORIES_BY_BUCKET, bucket)
+          ? CATEGORIES_BY_BUCKET[bucket]
+          : undefined;
+        if (options?.includes(subcategory)) {
+          this.inferredCategoryBaseline ??= {
+            bucket: this.parentBucket,
+            subcategory: this.subcategory,
+          };
+          this.parentBucket = bucket;
+          this.subcategory = subcategory;
+        }
+      }
+      const historyCard = typeof history?.card === "string" ? history.card.trim() : "";
+      if (!this.cardManuallySelected && historyCard) {
+        this.inferredCardBaseline ??= {
+          card: this.card,
+          custom: this.isCustomCard,
+          auto: this.autoCustomCard,
+        };
+        this.card = historyCard;
+        if (!this.cards.includes(this.card)) this.cards = [...this.cards, this.card];
+        this.isCustomCard = false;
+        this.autoCustomCard = false;
+      }
     },
 
     toggleCustomMerchant(): void {
+      this.clearInferredDefaults();
+      this.merchantInferenceRequested = false;
+      this.merchantUserSelected = false;
       this.isCustomMerchant = !this.isCustomMerchant;
       if (this.isCustomMerchant) {
-        if (this.customMerchantInput.trim().length > 0) {
-          this.merchant = this.customMerchantInput.trim();
-        }
+        const customMerchant = this.customMerchantInput.trim();
+        if (customMerchant) this.updateCustomMerchant(customMerchant);
       } else {
         this.merchant = this.frequentMerchants[0] || "";
+        this.merchantInferenceRequested = true;
+        this.merchantUserSelected = true;
+        this.applyMerchantDefaults();
       }
     },
 
     updateCustomMerchant(value: string): void {
+      this.clearInferredDefaults();
+      this.merchantInferenceRequested = false;
+      this.merchantUserSelected = false;
       this.customMerchantInput = value;
       this.merchant = value;
+      const name = value.trim().toLowerCase();
+      if (!name) return;
+      this.merchantInferenceRequested = true;
+      const normalized = normalizeIntakeMerchant(value);
+      if (
+        isExactIntakeRule(normalized) ||
+        normalized.matchStrategy === "regex_heuristic" ||
+        normalized.matchStrategy === "aggregator_heuristic" ||
+        this.allMerchants.some(
+          (merchant) => typeof merchant === "string" && merchant.trim().toLowerCase() === name,
+        ) ||
+        this.recentTransactions.some(
+          (tx) =>
+            tx && typeof tx.merchant === "string" && tx.merchant.trim().toLowerCase() === name,
+        )
+      ) {
+        this.applyMerchantDefaults(normalized);
+      }
     },
 
     persistMerchants(): void {
@@ -366,6 +521,17 @@ export function intakeForm() {
         }
         if (data.merchants && data.merchants.length > 0) {
           this.frequentMerchants = data.merchants.slice(0, 8);
+          if (this.merchantUserSelected && !this.isCustomMerchant && this.merchant) {
+            const selected = this.merchant;
+            const index = this.frequentMerchants.findIndex(
+              (m) =>
+                typeof m === "string" && m.trim().toLowerCase() === selected.trim().toLowerCase(),
+            );
+            this.frequentMerchants =
+              index === -1
+                ? [selected, ...this.frequentMerchants.slice(0, 7)]
+                : this.frequentMerchants.map((m, i) => (i === index ? selected : m));
+          }
 
           // Merge distinct merchants into autocomplete cache
           const merged = [...this.allMerchants];
@@ -379,6 +545,7 @@ export function intakeForm() {
 
           if (
             !this.isCustomMerchant &&
+            !this.merchantUserSelected &&
             (!this.merchant || !this.frequentMerchants.includes(this.merchant))
           ) {
             this.merchant = this.frequentMerchants[0];
@@ -394,18 +561,19 @@ export function intakeForm() {
         return;
       }
       const requestToken = this.token;
+      const requestSequence = ++this.recentRequestSequence;
       try {
         const response = await fetch("/api/transactions?limit=5", {
           headers: { Authorization: `Bearer ${requestToken}` },
         });
-        if (this.token === requestToken && response.status === 401)
-          this.authenticationFailed = true;
-        if (!response.ok || this.token !== requestToken) {
+        if (this.token !== requestToken || requestSequence !== this.recentRequestSequence) return;
+        if (response.status === 401) this.authenticationFailed = true;
+        if (!response.ok) {
           return;
         }
         this.authenticationFailed = false;
         const data = (await response.json()) as { transactions?: RecentTransaction[] };
-        if (this.token !== requestToken) {
+        if (this.token !== requestToken || requestSequence !== this.recentRequestSequence) {
           return;
         }
         if (data.transactions) {
@@ -431,14 +599,22 @@ export function intakeForm() {
               }
             }
             this.cards = merged;
-            if (this.autoCustomCard) {
+            if (this.autoCustomCard && !this.cardManuallySelected) {
               this.isCustomCard = false;
               this.autoCustomCard = false;
             }
-            if (!this.isCustomCard && (!this.card || !this.cards.includes(this.card))) {
+            if (
+              !this.cardManuallySelected &&
+              !this.isCustomCard &&
+              (!this.card || !this.cards.includes(this.card))
+            ) {
               this.card = this.cards[0];
             }
             this.persistCards();
+          }
+          if (this.merchantInferenceRequested) {
+            this.clearInferredDefaults();
+            this.applyMerchantDefaults();
           }
         }
       } catch {
@@ -684,6 +860,12 @@ export function intakeForm() {
         this.isError = false;
         this.amountCents = 0;
         this.isNegative = false;
+        if (this.isCustomMerchant) {
+          this.clearInferredDefaults();
+        }
+        this.categoryManuallySelected = false;
+        this.cardManuallySelected = false;
+        this.merchantInferenceRequested = false;
         this.resetDateToToday();
 
         // Add merchant to local autocomplete cache
@@ -694,6 +876,7 @@ export function intakeForm() {
 
         if (this.isCustomMerchant) {
           this.isCustomMerchant = false;
+          this.merchantUserSelected = false;
           this.customMerchantInput = "";
           this.merchant = this.frequentMerchants[0] || "";
         }
