@@ -1,4 +1,5 @@
 import { BUCKET_SUBCATEGORIES, DEFAULT_FREQUENT_MERCHANTS } from "../config/intake.ts";
+import { normalizeMerchant } from "../utils/merchant-normalizer.ts";
 import {
   type DeadLetterItem,
   deleteDeadLetterItem,
@@ -65,6 +66,8 @@ export function intakeForm() {
     buckets: Object.keys(BUCKET_SUBCATEGORIES),
     parentBucket: "Guilt-Free",
     subcategory: BUCKET_SUBCATEGORIES["Guilt-Free"][0],
+    categoryManuallySelected: false,
+    cardManuallySelected: false,
 
     // Merchant selection and autocomplete cache
     frequentMerchants: [...DEFAULT_FREQUENT_MERCHANTS],
@@ -211,12 +214,14 @@ export function intakeForm() {
 
     // Selectors
     selectCard(card: string): void {
+      this.cardManuallySelected = true;
       this.card = card;
       this.isCustomCard = false;
       this.autoCustomCard = false;
     },
 
     toggleCustomCard(): void {
+      this.cardManuallySelected = true;
       this.isCustomCard = !this.isCustomCard;
       this.autoCustomCard = false;
       if (this.isCustomCard) {
@@ -229,6 +234,7 @@ export function intakeForm() {
     },
 
     updateCustomCard(value: string): void {
+      this.cardManuallySelected = true;
       this.customCardInput = value;
       this.card = value;
     },
@@ -244,6 +250,7 @@ export function intakeForm() {
     },
 
     selectBucket(bucket: string): void {
+      this.categoryManuallySelected = true;
       this.parentBucket = bucket;
       if (bucket === "Income") {
         this.isNegative = false;
@@ -255,12 +262,50 @@ export function intakeForm() {
     },
 
     selectSubcategory(sub: string): void {
+      this.categoryManuallySelected = true;
       this.subcategory = sub;
     },
 
     selectMerchant(merchant: string): void {
       this.merchant = merchant;
       this.isCustomMerchant = false;
+      this.applyMerchantDefaults();
+    },
+
+    applyMerchantDefaults(): void {
+      const merchant = this.merchant.trim();
+      if (!merchant) return;
+      const normalized = normalizeMerchant(merchant);
+      const matches = this.recentTransactions.filter(
+        (tx) => tx.merchant.trim().toLowerCase() === merchant.toLowerCase(),
+      );
+      const counts = new Map<string, { tx: RecentTransaction; count: number }>();
+      for (const tx of matches) {
+        const key = JSON.stringify([tx.parent_bucket, tx.subcategory, tx.card]);
+        const existing = counts.get(key);
+        counts.set(key, { tx, count: (existing?.count ?? 0) + 1 });
+      }
+      const history = [...counts.values()].sort((a, b) => b.count - a.count)[0]?.tx;
+      const bucket = normalized.parentBucket ?? history?.parent_bucket;
+      const subcategory = normalized.subcategory ?? history?.subcategory;
+      if (
+        !this.categoryManuallySelected &&
+        bucket &&
+        subcategory &&
+        !(this.isNegative && bucket === "Income")
+      ) {
+        const options = CATEGORIES_BY_BUCKET[bucket];
+        if (options?.includes(subcategory)) {
+          this.parentBucket = bucket;
+          this.subcategory = subcategory;
+        }
+      }
+      if (!this.cardManuallySelected && history?.card.trim()) {
+        this.card = history.card.trim();
+        if (!this.cards.includes(this.card)) this.cards = [...this.cards, this.card];
+        this.isCustomCard = false;
+        this.autoCustomCard = false;
+      }
     },
 
     toggleCustomMerchant(): void {
@@ -277,6 +322,17 @@ export function intakeForm() {
     updateCustomMerchant(value: string): void {
       this.customMerchantInput = value;
       this.merchant = value;
+      const name = value.trim().toLowerCase();
+      const normalized = normalizeMerchant(value);
+      if (
+        name &&
+        ((normalized.matchStrategy === "exact_rule" &&
+          normalized.canonicalMerchant.toLowerCase() === name) ||
+          this.allMerchants.some((merchant) => merchant.trim().toLowerCase() === name) ||
+          this.recentTransactions.some((tx) => tx.merchant.trim().toLowerCase() === name))
+      ) {
+        this.applyMerchantDefaults();
+      }
     },
 
     persistMerchants(): void {
@@ -684,6 +740,8 @@ export function intakeForm() {
         this.isError = false;
         this.amountCents = 0;
         this.isNegative = false;
+        this.categoryManuallySelected = false;
+        this.cardManuallySelected = false;
         this.resetDateToToday();
 
         // Add merchant to local autocomplete cache

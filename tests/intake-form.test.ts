@@ -5,6 +5,7 @@ import {
   DEFAULT_FREQUENT_MERCHANTS,
   getTodayDate,
   intakeForm,
+  type RecentTransaction,
   TOKEN_STORAGE_KEY,
 } from "../src/scripts/intake-form.ts";
 import { clearDeadLetterQueue, clearOutbox, clearRetryTimer } from "../src/scripts/outbox.ts";
@@ -32,6 +33,100 @@ class MockLocalStorage {
 afterEach(async () => {
   clearRetryTimer();
   await clearOutbox();
+});
+
+function recentMerchant(overrides: Partial<RecentTransaction> = {}): RecentTransaction {
+  return {
+    id: "1",
+    date: "2026-01-01",
+    card: "Amex Gold",
+    parent_bucket: "Guilt-Free",
+    subcategory: "Coffee & Snacks",
+    merchant: "Starbucks",
+    gross_amount: 5,
+    reimbursement: 0,
+    net_spend: 5,
+    created_at: "2026-01-01",
+    ...overrides,
+  };
+}
+
+describe("merchant defaults", () => {
+  it("infers a known merchant category without overwriting manual choices", () => {
+    const form = intakeForm();
+
+    form.selectMerchant("Trader Joe's");
+    assert.equal(form.parentBucket, "Fixed Costs");
+    assert.equal(form.subcategory, "Groceries");
+
+    form.selectBucket("Guilt-Free");
+    form.selectSubcategory("Dining");
+    form.selectCard("My Card");
+    form.selectMerchant("Starbucks");
+
+    assert.equal(form.parentBucket, "Guilt-Free");
+    assert.equal(form.subcategory, "Dining");
+    assert.equal(form.card, "My Card");
+  });
+
+  it("uses recent merchant history for card and uncategorized merchants", () => {
+    const form = intakeForm();
+    form.recentTransactions = [recentMerchant()];
+
+    form.selectMerchant("Starbucks");
+
+    assert.equal(form.parentBucket, "Guilt-Free");
+    assert.equal(form.subcategory, "Coffee & Snacks");
+    assert.equal(form.card, "Amex Gold");
+  });
+
+  it("uses the most common recent tuple for an unknown merchant", () => {
+    const form = intakeForm();
+    form.recentTransactions = [
+      recentMerchant({ id: "1", merchant: "Local Shop", card: "Visa", subcategory: "Shopping" }),
+      recentMerchant({ id: "2", merchant: "Local Shop", card: "Amex Gold", subcategory: "Dining" }),
+      recentMerchant({ id: "3", merchant: "Local Shop", card: "Visa", subcategory: "Shopping" }),
+    ];
+
+    form.updateCustomMerchant(" local shop ");
+
+    assert.equal(form.parentBucket, "Guilt-Free");
+    assert.equal(form.subcategory, "Shopping");
+    assert.equal(form.card, "Visa");
+  });
+
+  it("keeps an unknown merchant's current selections", () => {
+    const form = intakeForm();
+    form.card = "Existing card";
+
+    form.selectMerchant("Unrecognized Vendor");
+
+    assert.equal(form.parentBucket, "Guilt-Free");
+    assert.equal(form.subcategory, "Dining");
+    assert.equal(form.card, "Existing card");
+  });
+
+  it("infers a typed canonical merchant without cached history", () => {
+    const form = intakeForm();
+
+    form.updateCustomMerchant("Starbucks");
+
+    assert.equal(form.parentBucket, "Guilt-Free");
+    assert.equal(form.subcategory, "Coffee & Snacks");
+  });
+
+  it("preserves a manual category while still inferring a card", () => {
+    const form = intakeForm();
+    form.recentTransactions = [recentMerchant()];
+    form.selectBucket("Fixed Costs");
+    form.selectSubcategory("Groceries");
+
+    form.selectMerchant("Starbucks");
+
+    assert.equal(form.parentBucket, "Fixed Costs");
+    assert.equal(form.subcategory, "Groceries");
+    assert.equal(form.card, "Amex Gold");
+  });
 });
 
 describe("getTodayDate helper", () => {
