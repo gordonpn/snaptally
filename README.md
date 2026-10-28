@@ -7,7 +7,7 @@ SnapTally is a lightweight, mobile-first progressive web application (PWA) desig
 Logging transactions at checkout using full spreadsheet applications or heavy personal finance tools is slow and error-prone on mobile devices. SnapTally delivers an ultra-fast checkout entry experience paired with planned Conscious Spending Plan analysis:
 
 - Single-tap pill chips and numeric amount entry for sub-5-second logging.
-- Custom merchant, card, and API token fields opt out of browser autofill and keyboard text correction while retaining local merchant suggestions.
+- Custom merchant, card, and API token fields ask browsers and keyboards to suppress text assistance while retaining local merchant suggestions.
 - Instant submission with an optimistic client-side outbox using IndexedDB.
 - Planned monthly Conscious Spending Plan budget analysis, burn-rate pacing, and sinking fund balance tracking.
 - Zero server maintenance and durable persistence on Cloudflare edge infrastructure.
