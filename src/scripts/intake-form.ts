@@ -38,6 +38,35 @@ export const TOKEN_STORAGE_KEY = "snaptally_api_token";
 export const CARDS_STORAGE_KEY = "snaptally_cards";
 export const MERCHANTS_STORAGE_KEY = "snaptally_merchants";
 
+const CANONICAL_MERCHANT_RULES = new Map(
+  Object.values(DEFAULT_CANONICAL_RULES).map((rule) => [rule.canonicalName.toLowerCase(), rule]),
+);
+
+function normalizeIntakeMerchant(value: string): NormalizedTransaction {
+  const normalized = normalizeMerchant(value);
+  const rule = CANONICAL_MERCHANT_RULES.get(normalized.cleanedDescription.toLowerCase());
+  if (!rule) return normalized;
+  return {
+    ...normalized,
+    canonicalMerchant: rule.canonicalName,
+    parentBucket: rule.parentBucket,
+    subcategory: rule.subcategory,
+    rewardCategory: rule.rewardMultiplierCategory ?? null,
+    confidence: 0.98,
+    matchStrategy: "exact_rule",
+    requiresLLM: false,
+  };
+}
+
+function isExactIntakeRule(normalized: NormalizedTransaction): boolean {
+  // Avoid applying a rule token embedded in an unrelated merchant name.
+  return (
+    normalized.matchStrategy === "exact_rule" &&
+    (normalized.canonicalMerchant.toLowerCase() === normalized.cleanedDescription.toLowerCase() ||
+      Object.hasOwn(DEFAULT_CANONICAL_RULES, normalized.cleanedDescription))
+  );
+}
+
 /**
  * Returns today's date in local YYYY-MM-DD calendar format.
  */
@@ -303,11 +332,8 @@ export function intakeForm() {
     applyMerchantDefaults(result?: NormalizedTransaction): void {
       const merchant = this.merchant.trim();
       if (!merchant) return;
-      const normalized = result ?? normalizeMerchant(merchant);
-      const exactMatch =
-        normalized.matchStrategy === "exact_rule" &&
-        (normalized.canonicalMerchant.toLowerCase() === merchant.toLowerCase() ||
-          Object.hasOwn(DEFAULT_CANONICAL_RULES, normalized.cleanedDescription));
+      const normalized = result ?? normalizeIntakeMerchant(merchant);
+      const exactMatch = isExactIntakeRule(normalized);
       const canonical = exactMatch ? normalized.canonicalMerchant.toLowerCase() : "";
       const matches = this.recentTransactions.filter(
         (tx) =>
@@ -380,11 +406,9 @@ export function intakeForm() {
       this.merchant = value;
       const name = value.trim().toLowerCase();
       if (!name) return;
-      const normalized = normalizeMerchant(value);
+      const normalized = normalizeIntakeMerchant(value);
       if (
-        (normalized.matchStrategy === "exact_rule" &&
-          (normalized.canonicalMerchant.toLowerCase() === name ||
-            Object.hasOwn(DEFAULT_CANONICAL_RULES, normalized.cleanedDescription))) ||
+        isExactIntakeRule(normalized) ||
         this.allMerchants.some(
           (merchant) => typeof merchant === "string" && merchant.trim().toLowerCase() === name,
         ) ||
@@ -485,13 +509,16 @@ export function intakeForm() {
         }
         if (data.merchants && data.merchants.length > 0) {
           this.frequentMerchants = data.merchants.slice(0, 8);
-          if (
-            this.merchantInferenceRequested &&
-            !this.isCustomMerchant &&
-            this.merchant &&
-            !this.frequentMerchants.includes(this.merchant)
-          ) {
-            this.frequentMerchants = [this.merchant, ...this.frequentMerchants.slice(0, 7)];
+          if (this.merchantInferenceRequested && !this.isCustomMerchant && this.merchant) {
+            const selected = this.merchant;
+            const index = this.frequentMerchants.findIndex(
+              (m) =>
+                typeof m === "string" && m.trim().toLowerCase() === selected.trim().toLowerCase(),
+            );
+            this.frequentMerchants =
+              index === -1
+                ? [selected, ...this.frequentMerchants.slice(0, 7)]
+                : this.frequentMerchants.map((m, i) => (i === index ? selected : m));
           }
 
           // Merge distinct merchants into autocomplete cache

@@ -172,6 +172,24 @@ describe("merchant defaults", () => {
     assert.equal(form.card, "Visa");
   });
 
+  it("recognizes canonical merchant names even when a shorter rule matches first", () => {
+    const form = intakeForm();
+
+    form.updateCustomMerchant("Amazon Marketplace");
+
+    assert.equal(form.parentBucket, "Guilt-Free");
+    assert.equal(form.subcategory, "Shopping");
+  });
+
+  it("recognizes a canonical merchant after descriptor cleanup", () => {
+    const form = intakeForm();
+
+    form.updateCustomMerchant("Whole Foods Market Boston MA");
+
+    assert.equal(form.parentBucket, "Fixed Costs");
+    assert.equal(form.subcategory, "Groceries");
+  });
+
   it("does not apply an unrelated rule token inside a merchant name", () => {
     const form = intakeForm();
     form.allMerchants = ["Medium Rare"];
@@ -263,6 +281,26 @@ describe("merchant defaults", () => {
       assert.equal(form.merchant, "Trader Joe's");
       assert.deepEqual(form.frequentMerchants, ["Trader Joe's", "Starbucks"]);
       assert.equal(form.subcategory, "Groceries");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("keeps one selected chip when the refreshed merchant has different casing", async () => {
+    const form = intakeForm();
+    const originalFetch = globalThis.fetch;
+    const response = Promise.withResolvers<Response>();
+    globalThis.fetch = () => response.promise;
+    form.token = "token";
+
+    try {
+      const loading = form.loadFrequentMerchants();
+      form.selectMerchant("trader joe's");
+      response.resolve(Response.json({ merchants: ["Trader Joe's", "Starbucks"] }));
+      await loading;
+
+      assert.equal(form.merchant, "trader joe's");
+      assert.deepEqual(form.frequentMerchants, ["trader joe's", "Starbucks"]);
     } finally {
       globalThis.fetch = originalFetch;
     }
