@@ -317,8 +317,13 @@ export function intakeForm() {
 
     clearInferredDefaults(): void {
       if (this.inferredCategoryBaseline) {
-        this.parentBucket = this.inferredCategoryBaseline.bucket;
-        this.subcategory = this.inferredCategoryBaseline.subcategory;
+        if (this.isNegative && this.inferredCategoryBaseline.bucket === "Income") {
+          this.parentBucket = "Guilt-Free";
+          this.subcategory = BUCKET_SUBCATEGORIES["Guilt-Free"][0];
+        } else {
+          this.parentBucket = this.inferredCategoryBaseline.bucket;
+          this.subcategory = this.inferredCategoryBaseline.subcategory;
+        }
         this.inferredCategoryBaseline = undefined;
       }
       if (this.inferredCardBaseline) {

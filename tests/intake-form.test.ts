@@ -153,6 +153,20 @@ describe("merchant defaults", () => {
     assert.equal(form.card, "Existing card");
   });
 
+  it("keeps credit mode on an expense category when the baseline is Income", () => {
+    const form = intakeForm();
+    form.parentBucket = "Income";
+    form.subcategory = "Salary";
+
+    form.selectMerchant("Starbucks");
+    form.toggleNegative();
+    form.selectMerchant("Unknown vendor");
+
+    assert.equal(form.isNegative, true);
+    assert.equal(form.parentBucket, "Guilt-Free");
+    assert.equal(form.subcategory, "Dining");
+  });
+
   it("recognizes typed merchant aliases", () => {
     const form = intakeForm();
 
