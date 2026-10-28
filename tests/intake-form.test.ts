@@ -106,6 +106,18 @@ describe("merchant defaults", () => {
     assert.equal(form.card, "Existing card");
   });
 
+  it("ignores an invalid historical bucket", () => {
+    const form = intakeForm();
+    form.recentTransactions = [
+      recentMerchant({ merchant: "Local Shop", parent_bucket: "toString" }),
+    ];
+
+    form.selectMerchant("Local Shop");
+
+    assert.equal(form.parentBucket, "Guilt-Free");
+    assert.equal(form.subcategory, "Dining");
+  });
+
   it("infers a typed canonical merchant without cached history", () => {
     const form = intakeForm();
 
@@ -148,6 +160,47 @@ describe("merchant defaults", () => {
 
     assert.equal(form.parentBucket, "Fixed Costs");
     assert.equal(form.subcategory, "Groceries");
+  });
+
+  it("finds canonical merchant history for a typed alias", () => {
+    const form = intakeForm();
+    form.recentTransactions = [recentMerchant({ merchant: "Whole Foods Market", card: "Visa" })];
+
+    form.updateCustomMerchant("WHOLEFDS");
+
+    assert.equal(form.subcategory, "Groceries");
+    assert.equal(form.card, "Visa");
+  });
+
+  it("does not apply an unrelated rule token inside a merchant name", () => {
+    const form = intakeForm();
+    form.allMerchants = ["Medium Rare"];
+
+    form.updateCustomMerchant("Medium Rare");
+
+    assert.equal(form.parentBucket, "Guilt-Free");
+    assert.equal(form.subcategory, "Dining");
+  });
+
+  it("retains inferred values for a second transaction at the same merchant", async () => {
+    const form = intakeForm();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      throw new Error("Offline");
+    };
+    form.recentTransactions = [recentMerchant()];
+    form.selectMerchant("Starbucks");
+    form.pressDigit(1);
+
+    try {
+      await form.submitTransaction();
+
+      assert.equal(form.merchant, "Starbucks");
+      assert.equal(form.subcategory, "Coffee & Snacks");
+      assert.equal(form.card, "Amex Gold");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("uses history arriving after a merchant selection without overriding manual choices", async () => {
@@ -194,6 +247,27 @@ describe("merchant defaults", () => {
     }
   });
 
+  it("keeps a selected merchant visible when the merchant list arrives later", async () => {
+    const form = intakeForm();
+    const originalFetch = globalThis.fetch;
+    const response = Promise.withResolvers<Response>();
+    globalThis.fetch = () => response.promise;
+    form.token = "token";
+
+    try {
+      const loading = form.loadFrequentMerchants();
+      form.selectMerchant("Trader Joe's");
+      response.resolve(Response.json({ merchants: ["Starbucks"] }));
+      await loading;
+
+      assert.equal(form.merchant, "Trader Joe's");
+      assert.deepEqual(form.frequentMerchants, ["Trader Joe's", "Starbucks"]);
+      assert.equal(form.subcategory, "Groceries");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("allows new inference after saving a manual selection", async () => {
     const form = intakeForm();
     const originalFetch = globalThis.fetch;
@@ -235,6 +309,22 @@ describe("merchant defaults", () => {
 
       assert.equal(form.subcategory, "Coffee & Snacks");
       assert.equal(form.card, "Amex Gold");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("ignores non-string cached merchants while typing", async () => {
+    const form = intakeForm();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => Response.json({ merchants: [42] });
+    form.token = "token";
+
+    try {
+      await form.loadFrequentMerchants();
+      form.updateCustomMerchant("Unknown vendor");
+
+      assert.equal(form.merchant, "Unknown vendor");
     } finally {
       globalThis.fetch = originalFetch;
     }
