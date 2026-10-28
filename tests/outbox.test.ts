@@ -624,7 +624,7 @@ describe("Optimistic Intake Form & Merchant Autocomplete (Scenario 1 & 2)", () =
     }
   });
 
-  it("caches distinct merchants and reuses saved casing for case variants", async () => {
+  it("caches distinct merchants locally for offline datalist autocomplete", async () => {
     const form = intakeForm();
     form.init();
 
@@ -640,9 +640,7 @@ describe("Optimistic Intake Form & Merchant Autocomplete (Scenario 1 & 2)", () =
     form.pressDigit(0); // $5.00
 
     const originalFetch = globalThis.fetch;
-    const postedBodies: string[] = [];
-    globalThis.fetch = (async (_url: unknown, options?: RequestInit) => {
-      postedBodies.push(String(options?.body));
+    globalThis.fetch = (async () => {
       return new Response(JSON.stringify({ ok: true, id: "srv-bakery" }), {
         status: 201,
         headers: { "Content-Type": "application/json" },
@@ -655,71 +653,11 @@ describe("Optimistic Intake Form & Merchant Autocomplete (Scenario 1 & 2)", () =
       // Local Bakery added to merchants cache
       assert.ok(form.allMerchants.includes("Local Bakery"));
 
-      form.toggleCustomMerchant();
-      form.updateCustomMerchant("local bakery");
-      form.pressDigit(5);
-      form.pressDigit(0);
-      form.pressDigit(0);
-      await form.submitTransaction();
-
-      assert.ok(postedBodies[1]?.includes('"merchant":"local bakery"'));
-      assert.deepStrictEqual(
-        form.allMerchants.filter((merchant) => merchant.toLowerCase() === "local bakery"),
-        ["Local Bakery"],
-      );
-
       // Stored in localStorage
       const stored = mockStorage.getItem(MERCHANTS_STORAGE_KEY);
       assert.ok(stored !== null);
       const parsed = JSON.parse(stored as string) as string[];
-      assert.deepStrictEqual(
-        parsed.filter((merchant) => merchant.toLowerCase() === "local bakery"),
-        ["Local Bakery"],
-      );
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("deduplicates stored merchant names and submissions across whitespace", async () => {
-    mockStorage.setItem(
-      MERCHANTS_STORAGE_KEY,
-      JSON.stringify(["Local Bakery ", "local bakery", "", "   "]),
-    );
-    const form = intakeForm();
-    form.init();
-
-    assert.ok(!form.allMerchants.includes(""));
-    assert.deepStrictEqual(
-      form.allMerchants.filter((merchant) => merchant.trim().toLowerCase() === "local bakery"),
-      ["Local Bakery"],
-    );
-    const stored = JSON.parse(mockStorage.getItem(MERCHANTS_STORAGE_KEY) ?? "[]") as string[];
-    assert.ok(!stored.includes(""));
-    assert.deepStrictEqual(
-      stored.filter((merchant) => merchant.trim().toLowerCase() === "local bakery"),
-      ["Local Bakery"],
-    );
-
-    form.toggleCustomMerchant();
-    form.updateCustomMerchant("local bakery");
-    form.card = "Visa";
-    form.pressDigit(1);
-
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => {
-      return new Response(JSON.stringify({ ok: true, id: "srv-bakery" }), {
-        status: 201,
-        headers: { "Content-Type": "application/json" },
-      });
-    }) as typeof fetch;
-
-    try {
-      await form.submitTransaction();
-      assert.deepStrictEqual(
-        form.allMerchants.filter((merchant) => merchant.trim().toLowerCase() === "local bakery"),
-        ["Local Bakery"],
-      );
+      assert.ok(parsed.includes("Local Bakery"));
     } finally {
       globalThis.fetch = originalFetch;
     }

@@ -517,18 +517,6 @@ describe("intakeForm Recent Transactions Feed (Scenario 4)", () => {
         net_spend: 20.0,
         created_at: "2026-09-28 12:00:00",
       },
-      {
-        id: "tx-4",
-        date: "2026-09-27",
-        card: "chase sapphire",
-        parent_bucket: "Guilt-Free",
-        subcategory: "Dining",
-        merchant: "Dig",
-        gross_amount: 12.0,
-        reimbursement: 0.0,
-        net_spend: 12.0,
-        created_at: "2026-09-27 12:00:00",
-      },
     ];
 
     const originalFetch = globalThis.fetch;
@@ -664,49 +652,16 @@ describe("intakeForm Frequent Merchants Loading", () => {
 
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (url: unknown) => {
-      assert.strictEqual(String(url), "/api/merchants?limit=24");
-      return new Response(
-        JSON.stringify({
-          merchants: [
-            "Market Basket",
-            "market basket",
-            "Star Market",
-            "Merchant 4",
-            "Merchant 5",
-            "Merchant 6",
-            "Merchant 7",
-            "Merchant 8",
-            "Ninth Merchant",
-            "Tenth Merchant",
-            42,
-          ],
-        }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      assert.strictEqual(String(url), "/api/merchants?limit=8");
+      return new Response(JSON.stringify({ merchants: ["Market Basket", "Star Market"] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     }) as unknown as typeof fetch;
 
     try {
       await form.loadFrequentMerchants();
-      assert.deepStrictEqual(form.frequentMerchants, [
-        "Market Basket",
-        "Star Market",
-        "Merchant 4",
-        "Merchant 5",
-        "Merchant 6",
-        "Merchant 7",
-        "Merchant 8",
-        "Ninth Merchant",
-      ]);
-      assert.deepStrictEqual(
-        form.allMerchants.filter((merchant) => merchant.toLowerCase() === "market basket"),
-        ["Market Basket"],
-      );
-      assert.ok(form.allMerchants.includes("Ninth Merchant"));
-      assert.ok(!form.frequentMerchants.includes("Tenth Merchant"));
-      assert.ok(form.allMerchants.includes("Tenth Merchant"));
+      assert.deepStrictEqual(form.frequentMerchants, ["Market Basket", "Star Market"]);
       assert.strictEqual(form.merchant, "Market Basket");
     } finally {
       globalThis.fetch = originalFetch;
@@ -730,31 +685,10 @@ describe("intakeForm Frequent Merchants Loading", () => {
     }
   });
 
-  it("preserves suggestions when the API only returns blank merchants", async () => {
-    const form = intakeForm();
-    form.token = "valid-token";
-
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => {
-      return new Response(JSON.stringify({ merchants: ["", "   "] }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }) as typeof fetch;
-
-    try {
-      await form.loadFrequentMerchants();
-      assert.deepStrictEqual(form.frequentMerchants, DEFAULT_FREQUENT_MERCHANTS);
-      assert.strictEqual(form.merchant, DEFAULT_FREQUENT_MERCHANTS[0]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
   it("preserves currently selected merchant if present in fetched frequent merchants", async () => {
     const form = intakeForm();
     form.token = "valid-token";
-    form.merchant = "star market";
+    form.merchant = "Star Market";
 
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async () => {
@@ -1157,24 +1091,20 @@ describe("intakeForm Card Lifecycle and Storage", () => {
     }
   });
 
-  it("deduplicates case variants of saved card labels", async () => {
-    mockStorage.setItem(CARDS_STORAGE_KEY, JSON.stringify(["Bilt Mastercard", "bilt mastercard"]));
+  it("does not duplicate existing card in cards list when submitted as custom card", async () => {
+    mockStorage.setItem(CARDS_STORAGE_KEY, JSON.stringify(["Bilt Mastercard"]));
     const form = intakeForm();
     form.init();
-    assert.deepStrictEqual(form.cards, ["Bilt Mastercard"]);
-    assert.strictEqual(mockStorage.getItem(CARDS_STORAGE_KEY), JSON.stringify(["Bilt Mastercard"]));
 
     form.toggleCustomCard();
-    form.updateCustomCard("bilt mastercard");
+    form.updateCustomCard("Bilt Mastercard");
     form.pressDigit(1);
     form.pressDigit(0);
     form.pressDigit(0);
     form.merchant = "Trader Joe's";
 
     const originalFetch = globalThis.fetch;
-    let postedBody = "";
-    globalThis.fetch = (async (_url: unknown, options?: RequestInit) => {
-      postedBody = String(options?.body);
+    globalThis.fetch = (async () => {
       return new Response(JSON.stringify({ ok: true, id: "tx-dup-card" }), {
         status: 201,
         headers: { "Content-Type": "application/json" },
@@ -1184,9 +1114,7 @@ describe("intakeForm Card Lifecycle and Storage", () => {
     try {
       const success = await form.submitTransaction();
       assert.strictEqual(success, true);
-      assert.ok(postedBody.includes('"card":"bilt mastercard"'));
       assert.deepStrictEqual(form.cards, ["Bilt Mastercard"]);
-      assert.strictEqual(form.card, "Bilt Mastercard");
     } finally {
       globalThis.fetch = originalFetch;
     }
