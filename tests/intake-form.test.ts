@@ -127,6 +127,118 @@ describe("merchant defaults", () => {
     assert.equal(form.subcategory, "Groceries");
     assert.equal(form.card, "Amex Gold");
   });
+
+  it("restores previous selections when changing to an unknown merchant", () => {
+    const form = intakeForm();
+    form.card = "Existing card";
+    form.recentTransactions = [recentMerchant()];
+
+    form.selectMerchant("Starbucks");
+    form.updateCustomMerchant("Unknown vendor");
+
+    assert.equal(form.parentBucket, "Guilt-Free");
+    assert.equal(form.subcategory, "Dining");
+    assert.equal(form.card, "Existing card");
+  });
+
+  it("recognizes typed merchant aliases", () => {
+    const form = intakeForm();
+
+    form.updateCustomMerchant("WHOLEFDS");
+
+    assert.equal(form.parentBucket, "Fixed Costs");
+    assert.equal(form.subcategory, "Groceries");
+  });
+
+  it("uses history arriving after a merchant selection without overriding manual choices", async () => {
+    const form = intakeForm();
+    const originalFetch = globalThis.fetch;
+    const response = Promise.withResolvers<Response>();
+    globalThis.fetch = () => response.promise;
+    form.token = "token";
+
+    try {
+      const loading = form.loadRecentTransactions();
+      form.selectMerchant("Starbucks");
+      form.selectBucket("Fixed Costs");
+      form.selectSubcategory("Groceries");
+      response.resolve(Response.json({ transactions: [recentMerchant()] }));
+      await loading;
+
+      assert.equal(form.parentBucket, "Fixed Costs");
+      assert.equal(form.subcategory, "Groceries");
+      assert.equal(form.card, "Amex Gold");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("preserves a manual card when history arrives later", async () => {
+    const form = intakeForm();
+    const originalFetch = globalThis.fetch;
+    const response = Promise.withResolvers<Response>();
+    globalThis.fetch = () => response.promise;
+    form.token = "token";
+
+    try {
+      const loading = form.loadRecentTransactions();
+      form.selectMerchant("Starbucks");
+      form.selectCard("Visa");
+      response.resolve(Response.json({ transactions: [recentMerchant()] }));
+      await loading;
+
+      assert.equal(form.card, "Visa");
+      assert.equal(form.subcategory, "Coffee & Snacks");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("allows new inference after saving a manual selection", async () => {
+    const form = intakeForm();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      throw new Error("Offline");
+    };
+    form.selectBucket("Fixed Costs");
+    form.selectSubcategory("Rent");
+    form.selectCard("Visa");
+    form.selectMerchant("Trader Joe's");
+    form.pressDigit(1);
+
+    try {
+      await form.submitTransaction();
+      form.selectMerchant("Starbucks");
+
+      assert.equal(form.parentBucket, "Guilt-Free");
+      assert.equal(form.subcategory, "Coffee & Snacks");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("ignores missing merchant and card values in history", async () => {
+    const form = intakeForm();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      Response.json({
+        transactions: [
+          { ...recentMerchant(), merchant: null },
+          { ...recentMerchant({ id: "2" }), card: null },
+        ],
+      });
+    form.token = "token";
+
+    try {
+      await form.loadRecentTransactions();
+      form.selectMerchant("Starbucks");
+
+      assert.equal(form.subcategory, "Coffee & Snacks");
+      assert.equal(form.card, "Amex Gold");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 describe("getTodayDate helper", () => {
