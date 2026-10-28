@@ -102,6 +102,8 @@ export function intakeForm() {
     categoryManuallySelected: false,
     cardManuallySelected: false,
     merchantInferenceRequested: false,
+    merchantUserSelected: false,
+    recentRequestSequence: 0,
     inferredCategoryBaseline: undefined as { bucket: string; subcategory: string } | undefined,
     inferredCardBaseline: undefined as { card: string; custom: boolean; auto: boolean } | undefined,
 
@@ -310,6 +312,7 @@ export function intakeForm() {
     selectMerchant(merchant: string): void {
       this.clearInferredDefaults();
       this.merchantInferenceRequested = true;
+      this.merchantUserSelected = true;
       this.merchant = merchant;
       this.isCustomMerchant = false;
       this.applyMerchantDefaults();
@@ -392,6 +395,7 @@ export function intakeForm() {
     toggleCustomMerchant(): void {
       this.clearInferredDefaults();
       this.merchantInferenceRequested = false;
+      this.merchantUserSelected = false;
       this.isCustomMerchant = !this.isCustomMerchant;
       if (this.isCustomMerchant) {
         if (this.customMerchantInput.trim().length > 0) {
@@ -400,6 +404,7 @@ export function intakeForm() {
       } else {
         this.merchant = this.frequentMerchants[0] || "";
         this.merchantInferenceRequested = true;
+        this.merchantUserSelected = true;
         this.applyMerchantDefaults();
       }
     },
@@ -407,13 +412,17 @@ export function intakeForm() {
     updateCustomMerchant(value: string): void {
       this.clearInferredDefaults();
       this.merchantInferenceRequested = false;
+      this.merchantUserSelected = false;
       this.customMerchantInput = value;
       this.merchant = value;
       const name = value.trim().toLowerCase();
       if (!name) return;
+      this.merchantInferenceRequested = true;
       const normalized = normalizeIntakeMerchant(value);
       if (
         isExactIntakeRule(normalized) ||
+        normalized.matchStrategy === "regex_heuristic" ||
+        normalized.matchStrategy === "aggregator_heuristic" ||
         this.allMerchants.some(
           (merchant) => typeof merchant === "string" && merchant.trim().toLowerCase() === name,
         ) ||
@@ -422,7 +431,6 @@ export function intakeForm() {
             tx && typeof tx.merchant === "string" && tx.merchant.trim().toLowerCase() === name,
         )
       ) {
-        this.merchantInferenceRequested = true;
         this.applyMerchantDefaults(normalized);
       }
     },
@@ -514,7 +522,7 @@ export function intakeForm() {
         }
         if (data.merchants && data.merchants.length > 0) {
           this.frequentMerchants = data.merchants.slice(0, 8);
-          if (this.merchantInferenceRequested && !this.isCustomMerchant && this.merchant) {
+          if (this.merchantUserSelected && !this.isCustomMerchant && this.merchant) {
             const selected = this.merchant;
             const index = this.frequentMerchants.findIndex(
               (m) =>
@@ -538,7 +546,7 @@ export function intakeForm() {
 
           if (
             !this.isCustomMerchant &&
-            !this.merchantInferenceRequested &&
+            !this.merchantUserSelected &&
             (!this.merchant || !this.frequentMerchants.includes(this.merchant))
           ) {
             this.merchant = this.frequentMerchants[0];
@@ -554,18 +562,19 @@ export function intakeForm() {
         return;
       }
       const requestToken = this.token;
+      const requestSequence = ++this.recentRequestSequence;
       try {
         const response = await fetch("/api/transactions?limit=5", {
           headers: { Authorization: `Bearer ${requestToken}` },
         });
-        if (this.token === requestToken && response.status === 401)
-          this.authenticationFailed = true;
-        if (!response.ok || this.token !== requestToken) {
+        if (this.token !== requestToken || requestSequence !== this.recentRequestSequence) return;
+        if (response.status === 401) this.authenticationFailed = true;
+        if (!response.ok) {
           return;
         }
         this.authenticationFailed = false;
         const data = (await response.json()) as { transactions?: RecentTransaction[] };
-        if (this.token !== requestToken) {
+        if (this.token !== requestToken || requestSequence !== this.recentRequestSequence) {
           return;
         }
         if (data.transactions) {
@@ -604,7 +613,10 @@ export function intakeForm() {
             }
             this.persistCards();
           }
-          if (this.merchantInferenceRequested) this.applyMerchantDefaults();
+          if (this.merchantInferenceRequested) {
+            this.clearInferredDefaults();
+            this.applyMerchantDefaults();
+          }
         }
       } catch {
         // Silently preserve existing recent records on network or parse failures
@@ -851,9 +863,6 @@ export function intakeForm() {
         this.isNegative = false;
         if (this.isCustomMerchant) {
           this.clearInferredDefaults();
-        } else {
-          this.inferredCategoryBaseline = undefined;
-          this.inferredCardBaseline = undefined;
         }
         this.categoryManuallySelected = false;
         this.cardManuallySelected = false;
@@ -868,6 +877,7 @@ export function intakeForm() {
 
         if (this.isCustomMerchant) {
           this.isCustomMerchant = false;
+          this.merchantUserSelected = false;
           this.customMerchantInput = "";
           this.merchant = this.frequentMerchants[0] || "";
         }
