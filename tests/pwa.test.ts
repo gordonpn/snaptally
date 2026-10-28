@@ -334,3 +334,30 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
     );
   });
 });
+
+describe("Intake text input assistance", () => {
+  it("disables native text assistance on custom merchant, card, and token inputs", () => {
+    const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
+    const indexContent = fs.readFileSync(indexPath, "utf-8");
+    const inputTags = [...indexContent.matchAll(/<input\b[^>]*>/g)].map(([input]) => input);
+    const fields = [
+      ["custom merchant", 'x-model="customMerchantInput"'],
+      ["custom card", 'x-model="customCardInput"'],
+      ["API token", 'id="api-token-input"'],
+    ] as const;
+    const attributes = [
+      'autocomplete="off"',
+      'autocorrect="off"',
+      'autocapitalize="off"',
+      'spellcheck="false"',
+    ] as const;
+
+    for (const [fieldName, selector] of fields) {
+      const input = inputTags.find((tag) => tag.includes(selector));
+      assert.ok(input, `index.astro must declare the ${fieldName} input`);
+      for (const attribute of attributes) {
+        assert.ok(input.includes(attribute), `${fieldName} input must include ${attribute}`);
+      }
+    }
+  });
+});
