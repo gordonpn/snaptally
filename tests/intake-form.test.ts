@@ -129,6 +129,22 @@ describe("merchant defaults", () => {
     assert.equal(form.subcategory, "Coffee & Snacks");
   });
 
+  it("reapplies defaults when restoring custom merchant input", () => {
+    const form = intakeForm();
+    form.recentTransactions = [recentMerchant()];
+    form.card = "Visa";
+    form.toggleCustomMerchant();
+    form.updateCustomMerchant("Starbucks");
+    form.toggleCustomMerchant();
+
+    form.toggleCustomMerchant();
+
+    assert.equal(form.merchant, "Starbucks");
+    assert.equal(form.parentBucket, "Guilt-Free");
+    assert.equal(form.subcategory, "Coffee & Snacks");
+    assert.equal(form.card, "Amex Gold");
+  });
+
   it("preserves a manual category while still inferring a card", () => {
     const form = intakeForm();
     form.recentTransactions = [recentMerchant()];

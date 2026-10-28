@@ -398,9 +398,8 @@ export function intakeForm() {
       this.merchantUserSelected = false;
       this.isCustomMerchant = !this.isCustomMerchant;
       if (this.isCustomMerchant) {
-        if (this.customMerchantInput.trim().length > 0) {
-          this.merchant = this.customMerchantInput.trim();
-        }
+        const customMerchant = this.customMerchantInput.trim();
+        if (customMerchant) this.updateCustomMerchant(customMerchant);
       } else {
         this.merchant = this.frequentMerchants[0] || "";
         this.merchantInferenceRequested = true;
