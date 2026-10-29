@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   formatDateHeading,
   formatMonthName,
+  formatTransactionTime,
   getTodayDate,
   getYesterdayDate,
   isValidDate,
@@ -72,6 +73,24 @@ describe("date utils", () => {
       assert.strictEqual(formatMonthName(undefined), "This Month");
       assert.strictEqual(formatMonthName(""), "This Month");
       assert.strictEqual(formatMonthName("invalid-month"), "This Month");
+    });
+  });
+
+  describe("formatTransactionTime", () => {
+    it("formats ISO timestamp to localized time", () => {
+      const formatted = formatTransactionTime("2026-10-29T14:30:00Z");
+      assert.match(formatted, /\d{1,2}:\d{2}\s*(?:AM|PM)/i);
+    });
+
+    it("formats SQLite datetime string to localized time", () => {
+      const formatted = formatTransactionTime("2026-10-29 14:30:00");
+      assert.match(formatted, /\d{1,2}:\d{2}\s*(?:AM|PM)/i);
+    });
+
+    it("returns empty string for null, undefined, or invalid timestamp", () => {
+      assert.strictEqual(formatTransactionTime(undefined), "");
+      assert.strictEqual(formatTransactionTime(""), "");
+      assert.strictEqual(formatTransactionTime("invalid-timestamp"), "");
     });
   });
 });

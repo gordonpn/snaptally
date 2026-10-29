@@ -1,4 +1,9 @@
-import { formatDateHeading, formatMonthName } from "../utils/date.ts";
+import {
+  formatDateHeading,
+  formatMonthName,
+  formatTransactionTime,
+  getTodayDate,
+} from "../utils/date.ts";
 import { TOKEN_STORAGE_KEY } from "./intake-form.ts";
 
 export interface ActivityTransaction {
@@ -55,6 +60,7 @@ export function activityView() {
     selectedBucket: "",
     monthSummary: null as ActivityMonthSummary | null,
     searchDebounceTimer: null as ReturnType<typeof setTimeout> | null,
+    requestSequence: 0,
 
     get hasToken(): boolean {
       return Boolean(this.token && this.token.trim().length > 0);
@@ -151,7 +157,12 @@ export function activityView() {
       this.loadInitial();
     },
 
+    formatTime(createdAt?: string): string {
+      return formatTransactionTime(createdAt);
+    },
+
     async fetchTransactions(reset: boolean): Promise<void> {
+      const requestId = ++this.requestSequence;
       if (reset) {
         this.offset = 0;
         this.loading = true;
@@ -163,6 +174,7 @@ export function activityView() {
       const params = new URLSearchParams();
       params.set("limit", String(this.limit));
       params.set("offset", String(this.offset));
+      params.set("month", getTodayDate().slice(0, 7));
 
       const trimmedSearch = this.searchQuery.trim();
       if (trimmedSearch.length > 0) {
@@ -187,6 +199,10 @@ export function activityView() {
           headers,
         });
 
+        if (requestId !== this.requestSequence) {
+          return;
+        }
+
         if (!response.ok) {
           if (response.status === 401) {
             this.error =
@@ -203,12 +219,18 @@ export function activityView() {
         }
 
         const data = (await response.json()) as TransactionsApiResponse;
+        if (requestId !== this.requestSequence) {
+          return;
+        }
+
         const incoming = data.transactions ?? [];
 
         if (reset) {
           this.transactions = incoming;
         } else {
-          this.transactions = [...this.transactions, ...incoming];
+          const loadedIds = new Set(this.transactions.map((tx) => tx.id));
+          const newRows = incoming.filter((tx) => !loadedIds.has(tx.id));
+          this.transactions = [...this.transactions, ...newRows];
         }
 
         this.totalCount = data.total_count ?? this.transactions.length;
@@ -224,6 +246,9 @@ export function activityView() {
         }
         this.error = null;
       } catch (err) {
+        if (requestId !== this.requestSequence) {
+          return;
+        }
         this.error = err instanceof Error ? err.message : "Network error loading transactions";
         if (reset) {
           this.transactions = [];
@@ -231,8 +256,10 @@ export function activityView() {
           this.hasMore = false;
         }
       } finally {
-        this.loading = false;
-        this.loadingMore = false;
+        if (requestId === this.requestSequence) {
+          this.loading = false;
+          this.loadingMore = false;
+        }
       }
     },
   };

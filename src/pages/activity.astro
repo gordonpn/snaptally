@@ -14,12 +14,12 @@ import Layout from "../layouts/Layout.astro";
         <a
           href="/"
           class="w-11 h-11 rounded-full neu-raised-sm neu-pressed flex items-center justify-center text-neu-text transition-all min-h-[44px] min-w-[44px]"
-          aria-label="Back to Intake"
+          aria-label="Back to intake"
         >
           <IconArrowLeft class="w-5 h-5" />
         </a>
         <div>
-          <h1 class="text-lg font-bold tracking-tight text-neu-text leading-none">Activity</h1>
+          <h1 class="text-lg font-bold tracking-tight text-neu-text leading-none">Activity Log</h1>
           <span class="text-xs text-neu-text-muted" x-text="`${totalCount} transaction${totalCount === 1 ? '' : 's'}`"></span>
         </div>
       </div>
@@ -84,11 +84,12 @@ import Layout from "../layouts/Layout.astro";
       </div>
 
       <!-- Bucket Filter Pills -->
-      <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5" role="tablist" aria-label="Bucket Filters">
+      <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5" role="group" aria-label="Bucket Filters">
         <button
           type="button"
           class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all min-h-[44px]"
           :class="selectedBucket === '' ? 'neu-convex text-primary font-bold' : 'neu-flat text-neu-text-muted hover:text-neu-text'"
+          :aria-pressed="selectedBucket === ''"
           @click="setBucket('')"
         >
           All
@@ -97,6 +98,7 @@ import Layout from "../layouts/Layout.astro";
           type="button"
           class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all min-h-[44px]"
           :class="selectedBucket === 'Guilt-Free' ? 'neu-convex text-primary font-bold' : 'neu-flat text-neu-text-muted hover:text-neu-text'"
+          :aria-pressed="selectedBucket === 'Guilt-Free'"
           @click="setBucket('Guilt-Free')"
         >
           Guilt-Free
@@ -105,6 +107,7 @@ import Layout from "../layouts/Layout.astro";
           type="button"
           class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all min-h-[44px]"
           :class="selectedBucket === 'Fixed Costs' ? 'neu-convex text-primary font-bold' : 'neu-flat text-neu-text-muted hover:text-neu-text'"
+          :aria-pressed="selectedBucket === 'Fixed Costs'"
           @click="setBucket('Fixed Costs')"
         >
           Fixed Costs
@@ -113,6 +116,7 @@ import Layout from "../layouts/Layout.astro";
           type="button"
           class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all min-h-[44px]"
           :class="selectedBucket === 'Savings' ? 'neu-convex text-primary font-bold' : 'neu-flat text-neu-text-muted hover:text-neu-text'"
+          :aria-pressed="selectedBucket === 'Savings'"
           @click="setBucket('Savings')"
         >
           Savings
@@ -121,6 +125,7 @@ import Layout from "../layouts/Layout.astro";
           type="button"
           class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all min-h-[44px]"
           :class="selectedBucket === 'Income' ? 'neu-convex text-primary font-bold' : 'neu-flat text-neu-text-muted hover:text-neu-text'"
+          :aria-pressed="selectedBucket === 'Income'"
           @click="setBucket('Income')"
         >
           Income
@@ -185,6 +190,12 @@ import Layout from "../layouts/Layout.astro";
                     <span x-text="tx.subcategory"></span>
                     <span>&bull;</span>
                     <span x-text="tx.card"></span>
+                    <template x-if="formatTime(tx.created_at)">
+                      <span class="flex items-center gap-1.5">
+                        <span>&bull;</span>
+                        <span x-text="formatTime(tx.created_at)"></span>
+                      </span>
+                    </template>
                   </div>
                 </div>
                 <div class="text-right whitespace-nowrap">

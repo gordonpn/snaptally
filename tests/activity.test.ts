@@ -91,6 +91,7 @@ describe("activityView", () => {
       assert.strictEqual(view.hasToken, true);
       assert.strictEqual(authHeader, "Bearer test-secret-token");
       assert.match(fetchedUrl, /\/api\/transactions\?limit=20&offset=0/);
+      assert.match(fetchedUrl, /month=\d{4}-\d{2}/);
       assert.strictEqual(view.transactions.length, 1);
       assert.strictEqual(view.totalCount, 1);
       assert.strictEqual(view.hasMore, false);
@@ -356,5 +357,112 @@ describe("activityView", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("ignores responses from superseded out-of-order requests", async () => {
+    let slowResolve: (res: Response) => void = () => {};
+    let fastResolve: (res: Response) => void = () => {};
+
+    const slowPromise = new Promise<Response>((resolve) => {
+      slowResolve = resolve;
+    });
+    const fastPromise = new Promise<Response>((resolve) => {
+      fastResolve = resolve;
+    });
+
+    let callCount = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (() => {
+      callCount++;
+      if (callCount === 1) {
+        return slowPromise;
+      }
+      return fastPromise;
+    }) as unknown as typeof fetch;
+
+    try {
+      const view = activityView();
+
+      // Trigger first request (slow)
+      const req1 = view.fetchTransactions(true);
+
+      // Trigger second request (fast)
+      const req2 = view.fetchTransactions(true);
+
+      // Resolve fast second request first
+      fastResolve(
+        new Response(
+          JSON.stringify({
+            transactions: [createSampleTx({ id: "tx-fast", merchant: "Fast Merchant" })],
+            total_count: 1,
+            has_more: false,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+      await req2;
+
+      assert.strictEqual(view.transactions.length, 1);
+      assert.strictEqual(view.transactions[0].id, "tx-fast");
+
+      // Resolve slow first request later (should be ignored)
+      slowResolve(
+        new Response(
+          JSON.stringify({
+            transactions: [createSampleTx({ id: "tx-slow", merchant: "Slow Merchant" })],
+            total_count: 10,
+            has_more: true,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+      await req1;
+
+      // Stale request must not overwrite state
+      assert.strictEqual(view.transactions.length, 1);
+      assert.strictEqual(view.transactions[0].id, "tx-fast");
+      assert.strictEqual(view.totalCount, 1);
+      assert.strictEqual(view.hasMore, false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("deduplicates transactions when appending a page with overlapping IDs", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({
+          transactions: [
+            createSampleTx({ id: "tx-1", merchant: "Duplicate Row" }),
+            createSampleTx({ id: "tx-2", merchant: "New Row" }),
+          ],
+          total_count: 2,
+          has_more: false,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      const view = activityView();
+      view.transactions = [createSampleTx({ id: "tx-1", merchant: "Existing Row" })];
+      view.hasMore = true;
+
+      view.loadMore();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      assert.strictEqual(view.transactions.length, 2);
+      assert.strictEqual(view.transactions[0].id, "tx-1");
+      assert.strictEqual(view.transactions[1].id, "tx-2");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("formats transaction time using formatTime method", () => {
+    const view = activityView();
+    assert.match(view.formatTime("2026-10-29T14:30:00Z"), /\d{1,2}:\d{2}\s*(?:AM|PM)/i);
+    assert.strictEqual(view.formatTime(undefined), "");
   });
 });

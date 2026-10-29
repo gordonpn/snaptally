@@ -56,3 +56,19 @@ export function formatMonthName(monthStr?: string): string {
     year: "numeric",
   });
 }
+
+/** Formats ISO or SQLite timestamp into localized short time string, e.g. 2:30 PM. */
+export function formatTransactionTime(createdAt?: string): string {
+  if (!createdAt || typeof createdAt !== "string") {
+    return "";
+  }
+  const isoStr = createdAt.includes("T") ? createdAt : `${createdAt.replace(" ", "T")}Z`;
+  const parsed = new Date(isoStr);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+  return parsed.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
