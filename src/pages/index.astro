@@ -176,24 +176,49 @@ import Layout from "../layouts/Layout.astro";
             Other...
           </button>
         </div>
-        <div x-show="isCustomMerchant" x-transition>
+        <div x-show="isCustomMerchant" x-transition class="relative mt-1" @click.outside="closeMerchantSuggestions()">
           <input
+            id="custom-merchant-input"
             type="text"
-            list="merchants-list"
             autocomplete="off"
             autocorrect="off"
             autocapitalize="off"
             spellcheck="false"
             placeholder="Type merchant name..."
-            class="neu-inset w-full rounded-xl px-3 py-2 text-base text-neu-text focus:outline-none focus:ring-2 focus:ring-primary/40 mt-1"
+            class="neu-inset w-full rounded-xl px-3 py-2 text-base text-neu-text focus:outline-none focus:ring-2 focus:ring-primary/40"
             x-model="customMerchantInput"
             @input="updateCustomMerchant($event.target.value)"
+            @focus="onCustomMerchantFocus()"
+            @keydown="handleCustomMerchantKeydown($event)"
+            role="combobox"
+            aria-autocomplete="list"
+            :aria-expanded="merchantSuggestionsOpen && merchantSuggestions.length > 0"
+            aria-controls="merchant-suggestions-list"
+            :aria-activedescendant="highlightedMerchantIndex >= 0 ? `merchant-opt-${highlightedMerchantIndex}` : undefined"
           />
-          <datalist id="merchants-list">
-            <template x-for="m in allMerchants" :key="m">
-              <option :value="m" x-text="m"></option>
+          <ul
+            id="merchant-suggestions-list"
+            role="listbox"
+            aria-label="Merchant suggestions"
+            x-show="merchantSuggestionsOpen && merchantSuggestions.length > 0"
+            x-transition
+            class="absolute z-30 left-0 right-0 top-full mt-1 neu-raised-sm rounded-xl overflow-hidden shadow-lg border border-base-content/10 bg-[var(--neu-surface)] py-1 max-h-48 overflow-y-auto no-scrollbar"
+          >
+            <template x-for="(s, index) in merchantSuggestions" :key="s">
+              <li
+                :id="`merchant-opt-${index}`"
+                role="option"
+                :aria-selected="highlightedMerchantIndex === index"
+                class="w-full text-left px-3 py-2 text-sm text-neu-text transition-colors flex items-center justify-between cursor-pointer select-none"
+                :class="highlightedMerchantIndex === index ? 'neu-inset-sm font-semibold text-primary bg-primary/10' : 'hover:bg-base-content/5'"
+                @mouseenter="highlightedMerchantIndex = index; highlightedMerchant = s"
+                @mousedown.prevent
+                @click="chooseMerchantSuggestion(s)"
+              >
+                <span x-text="s"></span>
+              </li>
             </template>
-          </datalist>
+          </ul>
         </div>
       </div>
 

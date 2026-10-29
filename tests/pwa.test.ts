@@ -360,4 +360,61 @@ describe("Intake text input assistance", () => {
       }
     }
   });
+
+  it("declares combobox and listbox accessibility attributes on custom merchant input and dropdown", () => {
+    const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
+    const indexContent = fs.readFileSync(indexPath, "utf-8");
+
+    const inputMatch = indexContent.match(/<input[\s\S]*?id="custom-merchant-input"[\s\S]*?\/>/);
+    assert.ok(inputMatch, "custom merchant input must exist");
+    const customMerchantInput = inputMatch[0];
+
+    assert.match(
+      customMerchantInput,
+      /role="combobox"/,
+      "custom merchant input must declare combobox role",
+    );
+    assert.match(
+      customMerchantInput,
+      /aria-autocomplete="list"/,
+      "custom merchant input must declare aria-autocomplete list",
+    );
+    assert.match(
+      customMerchantInput,
+      /:aria-expanded="merchantSuggestionsOpen && merchantSuggestions\.length > 0"/,
+      "custom merchant input must bind aria-expanded",
+    );
+    assert.match(
+      customMerchantInput,
+      /aria-controls="merchant-suggestions-list"/,
+      "custom merchant input must link to suggestions list via aria-controls",
+    );
+    assert.match(
+      customMerchantInput,
+      /:aria-activedescendant="highlightedMerchantIndex >= 0 \? `merchant-opt-\$\{highlightedMerchantIndex\}` : undefined"/,
+      "custom merchant input must bind aria-activedescendant",
+    );
+    assert.match(
+      customMerchantInput,
+      /@keydown="handleCustomMerchantKeydown\(\$event\)"/,
+      "custom merchant input must handle keyboard navigation",
+    );
+
+    assert.match(
+      indexContent,
+      /id="merchant-suggestions-list"[^>]*role="listbox"/,
+      "merchant suggestions must declare listbox role",
+    );
+    assert.match(indexContent, /role="option"/, "suggestions items must declare option role");
+    assert.doesNotMatch(
+      indexContent,
+      /<li[^>]*role="option"[^>]*>\s*<button/s,
+      "option elements must not contain nested button elements",
+    );
+    assert.match(
+      indexContent,
+      /@click\.outside="closeMerchantSuggestions\(\)"/,
+      "custom merchant container must dismiss dropdown on outside clicks",
+    );
+  });
 });

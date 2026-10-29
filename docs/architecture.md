@@ -50,14 +50,15 @@ flowchart TD
 ## Client Layer
 
 ### Touch-Friendly UI
+
 - **Responsive Viewport**: Sized to `min-h-dvh overflow-y-auto overscroll-none` with `viewport-fit=cover` to eliminate unwanted rubber-banding while ensuring full vertical accessibility across short screens and landscape orientations without disabling pinch zoom.
 - **Built-in On-Screen Keypad**: A custom 3x4 numeric keypad with ATM-style cents shifting (`$0.00` formatted amount display) ensures the native mobile virtual keyboard is never triggered for amount entry.
 - **Pill Chips**: Cards, merchants, and categories render as touch-friendly tap targets styled for thumb reachability (minimum 44x44px touch targets).
 - **Dynamic Dependent Chips**: Categories and subcategories are declared in `src/config/intake.ts`. Selecting a parent category (for example, Guilt-Free, Fixed Costs, or Savings) updates visible subcategories in Alpine.js client state instantly with zero network requests.
 - **Dynamic Card Selection**: Card options are dynamically extracted from recent transactions, cached in `localStorage` (`snaptally_cards`), and support an "Other..." toggle for custom card entry without hardcoded defaults.
 - **Merchant Defaults**: Selecting a merchant suggests its category from the local normalizer and its card from the most common matching tuple in the recent transactions feed. If no rule matches, the recent tuple also supplies the category. Manual category and card selections are preserved for the current transaction. History is limited to the recent feed already loaded by the app. When credit mode prevents restoring an Income category, the form falls back to Guilt-Free and Dining.
-- **Free-Form Text Inputs**: Custom merchant, custom card, and API token fields request that browsers and mobile keyboards disable autocomplete, autocorrect, auto-capitalization, and spellcheck. The merchant field retains its local saved-merchant datalist.
-- **Merchant Quick Chips & Offline Autocomplete**: Displays top frequent merchants from `GET /api/merchants?limit=8` (defaulting to the frequent merchant list in `src/config/intake.ts` when unauthenticated) with an "Other..." toggle. Custom merchant entry connects to a native HTML5 `<datalist id="merchants-list">` seeded from locally cached merchants (`snaptally_merchants`) for offline autocomplete without external JavaScript libraries. Newly entered custom merchants are appended to the local cache immediately.
+- **Free-Form Text Inputs**: Custom merchant, custom card, and API token fields request that browsers and mobile keyboards disable autocomplete, autocorrect, auto-capitalization, and spellcheck. The merchant field provides an interactive autocomplete dropdown seeded from local saved merchants.
+- **Merchant Quick Chips & Offline Autocomplete**: Displays top frequent merchants from `GET /api/merchants?limit=8` (defaulting to the frequent merchant list in `src/config/intake.ts` when unauthenticated) with an "Other..." toggle. Custom merchant entry features an interactive, accessible floating autocomplete dropdown seeded from locally cached merchants (`snaptally_merchants`), ranking prefix matches and recent/frequent merchants first. Newly entered custom merchants are appended to the local cache immediately.
 - **Secondary Date Backfill**: Defaults to current local date (`YYYY-MM-DD`) with zero interaction needed at checkout. A secondary trigger reveals a native date picker for historical expenses, resetting back to today's date upon saving.
 - **Recent Transactions Feed**: A slide-over modal displays the 5 most recent transactions fetched from `GET /api/transactions?limit=5`. Newly synced transactions are prepended immediately upon successful sync.
 - **Token Configuration**: Settings modal manages pre-shared API bearer tokens in `localStorage` (`snaptally_api_token`), showing connection status directly in the header.
@@ -66,6 +67,7 @@ flowchart TD
 - **Service Worker & Offline Shell**: Static service worker (`public/sw.js`) precaches the core application shell (`/`, `/manifest.json`, `/favicon.svg`, and icon assets), serving them cache-first with network fallback while bypassing API endpoints (`/api/*`).
 
 ### Optimistic Outbox & Background Sync
+
 The application uses native IndexedDB (`snaptally_db`, object store `outbox`) with resilient local storage fallback:
 
 1. The user taps **Save**.
@@ -121,6 +123,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_merchant ON transactions(merchant);
 ```
 
 ### Net Spend Calculation
+
 Transactions track both `gross_amount` and `reimbursement`. `net_spend` is calculated automatically via SQLite stored generated column (`gross_amount - COALESCE(reimbursement, 0.0)`), allowing direct aggregation on net out-of-pocket costs without client-side calculation drift.
 
 ## Analysis & Budgeting Engine Layer (Planned Phase 4)
@@ -128,19 +131,23 @@ Transactions track both `gross_amount` and `reimbursement`. `net_spend` is calcu
 To support in-app budget tracking alongside rapid intake in Phase 4, SnapTally specifies an edge-native analytics engine:
 
 ### Monthly Conscious Spending Plan Breakdown (Planned Phase 4)
+
 - **Endpoint**: `GET /api/analysis/monthly?month=YYYY-MM`
 - **Functionality**: Aggregates net spend by parent bucket (`Fixed Costs`, `Investments`, `Savings`, `Guilt-Free`) for the requested calendar month.
 - **Pacing**: Calculates the remaining daily discretionary allowance for Guilt-Free spending by subtracting current month Guilt-Free net spend from the configured monthly ceiling, divided by the remaining days in the month.
 
 ### Sinking Funds & Reserve Ledger (Planned Phase 4)
+
 - **Endpoint**: `GET /api/analysis/sinking-funds`
 - **Functionality**: Planned capability to track cumulative allocations and historical drawdowns across dedicated sinking funds (e.g. Travel Fund, Emergency Fund).
 - **Accounting Distinction**: Prevents large planned vacation purchases from distorting monthly discretionary spending metrics by attributing them to the dedicated sinking fund reserve. Sinking fund reserves will be computed by pairing user-configured monthly allocations with drawdown transactions tagged under the `Savings` parent bucket.
 
 ### Edge SQL Aggregation Strategy
+
 All analytics queries will run directly against D1 using indexed aggregation queries (`SUM(net_spend) ... GROUP BY parent_bucket, subcategory`) once the expanded schema migration is applied, avoiding the overhead of transferring raw transaction logs to the client for processing. In the initial baseline schema, transactions are stored with `amount` and `category`.
 
 ### Modular Analytics and Intelligence Pipeline (Planned Phase 4)
+
 SnapTally plans a decoupled Phase 4 analytics architecture separating deterministic SQL compute from structured LLM synthesis:
 - **Deterministic Rewards Leakage**: Calculates credit card category routing efficiency and foregone points directly in TypeScript and D1 SQL with zero LLM dependency.
 - **Structured Semantic Audits**: Dispatches pre-aggregated JSON payloads (< 2,500 tokens) with dual-gate velocity hurdles to specialized LLM targets for subscription creep and strategic cash flow habits.
@@ -161,14 +168,14 @@ SnapTally provides an export endpoint (`GET /api/export`) returning JSON or CSV 
 
 Cloudflare free tier allotments provide substantial headroom for personal budget tracking:
 
-| Resource | Allotment | SnapTally Usage Profile |
-| :--- | :--- | :--- |
-| Pages Hosting & Bandwidth | Unlimited | Static assets served from global edge cache |
-| Pages Functions Requests | 100,000 requests / day | Far exceeds personal daily transaction volume |
-| D1 Database Size | 500 MB / database | Accommodates roughly 1.5 to 2 million records |
-| D1 Row Writes | 100,000 writes / day | Point-of-sale entries rarely exceed dozens per day |
-| D1 Row Reads | 5,000,000 reads / day | Recent feed and periodic exports stay well under cap |
-| Inactivity Policy | No idle pauses or deletions | Data remains intact without periodic pinging |
+| Resource                  | Allotment                   | SnapTally Usage Profile                              |
+| :------------------------ | :-------------------------- | :--------------------------------------------------- |
+| Pages Hosting & Bandwidth | Unlimited                   | Static assets served from global edge cache          |
+| Pages Functions Requests  | 100,000 requests / day      | Far exceeds personal daily transaction volume        |
+| D1 Database Size          | 500 MB / database           | Accommodates roughly 1.5 to 2 million records        |
+| D1 Row Writes             | 100,000 writes / day        | Point-of-sale entries rarely exceed dozens per day   |
+| D1 Row Reads              | 5,000,000 reads / day       | Recent feed and periodic exports stay well under cap |
+| Inactivity Policy         | No idle pauses or deletions | Data remains intact without periodic pinging         |
 
 ## Phased Implementation Roadmap
 

@@ -113,6 +113,9 @@ export function intakeForm() {
     merchant: DEFAULT_FREQUENT_MERCHANTS[0],
     isCustomMerchant: false,
     customMerchantInput: "",
+    merchantSuggestionsOpen: false,
+    highlightedMerchantIndex: -1,
+    highlightedMerchant: null as string | null,
 
     // Date state
     date: getTodayDate(),
@@ -190,6 +193,84 @@ export function intakeForm() {
 
     get subcategories(): string[] {
       return CATEGORIES_BY_BUCKET[this.parentBucket] ?? [];
+    },
+
+    get merchantSuggestions(): string[] {
+      const query = this.customMerchantInput.trim().toLowerCase();
+      if (!query) {
+        return [];
+      }
+      const seen = new Set<string>();
+      const distinct: string[] = [];
+
+      const candidatePool: string[] = [...this.allMerchants];
+      for (const tx of this.recentTransactions) {
+        if (tx && typeof tx.merchant === "string") {
+          const tm = tx.merchant.trim();
+          if (tm && !candidatePool.includes(tm)) {
+            candidatePool.push(tm);
+          }
+        }
+      }
+
+      for (const m of candidatePool) {
+        if (typeof m !== "string") continue;
+        const trimmed = m.trim();
+        if (!trimmed) continue;
+        const lower = trimmed.toLowerCase();
+        if (!seen.has(lower) && lower.includes(query)) {
+          seen.add(lower);
+          distinct.push(trimmed);
+        }
+      }
+
+      distinct.sort((a, b) => {
+        const aLower = a.toLowerCase();
+        const bLower = b.toLowerCase();
+        const aPrefix = aLower.startsWith(query);
+        const bPrefix = bLower.startsWith(query);
+        if (aPrefix !== bPrefix) {
+          return aPrefix ? -1 : 1;
+        }
+
+        const aRecentIdx = this.recentTransactions.findIndex(
+          (tx) =>
+            tx && typeof tx.merchant === "string" && tx.merchant.trim().toLowerCase() === aLower,
+        );
+        const bRecentIdx = this.recentTransactions.findIndex(
+          (tx) =>
+            tx && typeof tx.merchant === "string" && tx.merchant.trim().toLowerCase() === bLower,
+        );
+        if (aRecentIdx !== -1 && bRecentIdx !== -1 && aRecentIdx !== bRecentIdx) {
+          return aRecentIdx - bRecentIdx;
+        }
+        if (aRecentIdx !== -1 && bRecentIdx === -1) {
+          return -1;
+        }
+        if (aRecentIdx === -1 && bRecentIdx !== -1) {
+          return 1;
+        }
+
+        const aFreqIdx = this.frequentMerchants.findIndex(
+          (m) => typeof m === "string" && m.trim().toLowerCase() === aLower,
+        );
+        const bFreqIdx = this.frequentMerchants.findIndex(
+          (m) => typeof m === "string" && m.trim().toLowerCase() === bLower,
+        );
+        if (aFreqIdx !== -1 && bFreqIdx !== -1 && aFreqIdx !== bFreqIdx) {
+          return aFreqIdx - bFreqIdx;
+        }
+        if (aFreqIdx !== -1 && bFreqIdx === -1) {
+          return -1;
+        }
+        if (aFreqIdx === -1 && bFreqIdx !== -1) {
+          return 1;
+        }
+
+        return a.localeCompare(b);
+      });
+
+      return distinct.slice(0, 5);
     },
 
     get hasToken(): boolean {
@@ -310,6 +391,7 @@ export function intakeForm() {
     },
 
     selectMerchant(merchant: string): void {
+      this.closeMerchantSuggestions();
       this.clearInferredDefaults();
       this.merchantInferenceRequested = true;
       this.merchantUserSelected = true;
@@ -393,6 +475,7 @@ export function intakeForm() {
     },
 
     toggleCustomMerchant(): void {
+      this.closeMerchantSuggestions();
       this.clearInferredDefaults();
       this.merchantInferenceRequested = false;
       this.merchantUserSelected = false;
@@ -400,6 +483,7 @@ export function intakeForm() {
       if (this.isCustomMerchant) {
         const customMerchant = this.customMerchantInput.trim();
         if (customMerchant) this.updateCustomMerchant(customMerchant);
+        this.closeMerchantSuggestions();
       } else {
         this.merchant = this.frequentMerchants[0] || "";
         this.merchantInferenceRequested = true;
@@ -414,8 +498,14 @@ export function intakeForm() {
       this.merchantUserSelected = false;
       this.customMerchantInput = value;
       this.merchant = value;
+      this.highlightedMerchantIndex = -1;
+      this.highlightedMerchant = null;
       const name = value.trim().toLowerCase();
-      if (!name) return;
+      if (!name) {
+        this.closeMerchantSuggestions();
+        return;
+      }
+      this.merchantSuggestionsOpen = this.merchantSuggestions.length > 0;
       this.merchantInferenceRequested = true;
       const normalized = normalizeIntakeMerchant(value);
       if (
@@ -431,6 +521,102 @@ export function intakeForm() {
         )
       ) {
         this.applyMerchantDefaults(normalized);
+      }
+    },
+
+    chooseMerchantSuggestion(suggestion: string): void {
+      const trimmed = suggestion.trim();
+      if (!trimmed) {
+        return;
+      }
+      this.updateCustomMerchant(trimmed);
+      this.closeMerchantSuggestions();
+    },
+
+    onCustomMerchantFocus(): void {
+      if (this.customMerchantInput.trim().length > 0 && this.merchantSuggestions.length > 0) {
+        this.merchantSuggestionsOpen = true;
+      }
+    },
+
+    closeMerchantSuggestions(): void {
+      this.merchantSuggestionsOpen = false;
+      this.highlightedMerchantIndex = -1;
+      this.highlightedMerchant = null;
+    },
+
+    syncHighlightedMerchant(): void {
+      if (!this.highlightedMerchant) {
+        return;
+      }
+      const suggestions = this.merchantSuggestions;
+      const index = suggestions.indexOf(this.highlightedMerchant);
+      if (index !== -1) {
+        this.highlightedMerchantIndex = index;
+      } else {
+        this.highlightedMerchantIndex = -1;
+        this.highlightedMerchant = null;
+      }
+    },
+
+    handleCustomMerchantKeydown(event: KeyboardEvent): void {
+      if (event.isComposing) {
+        return;
+      }
+
+      if (event.key === "Escape") {
+        if (this.merchantSuggestionsOpen) {
+          event.preventDefault();
+        }
+        this.closeMerchantSuggestions();
+        return;
+      }
+
+      if (event.key === "Tab") {
+        this.closeMerchantSuggestions();
+        return;
+      }
+
+      const suggestions = this.merchantSuggestions;
+      if (!this.merchantSuggestionsOpen || suggestions.length === 0) {
+        if (event.key === "ArrowDown" && suggestions.length > 0) {
+          this.merchantSuggestionsOpen = true;
+          this.highlightedMerchantIndex = 0;
+          this.highlightedMerchant = suggestions[0] ?? null;
+          event.preventDefault();
+        } else if (event.key === "ArrowUp" && suggestions.length > 0) {
+          this.merchantSuggestionsOpen = true;
+          this.highlightedMerchantIndex = suggestions.length - 1;
+          this.highlightedMerchant = suggestions[suggestions.length - 1] ?? null;
+          event.preventDefault();
+        }
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        const nextIndex = (this.highlightedMerchantIndex + 1) % suggestions.length;
+        this.highlightedMerchantIndex = nextIndex;
+        this.highlightedMerchant = suggestions[nextIndex] ?? null;
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        const nextIndex =
+          this.highlightedMerchantIndex <= 0
+            ? suggestions.length - 1
+            : this.highlightedMerchantIndex - 1;
+        this.highlightedMerchantIndex = nextIndex;
+        this.highlightedMerchant = suggestions[nextIndex] ?? null;
+      } else if (event.key === "Enter") {
+        if (this.highlightedMerchant && suggestions.includes(this.highlightedMerchant)) {
+          event.preventDefault();
+          this.chooseMerchantSuggestion(this.highlightedMerchant);
+        } else if (
+          this.highlightedMerchantIndex >= 0 &&
+          this.highlightedMerchantIndex < suggestions.length
+        ) {
+          event.preventDefault();
+          this.chooseMerchantSuggestion(suggestions[this.highlightedMerchantIndex]);
+        }
       }
     },
 
@@ -550,6 +736,7 @@ export function intakeForm() {
           ) {
             this.merchant = this.frequentMerchants[0];
           }
+          this.syncHighlightedMerchant();
         }
       } catch {
         // Silently preserve default merchants on network or parse failures
@@ -582,6 +769,25 @@ export function intakeForm() {
             if (dateDiff !== 0) return dateDiff;
             return (b.created_at || "").localeCompare(a.created_at || "");
           });
+
+          // Dynamically extract distinct merchants from recent transactions
+          const extractedMerchants: string[] = [];
+          for (const tx of data.transactions) {
+            const merchantName = tx.merchant?.trim();
+            if (merchantName && !extractedMerchants.includes(merchantName)) {
+              extractedMerchants.push(merchantName);
+            }
+          }
+          if (extractedMerchants.length > 0) {
+            const merged = [...this.allMerchants];
+            for (const m of extractedMerchants) {
+              if (!merged.includes(m)) {
+                merged.push(m);
+              }
+            }
+            this.allMerchants = merged;
+            this.persistMerchants();
+          }
 
           // Dynamically extract distinct cards from recent transactions
           const extractedCards: string[] = [];
@@ -616,6 +822,7 @@ export function intakeForm() {
             this.clearInferredDefaults();
             this.applyMerchantDefaults();
           }
+          this.syncHighlightedMerchant();
         }
       } catch {
         // Silently preserve existing recent records on network or parse failures
@@ -867,6 +1074,7 @@ export function intakeForm() {
         this.cardManuallySelected = false;
         this.merchantInferenceRequested = false;
         this.resetDateToToday();
+        this.closeMerchantSuggestions();
 
         // Add merchant to local autocomplete cache
         if (!this.allMerchants.includes(trimmedMerchant)) {
