@@ -46,10 +46,11 @@ describe("parseOffset", () => {
     assert.strictEqual(parseOffset("100"), 100);
   });
 
-  it("returns 0 for negative, non-numeric, or floating-point values", () => {
+  it("returns 0 for negative, non-numeric, floating-point, or unsafe integers", () => {
     assert.strictEqual(parseOffset("-5"), 0);
     assert.strictEqual(parseOffset("invalid"), 0);
     assert.strictEqual(parseOffset("15.5"), 0);
     assert.strictEqual(parseOffset("20abc"), 0);
+    assert.strictEqual(parseOffset("99999999999999999999"), 0);
   });
 });

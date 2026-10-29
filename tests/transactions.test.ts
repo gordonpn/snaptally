@@ -1381,6 +1381,54 @@ describe("GET /api/transactions handleGet", () => {
     assert.strictEqual(data.next_offset, 10);
   });
 
+  it("falls back to current month when invalid month format or month > 12 is provided", async () => {
+    let boundMonth: unknown = null;
+    const mockDb = {
+      prepare(query: string) {
+        if (query === countTransactionsQuery) {
+          return {
+            bind() {
+              return {
+                async first() {
+                  return { total: 0 };
+                },
+              };
+            },
+          };
+        }
+        if (query === selectMonthSummaryQuery) {
+          return {
+            bind(month: unknown) {
+              boundMonth = month;
+              return {
+                async first() {
+                  return { month_net_spend: 0, month_count: 0 };
+                },
+              };
+            },
+          };
+        }
+        return {
+          bind() {
+            return {
+              async all() {
+                return { results: [] };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions?month=2026-13", {
+      headers: { Authorization: `Bearer ${validToken}` },
+    });
+    const response = await handleGetTransactions(request, mockDb, validToken);
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(boundMonth, new Date().toISOString().slice(0, 7));
+  });
+
   it("clamps excessive limit to maxLimit 100", async () => {
     let boundSelectArgs: unknown[] = [];
     const mockDb = {
@@ -1725,6 +1773,17 @@ describe("Paginated Transactions SQLite Query Integration", () => {
       0,
       "USD",
     );
+    insertStmt.run(
+      "tx-5",
+      "2026-10-10",
+      "RBC Visa",
+      "Fixed Costs",
+      "Groceries",
+      "Metro",
+      30.0,
+      0,
+      "CAD",
+    );
 
     // 1. Unfiltered paginated query (page 1: limit 2, offset 0)
     const paginatedStmt = db.prepare(selectPaginatedTransactionsQuery);
@@ -1733,18 +1792,18 @@ describe("Paginated Transactions SQLite Query Integration", () => {
 
     const page1 = paginatedStmt.all(null, null, 2, 0) as Array<{ id: string; merchant: string }>;
     assert.strictEqual(page1.length, 2);
-    assert.strictEqual(page1[0].id, "tx-3");
-    assert.strictEqual(page1[1].id, "tx-2");
+    assert.strictEqual(page1[0].id, "tx-5");
+    assert.strictEqual(page1[1].id, "tx-3");
 
     // Page 2: limit 2, offset 2
     const page2 = paginatedStmt.all(null, null, 2, 2) as Array<{ id: string; merchant: string }>;
     assert.strictEqual(page2.length, 2);
-    assert.strictEqual(page2[0].id, "tx-1");
-    assert.strictEqual(page2[1].id, "tx-4");
+    assert.strictEqual(page2[0].id, "tx-2");
+    assert.strictEqual(page2[1].id, "tx-1");
 
     // Total count unfiltered
     const totalRow = countStmt.get(null, null) as { total: number };
-    assert.strictEqual(totalRow.total, 4);
+    assert.strictEqual(totalRow.total, 5);
 
     // 2. Search filter by merchant
     const searchSweetgreen = paginatedStmt.all("Sweetgreen", null, 10, 0) as Array<{ id: string }>;

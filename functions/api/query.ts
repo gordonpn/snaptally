@@ -31,5 +31,5 @@ export function parseOffset(param: string | null): number {
     return 0;
   }
   const parsed = Number.parseInt(trimmed, 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
 }

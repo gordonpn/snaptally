@@ -335,7 +335,7 @@ export async function handleGet(
 
   const rawMonth = url.searchParams.get("month");
   const targetMonth =
-    rawMonth && /^\d{4}-\d{2}$/.test(rawMonth.trim())
+    rawMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(rawMonth.trim())
       ? rawMonth.trim()
       : new Date().toISOString().slice(0, 7);
 
