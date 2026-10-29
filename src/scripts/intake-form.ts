@@ -483,6 +483,7 @@ export function intakeForm() {
       if (this.isCustomMerchant) {
         const customMerchant = this.customMerchantInput.trim();
         if (customMerchant) this.updateCustomMerchant(customMerchant);
+        this.closeMerchantSuggestions();
       } else {
         this.merchant = this.frequentMerchants[0] || "";
         this.merchantInferenceRequested = true;
@@ -567,6 +568,11 @@ export function intakeForm() {
         if (this.merchantSuggestionsOpen) {
           event.preventDefault();
         }
+        this.closeMerchantSuggestions();
+        return;
+      }
+
+      if (event.key === "Tab") {
         this.closeMerchantSuggestions();
         return;
       }

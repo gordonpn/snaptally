@@ -2107,7 +2107,11 @@ describe("intakeForm Merchant Autocomplete Dropdown (#114)", () => {
     assert.strictEqual(form.merchantSuggestionsOpen, false);
     assert.strictEqual(form.highlightedMerchantIndex, -1);
 
+    // Re-toggling into Other with saved text keeps suggestions closed until input focus
     form.toggleCustomMerchant();
+    assert.strictEqual(form.isCustomMerchant, true);
+    assert.strictEqual(form.merchantSuggestionsOpen, false);
+
     form.updateCustomMerchant("tat");
     assert.strictEqual(form.merchantSuggestionsOpen, true);
 
@@ -2231,6 +2235,7 @@ describe("intakeForm Merchant Autocomplete Dropdown (#114)", () => {
     const tabEvent = createFakeKeydownEvent("Tab");
     form.handleCustomMerchantKeydown(tabEvent.event);
     assert.strictEqual(tabEvent.prevented, false);
+    assert.strictEqual(form.merchantSuggestionsOpen, false);
   });
 
   it("closes suggestions upon transaction submission", async () => {
