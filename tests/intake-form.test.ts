@@ -1879,10 +1879,14 @@ describe("intakeForm Credit and Reimbursement Workflows (Issue #89)", () => {
 });
 
 describe("intakeForm Merchant Autocomplete Dropdown (#114)", () => {
-  function createFakeKeydownEvent(key: string): { event: KeyboardEvent; prevented: boolean } {
+  function createFakeKeydownEvent(
+    key: string,
+    isComposing = false,
+  ): { event: KeyboardEvent; prevented: boolean } {
     let prevented = false;
     const event = {
       key,
+      isComposing,
       preventDefault: () => {
         prevented = true;
       },
@@ -2253,5 +2257,153 @@ describe("intakeForm Merchant Autocomplete Dropdown (#114)", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("ignores keyboard navigation during IME composition", () => {
+    const form = intakeForm();
+    form.allMerchants = ["Tokyo Central", "Tokyo Mart"];
+    form.customMerchantInput = "tok";
+    form.merchantSuggestionsOpen = true;
+    form.highlightedMerchantIndex = 0;
+
+    const downEvent = createFakeKeydownEvent("ArrowDown", true);
+    form.handleCustomMerchantKeydown(downEvent.event);
+    assert.strictEqual(downEvent.prevented, false);
+    assert.strictEqual(form.highlightedMerchantIndex, 0);
+
+    const enterEvent = createFakeKeydownEvent("Enter", true);
+    form.handleCustomMerchantKeydown(enterEvent.event);
+    assert.strictEqual(enterEvent.prevented, false);
+    assert.strictEqual(form.customMerchantInput, "tok");
+  });
+
+  it("closes suggestions on Escape even when suggestions list has no current matches", () => {
+    const form = intakeForm();
+    form.allMerchants = [];
+    form.customMerchantInput = "xyz";
+    form.merchantSuggestionsOpen = true;
+
+    const escEvent = createFakeKeydownEvent("Escape");
+    form.handleCustomMerchantKeydown(escEvent.event);
+    assert.strictEqual(escEvent.prevented, true);
+    assert.strictEqual(form.merchantSuggestionsOpen, false);
+    assert.strictEqual(form.highlightedMerchantIndex, -1);
+    assert.strictEqual(form.highlightedMerchant, null);
+  });
+
+  it("includes merchants from recent transactions in suggestions even when absent from allMerchants", () => {
+    const form = intakeForm();
+    form.allMerchants = ["Star Market"];
+    form.recentTransactions = [
+      {
+        id: "tx-1",
+        date: "2026-10-28",
+        merchant: "Roche Bros",
+        card: "Amex Gold",
+        amount_cents: 2500,
+        parent_bucket: "Fixed Costs",
+        subcategory: "Groceries",
+        currency: "USD",
+        notes: null,
+        created_at: "2026-10-28T12:00:00Z",
+      },
+    ];
+    form.customMerchantInput = "roc";
+    assert.deepStrictEqual(form.merchantSuggestions, ["Roche Bros"]);
+  });
+
+  it("extracts distinct merchants from recent transactions into allMerchants", async () => {
+    const form = intakeForm();
+    form.token = "valid-token";
+    form.allMerchants = ["Existing Merchant"];
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({
+          transactions: [
+            {
+              id: "tx-2",
+              date: "2026-10-28",
+              merchant: "Brand New Merchant",
+              card: "Amex Gold",
+              amount_cents: 1200,
+              parent_bucket: "Guilt-Free",
+              subcategory: "Dining",
+              currency: "USD",
+              notes: null,
+              created_at: "2026-10-28T14:00:00Z",
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      await form.loadRecentTransactions();
+      assert.ok(form.allMerchants.includes("Brand New Merchant"));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("preserves highlighted merchant by identity across suggestion reorders", () => {
+    const form = intakeForm();
+    form.allMerchants = ["Tate Coffee", "Tatte Bakery"];
+    form.frequentMerchants = [];
+    form.customMerchantInput = "tat";
+    form.merchantSuggestionsOpen = true;
+
+    // Highlight "Tate Coffee" at index 0
+    form.highlightedMerchantIndex = 0;
+    form.highlightedMerchant = "Tate Coffee";
+
+    // Simulate recent transaction arriving that places "Tatte Bakery" ahead of "Tate Coffee"
+    form.recentTransactions = [
+      {
+        id: "tx-tatte",
+        date: "2026-10-28",
+        merchant: "Tatte Bakery",
+        card: "Amex Gold",
+        amount_cents: 1500,
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
+        currency: "USD",
+        notes: null,
+        created_at: "2026-10-28T10:00:00Z",
+      },
+    ];
+
+    form.syncHighlightedMerchant();
+
+    // "Tatte Bakery" is now index 0, "Tate Coffee" moved to index 1
+    assert.deepStrictEqual(form.merchantSuggestions, ["Tatte Bakery", "Tate Coffee"]);
+    assert.strictEqual(form.highlightedMerchantIndex, 1);
+    assert.strictEqual(form.highlightedMerchant, "Tate Coffee");
+
+    // Enter selects the intended "Tate Coffee"
+    const enterEvent = createFakeKeydownEvent("Enter");
+    form.handleCustomMerchantKeydown(enterEvent.event);
+    assert.strictEqual(enterEvent.prevented, true);
+    assert.strictEqual(form.customMerchantInput, "Tate Coffee");
+  });
+
+  it("resets highlighted merchant when it drops out of suggestions", () => {
+    const form = intakeForm();
+    form.allMerchants = ["Tate Coffee", "Tatte Bakery"];
+    form.customMerchantInput = "tat";
+    form.highlightedMerchantIndex = 0;
+    form.highlightedMerchant = "Tate Coffee";
+
+    // Remove "Tate Coffee" from merchants
+    form.allMerchants = ["Tatte Bakery"];
+    form.syncHighlightedMerchant();
+
+    assert.strictEqual(form.highlightedMerchantIndex, -1);
+    assert.strictEqual(form.highlightedMerchant, null);
   });
 });

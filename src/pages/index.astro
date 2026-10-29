@@ -178,6 +178,7 @@ import Layout from "../layouts/Layout.astro";
         </div>
         <div x-show="isCustomMerchant" x-transition class="relative mt-1" @click.outside="closeMerchantSuggestions()">
           <input
+            id="custom-merchant-input"
             type="text"
             autocomplete="off"
             autocorrect="off"
@@ -208,16 +209,13 @@ import Layout from "../layouts/Layout.astro";
                 :id="`merchant-opt-${index}`"
                 role="option"
                 :aria-selected="highlightedMerchantIndex === index"
+                class="w-full text-left px-3 py-2 text-sm text-neu-text transition-colors flex items-center justify-between cursor-pointer select-none"
+                :class="highlightedMerchantIndex === index ? 'neu-inset-sm font-semibold text-primary bg-primary/10' : 'hover:bg-base-content/5'"
+                @mouseenter="highlightedMerchantIndex = index; highlightedMerchant = s"
+                @mousedown.prevent
+                @click="chooseMerchantSuggestion(s)"
               >
-                <button
-                  type="button"
-                  class="w-full text-left px-3 py-2 text-sm text-neu-text transition-colors flex items-center justify-between"
-                  :class="highlightedMerchantIndex === index ? 'neu-inset-sm font-semibold text-primary bg-primary/10' : 'hover:bg-base-content/5'"
-                  @mouseenter="highlightedMerchantIndex = index"
-                  @click="chooseMerchantSuggestion(s)"
-                >
-                  <span x-text="s"></span>
-                </button>
+                <span x-text="s"></span>
               </li>
             </template>
           </ul>

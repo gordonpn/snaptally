@@ -115,6 +115,7 @@ export function intakeForm() {
     customMerchantInput: "",
     merchantSuggestionsOpen: false,
     highlightedMerchantIndex: -1,
+    highlightedMerchant: null as string | null,
 
     // Date state
     date: getTodayDate(),
@@ -201,7 +202,18 @@ export function intakeForm() {
       }
       const seen = new Set<string>();
       const distinct: string[] = [];
-      for (const m of this.allMerchants) {
+
+      const candidatePool: string[] = [...this.allMerchants];
+      for (const tx of this.recentTransactions) {
+        if (tx && typeof tx.merchant === "string") {
+          const tm = tx.merchant.trim();
+          if (tm && !candidatePool.includes(tm)) {
+            candidatePool.push(tm);
+          }
+        }
+      }
+
+      for (const m of candidatePool) {
         if (typeof m !== "string") continue;
         const trimmed = m.trim();
         if (!trimmed) continue;
@@ -485,13 +497,14 @@ export function intakeForm() {
       this.merchantUserSelected = false;
       this.customMerchantInput = value;
       this.merchant = value;
+      this.highlightedMerchantIndex = -1;
+      this.highlightedMerchant = null;
       const name = value.trim().toLowerCase();
       if (!name) {
         this.closeMerchantSuggestions();
         return;
       }
-      this.merchantSuggestionsOpen = true;
-      this.highlightedMerchantIndex = -1;
+      this.merchantSuggestionsOpen = this.merchantSuggestions.length > 0;
       this.merchantInferenceRequested = true;
       const normalized = normalizeIntakeMerchant(value);
       if (
@@ -528,18 +541,47 @@ export function intakeForm() {
     closeMerchantSuggestions(): void {
       this.merchantSuggestionsOpen = false;
       this.highlightedMerchantIndex = -1;
+      this.highlightedMerchant = null;
+    },
+
+    syncHighlightedMerchant(): void {
+      if (!this.highlightedMerchant) {
+        return;
+      }
+      const suggestions = this.merchantSuggestions;
+      const index = suggestions.indexOf(this.highlightedMerchant);
+      if (index !== -1) {
+        this.highlightedMerchantIndex = index;
+      } else {
+        this.highlightedMerchantIndex = -1;
+        this.highlightedMerchant = null;
+      }
     },
 
     handleCustomMerchantKeydown(event: KeyboardEvent): void {
+      if (event.isComposing) {
+        return;
+      }
+
+      if (event.key === "Escape") {
+        if (this.merchantSuggestionsOpen) {
+          event.preventDefault();
+        }
+        this.closeMerchantSuggestions();
+        return;
+      }
+
       const suggestions = this.merchantSuggestions;
       if (!this.merchantSuggestionsOpen || suggestions.length === 0) {
         if (event.key === "ArrowDown" && suggestions.length > 0) {
           this.merchantSuggestionsOpen = true;
           this.highlightedMerchantIndex = 0;
+          this.highlightedMerchant = suggestions[0] ?? null;
           event.preventDefault();
         } else if (event.key === "ArrowUp" && suggestions.length > 0) {
           this.merchantSuggestionsOpen = true;
           this.highlightedMerchantIndex = suggestions.length - 1;
+          this.highlightedMerchant = suggestions[suggestions.length - 1] ?? null;
           event.preventDefault();
         }
         return;
@@ -547,24 +589,28 @@ export function intakeForm() {
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        this.highlightedMerchantIndex = (this.highlightedMerchantIndex + 1) % suggestions.length;
+        const nextIndex = (this.highlightedMerchantIndex + 1) % suggestions.length;
+        this.highlightedMerchantIndex = nextIndex;
+        this.highlightedMerchant = suggestions[nextIndex] ?? null;
       } else if (event.key === "ArrowUp") {
         event.preventDefault();
-        this.highlightedMerchantIndex =
+        const nextIndex =
           this.highlightedMerchantIndex <= 0
             ? suggestions.length - 1
             : this.highlightedMerchantIndex - 1;
+        this.highlightedMerchantIndex = nextIndex;
+        this.highlightedMerchant = suggestions[nextIndex] ?? null;
       } else if (event.key === "Enter") {
-        if (
+        if (this.highlightedMerchant && suggestions.includes(this.highlightedMerchant)) {
+          event.preventDefault();
+          this.chooseMerchantSuggestion(this.highlightedMerchant);
+        } else if (
           this.highlightedMerchantIndex >= 0 &&
           this.highlightedMerchantIndex < suggestions.length
         ) {
           event.preventDefault();
           this.chooseMerchantSuggestion(suggestions[this.highlightedMerchantIndex]);
         }
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        this.closeMerchantSuggestions();
       }
     },
 
@@ -684,6 +730,7 @@ export function intakeForm() {
           ) {
             this.merchant = this.frequentMerchants[0];
           }
+          this.syncHighlightedMerchant();
         }
       } catch {
         // Silently preserve default merchants on network or parse failures
@@ -716,6 +763,25 @@ export function intakeForm() {
             if (dateDiff !== 0) return dateDiff;
             return (b.created_at || "").localeCompare(a.created_at || "");
           });
+
+          // Dynamically extract distinct merchants from recent transactions
+          const extractedMerchants: string[] = [];
+          for (const tx of data.transactions) {
+            const merchantName = tx.merchant?.trim();
+            if (merchantName && !extractedMerchants.includes(merchantName)) {
+              extractedMerchants.push(merchantName);
+            }
+          }
+          if (extractedMerchants.length > 0) {
+            const merged = [...this.allMerchants];
+            for (const m of extractedMerchants) {
+              if (!merged.includes(m)) {
+                merged.push(m);
+              }
+            }
+            this.allMerchants = merged;
+            this.persistMerchants();
+          }
 
           // Dynamically extract distinct cards from recent transactions
           const extractedCards: string[] = [];
@@ -750,6 +816,7 @@ export function intakeForm() {
             this.clearInferredDefaults();
             this.applyMerchantDefaults();
           }
+          this.syncHighlightedMerchant();
         }
       } catch {
         // Silently preserve existing recent records on network or parse failures

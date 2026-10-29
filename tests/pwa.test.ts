@@ -365,25 +365,51 @@ describe("Intake text input assistance", () => {
     const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
     const indexContent = fs.readFileSync(indexPath, "utf-8");
 
+    const inputMatch = indexContent.match(/<input[\s\S]*?id="custom-merchant-input"[\s\S]*?\/>/);
+    assert.ok(inputMatch, "custom merchant input must exist");
+    const customMerchantInput = inputMatch[0];
+
     assert.match(
-      indexContent,
-      /role="combobox"[^>]*aria-autocomplete="list"/,
-      "custom merchant input must declare combobox role and aria-autocomplete",
+      customMerchantInput,
+      /role="combobox"/,
+      "custom merchant input must declare combobox role",
     );
     assert.match(
-      indexContent,
+      customMerchantInput,
+      /aria-autocomplete="list"/,
+      "custom merchant input must declare aria-autocomplete list",
+    );
+    assert.match(
+      customMerchantInput,
       /:aria-expanded="merchantSuggestionsOpen && merchantSuggestions\.length > 0"/,
       "custom merchant input must bind aria-expanded",
     );
+    assert.match(
+      customMerchantInput,
+      /aria-controls="merchant-suggestions-list"/,
+      "custom merchant input must link to suggestions list via aria-controls",
+    );
+    assert.match(
+      customMerchantInput,
+      /:aria-activedescendant="highlightedMerchantIndex >= 0 \? `merchant-opt-\$\{highlightedMerchantIndex\}` : undefined"/,
+      "custom merchant input must bind aria-activedescendant",
+    );
+    assert.match(
+      customMerchantInput,
+      /@keydown="handleCustomMerchantKeydown\(\$event\)"/,
+      "custom merchant input must handle keyboard navigation",
+    );
+
     assert.match(
       indexContent,
       /id="merchant-suggestions-list"[^>]*role="listbox"/,
       "merchant suggestions must declare listbox role",
     );
-    assert.match(
+    assert.match(indexContent, /role="option"/, "suggestions items must declare option role");
+    assert.doesNotMatch(
       indexContent,
-      /@keydown="handleCustomMerchantKeydown\(\$event\)"/,
-      "custom merchant input must handle keyboard navigation",
+      /<li[^>]*role="option"[^>]*>\s*<button/s,
+      "option elements must not contain nested button elements",
     );
     assert.match(
       indexContent,
