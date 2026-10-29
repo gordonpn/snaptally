@@ -16,3 +16,5 @@ data/
 !tests/fixtures/backfill/*.csv
 .backups/
 .agent/HANDOFF.md
+.playwright-mcp/
+Comprehensive Personal Budget Spreadsheet Architecture.md
