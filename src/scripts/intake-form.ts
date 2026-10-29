@@ -113,6 +113,8 @@ export function intakeForm() {
     merchant: DEFAULT_FREQUENT_MERCHANTS[0],
     isCustomMerchant: false,
     customMerchantInput: "",
+    merchantSuggestionsOpen: false,
+    highlightedMerchantIndex: -1,
 
     // Date state
     date: getTodayDate(),
@@ -190,6 +192,73 @@ export function intakeForm() {
 
     get subcategories(): string[] {
       return CATEGORIES_BY_BUCKET[this.parentBucket] ?? [];
+    },
+
+    get merchantSuggestions(): string[] {
+      const query = this.customMerchantInput.trim().toLowerCase();
+      if (!query) {
+        return [];
+      }
+      const seen = new Set<string>();
+      const distinct: string[] = [];
+      for (const m of this.allMerchants) {
+        if (typeof m !== "string") continue;
+        const trimmed = m.trim();
+        if (!trimmed) continue;
+        const lower = trimmed.toLowerCase();
+        if (!seen.has(lower) && lower.includes(query)) {
+          seen.add(lower);
+          distinct.push(trimmed);
+        }
+      }
+
+      distinct.sort((a, b) => {
+        const aLower = a.toLowerCase();
+        const bLower = b.toLowerCase();
+        const aPrefix = aLower.startsWith(query);
+        const bPrefix = bLower.startsWith(query);
+        if (aPrefix !== bPrefix) {
+          return aPrefix ? -1 : 1;
+        }
+
+        const aRecentIdx = this.recentTransactions.findIndex(
+          (tx) =>
+            tx && typeof tx.merchant === "string" && tx.merchant.trim().toLowerCase() === aLower,
+        );
+        const bRecentIdx = this.recentTransactions.findIndex(
+          (tx) =>
+            tx && typeof tx.merchant === "string" && tx.merchant.trim().toLowerCase() === bLower,
+        );
+        if (aRecentIdx !== -1 && bRecentIdx !== -1 && aRecentIdx !== bRecentIdx) {
+          return aRecentIdx - bRecentIdx;
+        }
+        if (aRecentIdx !== -1 && bRecentIdx === -1) {
+          return -1;
+        }
+        if (aRecentIdx === -1 && bRecentIdx !== -1) {
+          return 1;
+        }
+
+        const aFreqIdx = this.frequentMerchants.findIndex(
+          (m) => typeof m === "string" && m.trim().toLowerCase() === aLower,
+        );
+        const bFreqIdx = this.frequentMerchants.findIndex(
+          (m) => typeof m === "string" && m.trim().toLowerCase() === bLower,
+        );
+        if (aFreqIdx !== -1 && bFreqIdx !== -1 && aFreqIdx !== bFreqIdx) {
+          return aFreqIdx - bFreqIdx;
+        }
+        if (aFreqIdx !== -1 && bFreqIdx === -1) {
+          return -1;
+        }
+        if (aFreqIdx === -1 && bFreqIdx !== -1) {
+          return 1;
+        }
+
+        return a.localeCompare(b);
+      });
+
+      return distinct.slice(0, 5);
     },
 
     get hasToken(): boolean {
@@ -310,6 +379,7 @@ export function intakeForm() {
     },
 
     selectMerchant(merchant: string): void {
+      this.closeMerchantSuggestions();
       this.clearInferredDefaults();
       this.merchantInferenceRequested = true;
       this.merchantUserSelected = true;
@@ -393,6 +463,7 @@ export function intakeForm() {
     },
 
     toggleCustomMerchant(): void {
+      this.closeMerchantSuggestions();
       this.clearInferredDefaults();
       this.merchantInferenceRequested = false;
       this.merchantUserSelected = false;
@@ -415,7 +486,12 @@ export function intakeForm() {
       this.customMerchantInput = value;
       this.merchant = value;
       const name = value.trim().toLowerCase();
-      if (!name) return;
+      if (!name) {
+        this.closeMerchantSuggestions();
+        return;
+      }
+      this.merchantSuggestionsOpen = true;
+      this.highlightedMerchantIndex = -1;
       this.merchantInferenceRequested = true;
       const normalized = normalizeIntakeMerchant(value);
       if (
@@ -431,6 +507,64 @@ export function intakeForm() {
         )
       ) {
         this.applyMerchantDefaults(normalized);
+      }
+    },
+
+    chooseMerchantSuggestion(suggestion: string): void {
+      const trimmed = suggestion.trim();
+      if (!trimmed) {
+        return;
+      }
+      this.updateCustomMerchant(trimmed);
+      this.closeMerchantSuggestions();
+    },
+
+    onCustomMerchantFocus(): void {
+      if (this.customMerchantInput.trim().length > 0 && this.merchantSuggestions.length > 0) {
+        this.merchantSuggestionsOpen = true;
+      }
+    },
+
+    closeMerchantSuggestions(): void {
+      this.merchantSuggestionsOpen = false;
+      this.highlightedMerchantIndex = -1;
+    },
+
+    handleCustomMerchantKeydown(event: KeyboardEvent): void {
+      const suggestions = this.merchantSuggestions;
+      if (!this.merchantSuggestionsOpen || suggestions.length === 0) {
+        if (event.key === "ArrowDown" && suggestions.length > 0) {
+          this.merchantSuggestionsOpen = true;
+          this.highlightedMerchantIndex = 0;
+          event.preventDefault();
+        } else if (event.key === "ArrowUp" && suggestions.length > 0) {
+          this.merchantSuggestionsOpen = true;
+          this.highlightedMerchantIndex = suggestions.length - 1;
+          event.preventDefault();
+        }
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        this.highlightedMerchantIndex = (this.highlightedMerchantIndex + 1) % suggestions.length;
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        this.highlightedMerchantIndex =
+          this.highlightedMerchantIndex <= 0
+            ? suggestions.length - 1
+            : this.highlightedMerchantIndex - 1;
+      } else if (event.key === "Enter") {
+        if (
+          this.highlightedMerchantIndex >= 0 &&
+          this.highlightedMerchantIndex < suggestions.length
+        ) {
+          event.preventDefault();
+          this.chooseMerchantSuggestion(suggestions[this.highlightedMerchantIndex]);
+        }
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        this.closeMerchantSuggestions();
       }
     },
 
@@ -867,6 +1001,7 @@ export function intakeForm() {
         this.cardManuallySelected = false;
         this.merchantInferenceRequested = false;
         this.resetDateToToday();
+        this.closeMerchantSuggestions();
 
         // Add merchant to local autocomplete cache
         if (!this.allMerchants.includes(trimmedMerchant)) {

@@ -360,4 +360,35 @@ describe("Intake text input assistance", () => {
       }
     }
   });
+
+  it("declares combobox and listbox accessibility attributes on custom merchant input and dropdown", () => {
+    const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
+    const indexContent = fs.readFileSync(indexPath, "utf-8");
+
+    assert.match(
+      indexContent,
+      /role="combobox"[^>]*aria-autocomplete="list"/,
+      "custom merchant input must declare combobox role and aria-autocomplete",
+    );
+    assert.match(
+      indexContent,
+      /:aria-expanded="merchantSuggestionsOpen && merchantSuggestions\.length > 0"/,
+      "custom merchant input must bind aria-expanded",
+    );
+    assert.match(
+      indexContent,
+      /id="merchant-suggestions-list"[^>]*role="listbox"/,
+      "merchant suggestions must declare listbox role",
+    );
+    assert.match(
+      indexContent,
+      /@keydown="handleCustomMerchantKeydown\(\$event\)"/,
+      "custom merchant input must handle keyboard navigation",
+    );
+    assert.match(
+      indexContent,
+      /@click\.outside="closeMerchantSuggestions\(\)"/,
+      "custom merchant container must dismiss dropdown on outside clicks",
+    );
+  });
 });
