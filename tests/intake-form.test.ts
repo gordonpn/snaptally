@@ -1113,7 +1113,7 @@ describe("intakeForm Recent Transactions Feed (Scenario 4)", () => {
     }
   });
 
-  it("toggles recent transactions drawer and loads data if token configured", async () => {
+  it("loads recent transactions when token configured", async () => {
     mockStorage.setItem(TOKEN_STORAGE_KEY, "valid-token");
     const form = intakeForm();
     form.init();
@@ -1129,9 +1129,7 @@ describe("intakeForm Recent Transactions Feed (Scenario 4)", () => {
     }) as unknown as typeof fetch;
 
     try {
-      assert.strictEqual(form.isRecentOpen, false);
-      form.toggleRecent();
-      assert.strictEqual(form.isRecentOpen, true);
+      await form.loadRecentTransactions();
       assert.strictEqual(fetchCalled, true);
     } finally {
       globalThis.fetch = originalFetch;

@@ -1,4 +1,5 @@
 import { BUCKET_SUBCATEGORIES, DEFAULT_FREQUENT_MERCHANTS } from "../config/intake.ts";
+import { getTodayDate } from "../utils/date.ts";
 import {
   DEFAULT_CANONICAL_RULES,
   type NormalizedTransaction,
@@ -67,16 +68,7 @@ function isExactIntakeRule(normalized: NormalizedTransaction): boolean {
   );
 }
 
-/**
- * Returns today's date in local YYYY-MM-DD calendar format.
- */
-export function getTodayDate(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
+export { getTodayDate };
 
 /** Creates state and actions for local transaction entry and queue recovery. */
 export function intakeForm() {
@@ -127,7 +119,6 @@ export function intakeForm() {
 
     // Recent transactions
     recentTransactions: [] as RecentTransaction[],
-    isRecentOpen: false,
 
     // Outbox & background sync state
     outboxCount: 0,
@@ -674,14 +665,6 @@ export function intakeForm() {
       } else {
         this.frequentMerchants = [...DEFAULT_FREQUENT_MERCHANTS];
         this.recentTransactions = [];
-      }
-    },
-
-    // Recent view toggle
-    toggleRecent(): void {
-      this.isRecentOpen = !this.isRecentOpen;
-      if (this.isRecentOpen && this.hasToken) {
-        this.loadRecentTransactions();
       }
     },
 

@@ -68,14 +68,13 @@ import Layout from "../layouts/Layout.astro";
           <span aria-hidden="true">!</span>
           <span x-text="deadLetterCount"></span>
         </button>
-        <button
-          type="button"
+        <a
+          href="/activity"
           class="w-11 h-11 rounded-full neu-raised-sm neu-pressed flex items-center justify-center text-neu-text transition-all min-h-[44px] min-w-[44px]"
-          @click="toggleRecent()"
-          aria-label="Recent Transactions"
+          aria-label="Activity Log"
         >
           <IconHistory class="w-5 h-5" />
-        </button>
+        </a>
         <button
           type="button"
           class="w-11 h-11 rounded-full neu-raised-sm neu-pressed flex items-center justify-center text-neu-text transition-all min-h-[44px] min-w-[44px] relative"
@@ -514,80 +513,6 @@ import Layout from "../layouts/Layout.astro";
           </button>
           <button type="button" class="neu-convex neu-pressed rounded-xl px-4 py-2 text-xs font-bold text-primary min-h-[44px]" @click="saveToken()">
             Save Token
-          </button>
-        </div>
-      </div>
-    </dialog>
-
-    <!-- Recent Transactions Modal -->
-    <dialog class="modal" :class="{ 'modal-open': isRecentOpen }">
-      <div class="modal-box p-5 max-w-sm rounded-2xl max-h-[85vh] flex flex-col neu-raised">
-        <div class="flex items-center justify-between pb-3 border-b border-base-content/10">
-          <h3 class="font-bold text-lg flex items-center gap-2 text-neu-text">
-            <IconHistory class="w-5 h-5 text-primary" />
-            Recent Activity
-          </h3>
-          <button
-            type="button"
-            class="w-11 h-11 rounded-full neu-raised-sm neu-pressed flex items-center justify-center text-neu-text min-h-[44px] min-w-[44px]"
-            @click="toggleRecent()"
-            aria-label="Close Recent Transactions"
-          >
-            <IconX class="w-4 h-4" />
-          </button>
-        </div>
-
-        <div class="overflow-y-auto flex-1 py-2 divide-y divide-base-content/10">
-          <template x-if="recentTransactions.length === 0">
-            <p class="text-sm text-neu-text-muted text-center py-6">
-              No recent transactions recorded yet.
-            </p>
-          </template>
-
-          <template x-for="tx in recentTransactions" :key="tx.id">
-            <div class="py-2.5 flex items-center justify-between">
-              <div class="min-w-0 pr-2">
-                <div class="font-semibold text-sm text-neu-text flex items-center gap-1.5 min-w-0">
-                  <span class="truncate" x-text="tx.merchant"></span>
-                  <template x-if="Number(tx.gross_amount) < 0">
-                    <span class="badge badge-secondary badge-xs shrink-0">Credit</span>
-                  </template>
-                  <template x-if="Number(tx.reimbursement) > 0">
-                    <span class="badge badge-accent badge-xs shrink-0">Split</span>
-                  </template>
-                </div>
-                <div class="text-xs text-neu-text-muted flex items-center gap-1.5 mt-0.5">
-                  <span x-text="tx.subcategory"></span>
-                  <span>&bull;</span>
-                  <span x-text="tx.card"></span>
-                  <span>&bull;</span>
-                  <span x-text="tx.date"></span>
-                </div>
-              </div>
-              <div class="text-right whitespace-nowrap">
-                <div
-                  class="font-mono font-bold text-sm"
-                  :class="Number(tx.net_spend) < 0 ? 'text-secondary' : 'text-neu-text'"
-                >
-                  <span x-text="Number(tx.net_spend) < 0 ? '-$' + Math.abs(Number(tx.net_spend)).toFixed(2) : '$' + Number(tx.net_spend).toFixed(2)"></span>
-                </div>
-                <template x-if="Number(tx.reimbursement) > 0">
-                  <div class="text-[11px] font-mono text-neu-text-muted">
-                    Gross: $<span x-text="Number(tx.gross_amount).toFixed(2)"></span>
-                  </div>
-                </template>
-              </div>
-            </div>
-          </template>
-        </div>
-
-        <div class="pt-2 border-t border-base-content/10">
-          <button
-            type="button"
-            class="neu-raised-sm neu-pressed w-full rounded-xl py-2.5 text-xs font-semibold text-neu-text min-h-[44px]"
-            @click="toggleRecent()"
-          >
-            Close
           </button>
         </div>
       </div>
