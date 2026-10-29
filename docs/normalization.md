@@ -6,7 +6,7 @@ This document specifies the deterministic pre-processing pipeline, payment rail 
 
 ## 1. Architectural Philosophy and System Boundaries
 
-Financial statement descriptors from credit cards and banks are noisy, inconsistent, and burdened with payment processor artifacts, terminal identifiers, and geographical metadata. 
+Financial statement descriptors from credit cards and banks are noisy, inconsistent, and burdened with payment processor artifacts, terminal identifiers, and geographical metadata.
 
 SnapTally adopts a **strict waterfall resolution strategy**:
 1. **Deterministic Edge First**: Strip transaction noise, extract payment rails, and evaluate canonical lookup tables entirely in deterministic code (TypeScript at the edge; Python in offline batch ETL pipelines).
@@ -42,6 +42,7 @@ flowchart TD
 ## 2. String Sanitization and Pre-Processing Pipeline
 
 ### 2.1 Step 1: Authorization Boilerplate and Prefix Removal
+
 Bank descriptors frequently include leading authorization tags, transaction channels, or date prefixes. These are stripped prior to entity analysis:
 
 ```typescript
@@ -49,42 +50,44 @@ const NOISE_PREFIXES: RegExp[] = [
   /^(?:PURCHASE AUTHORIZED ON \d{2}\/\d{2}(?:\/\d{2,4})?\s*)/i,
   /^(?:CHECKCARD|PURCHASE|WITHDRAWAL|POS DEBIT|DEBIT CARD PURCHASE|RECURRING PAYMENT)(?:\s+\d{2}\/\d{2}(?:\/\d{2,4})?)?\s*-?\s*/i,
   /^\d{2}\/\d{2}(?:\/\d{2,4})?\s*/,
-  /^(?:PAYMENT TO|DIRECT DEBIT|ACH DEBIT)\s*/i
+  /^(?:PAYMENT TO|DIRECT DEBIT|ACH DEBIT)\s*/i,
 ];
 ```
 
 ### 2.2 Step 2: Payment Rail and Gateway Isolation
+
 Intermediary payment gateways mask the true underlying merchant while embedding category signals. The pipeline captures the rail identifier for heuristic routing, then strips the gateway prefix:
 
-| Payment Rail | Matching Regular Expression | Heuristic Signal |
-| :--- | :--- | :--- |
-| **Toast** | `^(?:TST\*\|TOAST\*\|TOAST POS\s*-\s*)` | Food & Beverage (>95% dining probability) |
-| **Square** | `^(?:SQ\s*\*\|SQR\*\|SQUARE\s*\*\|SQC\*)` | Mixed retail, dining, services |
-| **PayPal** | `^(?:PAYPAL\s*\*\|PP\*\s*)` | Online retail, digital subscriptions |
-| **Stripe** | `^(?:STRIPE\*\|SP\*\s*)` | SaaS, e-commerce, digital products |
-| **Shopify** | `^(?:SHOPIFY\*\|SP\s+)` | Direct-to-consumer e-commerce |
-| **Venmo** | `^(?:VENMO\s*\*\|VENMO PAYMENT\s*)` | Peer-to-peer, informal dining splits |
-| **Apple Pay** | `^(?:APL\*\|APPLE\.COM\/BILL\s*)` | Digital media, subscriptions, apps |
+| Payment Rail  | Matching Regular Expression               | Heuristic Signal                          |
+| :------------ | :---------------------------------------- | :---------------------------------------- |
+| **Toast**     | `^(?:TST\*\|TOAST\*\|TOAST POS\s*-\s*)`   | Food & Beverage (>95% dining probability) |
+| **Square**    | `^(?:SQ\s*\*\|SQR\*\|SQUARE\s*\*\|SQC\*)` | Mixed retail, dining, services            |
+| **PayPal**    | `^(?:PAYPAL\s*\*\|PP\*\s*)`               | Online retail, digital subscriptions      |
+| **Stripe**    | `^(?:STRIPE\*\|SP\*\s*)`                  | SaaS, e-commerce, digital products        |
+| **Shopify**   | `^(?:SHOPIFY\*\|SP\s+)`                   | Direct-to-consumer e-commerce             |
+| **Venmo**     | `^(?:VENMO\s*\*\|VENMO PAYMENT\s*)`       | Peer-to-peer, informal dining splits      |
+| **Apple Pay** | `^(?:APL\*\|APPLE\.COM\/BILL\s*)`         | Digital media, subscriptions, apps        |
 
 ### 2.3 Step 3: Trailing Metadata and Geo Artifact Cleansing
+
 Descriptors often append physical store identifiers, terminals, phone numbers, state abbreviations, and zip codes. These are excised to produce a clean alphanumeric search token:
 
 ```typescript
 const TRAILING_NOISE_PATTERNS: RegExp[] = [
-  /\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b/g,               // Telephone numbers: 800-555-0199
-  /\bSTORE\s*#?\s*\d+\b/gi,                         // Store identifiers: STORE 0482
-  /\bLOC(?:ATION)?\s*#?\s*\d+\b/gi,                 // Location identifiers: LOC 129
-  /(?:^|\s)#\s*[\w\d-]+\b/g,                        // Store tags: #1024, #B-12
-  /\bT-\d+\b/gi,                                    // Retail register formats: T-0921
-  /\.COM(?:\/[A-Z0-9]+)?/gi,                        // Web domains: NETFLIX.COM
-  /\s+\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/gi,           // State + Zip code: MA 02138
+  /\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b/g, // Telephone numbers: 800-555-0199
+  /\bSTORE\s*#?\s*\d+\b/gi, // Store identifiers: STORE 0482
+  /\bLOC(?:ATION)?\s*#?\s*\d+\b/gi, // Location identifiers: LOC 129
+  /(?:^|\s)#\s*[\w\d-]+\b/g, // Store tags: #1024, #B-12
+  /\bT-\d+\b/gi, // Retail register formats: T-0921
+  /\.COM(?:\/[A-Z0-9]+)?/gi, // Web domains: NETFLIX.COM
+  /\s+\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/gi, // State + Zip code: MA 02138
   /\s+\b(?:CAMBRIDGE|BOSTON|SOMERVILLE|SEATTLE|SAN JOSE|NEW YORK|SAN FRANCISCO)\b(?=\s+[A-Z]{2}\b|\s*$)/gi, // Trailing city tokens
-  /\s+\b[A-Z]{2}\b$/g,                              // Trailing state abbreviation: BOSTON MA
-  /\s+\b\d{4,}\b$/g                                 // Trailing numeric sequences (>= 4 digits)
+  /\s+\b[A-Z]{2}\b$/g, // Trailing state abbreviation: BOSTON MA
+  /\s+\b\d{4,}\b$/g, // Trailing numeric sequences (>= 4 digits)
 ];
 ```
 
-*Note on Number Preservation:* Standalone numeric removal is restricted to trailing positions (`\b\d{4,}\b$`) or anchored patterns (`STORE`, `#`) to protect legitimate merchant names containing numbers (e.g. 7-Eleven, Studio 54). Unanchored city name removal is strictly anchored to trailing positions or preceding state abbreviations to avoid truncating brands like Boston Market.
+_Note on Number Preservation:_ Standalone numeric removal is restricted to trailing positions (`\b\d{4,}\b$`) or anchored patterns (`STORE`, `#`) to protect legitimate merchant names containing numbers (e.g. 7-Eleven, Studio 54). Unanchored city name removal is strictly anchored to trailing positions or preceding state abbreviations to avoid truncating brands like Boston Market.
 
 ---
 
@@ -97,39 +100,47 @@ export interface NormalizedClassification {
   canonical_name: string;
   parent_bucket: "Fixed Costs" | "Investments" | "Savings" | "Guilt-Free";
   subcategory: string;
-  reward_multiplier_category: "Dining" | "Groceries" | "Travel" | "Gas" | "Entertainment" | "Drugstores" | "Wholesale" | "Other";
+  reward_multiplier_category:
+    | "Dining"
+    | "Groceries"
+    | "Travel"
+    | "Gas"
+    | "Entertainment"
+    | "Drugstores"
+    | "Wholesale"
+    | "Other";
 }
 ```
 
 ### 3.1 Common Canonical Rules
 
-| Normalized Keyword | Canonical Name | Parent Bucket | Subcategory | Reward Multiplier Category |
-| :--- | :--- | :--- | :--- | :--- |
-| `WHOLE FOODS` | Whole Foods Market | Fixed Costs | Groceries | Groceries |
-| `WHOLEFDS` | Whole Foods Market | Fixed Costs | Groceries | Groceries |
-| `TRADER JOE` | Trader Joe's | Fixed Costs | Groceries | Groceries |
-| `TRDR JOE` | Trader Joe's | Fixed Costs | Groceries | Groceries |
-| `COSTCO WHS` | Costco Wholesale | Fixed Costs | Groceries | Wholesale |
-| `BOSTON MARKET` | Boston Market | Guilt-Free | Dining | Dining |
-| `STARBUCKS` | Starbucks | Guilt-Free | Coffee & Snacks | Dining |
-| `TATTE BAKERY` | Tatte Bakery & Cafe | Guilt-Free | Coffee & Snacks | Dining |
-| `BLUE BOTTLE` | Blue Bottle Coffee | Guilt-Free | Coffee & Snacks | Dining |
-| `BERRYLINE` | Berryline | Guilt-Free | Coffee & Snacks | Dining |
-| `SWEETGREEN` | Sweetgreen | Guilt-Free | Takeout | Dining |
-| `CHIPOTLE` | Chipotle Mexican Grill | Guilt-Free | Takeout | Dining |
-| `SHAKE SHACK` | Shake Shack | Guilt-Free | Takeout | Dining |
-| `NETFLIX` | Netflix | Fixed Costs | Subscriptions | Entertainment |
-| `SPOTIFY` | Spotify | Fixed Costs | Subscriptions | Entertainment |
-| `AMAZON PRIME` | Amazon Prime | Fixed Costs | Subscriptions | Other |
-| `AMAZON` | Amazon | Guilt-Free | Shopping | Other |
-| `AMZN MKTP` | Amazon Marketplace | Guilt-Free | Shopping | Other |
-| `UBER TRIP` | Uber | Fixed Costs | Transit | Travel |
-| `UBER EATS` | Uber Eats | Guilt-Free | Takeout | Dining |
-| `VENMO`          | Venmo                  | Guilt-Free    | Dining          | Dining                      |
-| `DOORDASH` | DoorDash | Guilt-Free | Takeout | Dining |
-| `CHEVRON` | Chevron | Fixed Costs | Transit | Gas |
-| `DELTA AIR` | Delta Air Lines | Savings | Travel Fund | Travel |
-| `CONEDISON` | ConEdison | Fixed Costs | Utilities | Other |
+| Normalized Keyword | Canonical Name         | Parent Bucket | Subcategory     | Reward Multiplier Category |
+| :----------------- | :--------------------- | :------------ | :-------------- | :------------------------- |
+| `WHOLE FOODS`      | Whole Foods Market     | Fixed Costs   | Groceries       | Groceries                  |
+| `WHOLEFDS`         | Whole Foods Market     | Fixed Costs   | Groceries       | Groceries                  |
+| `TRADER JOE`       | Trader Joe's           | Fixed Costs   | Groceries       | Groceries                  |
+| `TRDR JOE`         | Trader Joe's           | Fixed Costs   | Groceries       | Groceries                  |
+| `COSTCO WHS`       | Costco Wholesale       | Fixed Costs   | Groceries       | Wholesale                  |
+| `BOSTON MARKET`    | Boston Market          | Guilt-Free    | Dining          | Dining                     |
+| `STARBUCKS`        | Starbucks              | Guilt-Free    | Coffee & Snacks | Dining                     |
+| `TATTE BAKERY`     | Tatte Bakery & Cafe    | Guilt-Free    | Coffee & Snacks | Dining                     |
+| `BLUE BOTTLE`      | Blue Bottle Coffee     | Guilt-Free    | Coffee & Snacks | Dining                     |
+| `BERRYLINE`        | Berryline              | Guilt-Free    | Coffee & Snacks | Dining                     |
+| `SWEETGREEN`       | Sweetgreen             | Guilt-Free    | Takeout         | Dining                     |
+| `CHIPOTLE`         | Chipotle Mexican Grill | Guilt-Free    | Takeout         | Dining                     |
+| `SHAKE SHACK`      | Shake Shack            | Guilt-Free    | Takeout         | Dining                     |
+| `NETFLIX`          | Netflix                | Fixed Costs   | Subscriptions   | Entertainment              |
+| `SPOTIFY`          | Spotify                | Fixed Costs   | Subscriptions   | Entertainment              |
+| `AMAZON PRIME`     | Amazon Prime           | Fixed Costs   | Subscriptions   | Other                      |
+| `AMAZON`           | Amazon                 | Guilt-Free    | Shopping        | Other                      |
+| `AMZN MKTP`        | Amazon Marketplace     | Guilt-Free    | Shopping        | Other                      |
+| `UBER TRIP`        | Uber                   | Fixed Costs   | Transit         | Travel                     |
+| `UBER EATS`        | Uber Eats              | Guilt-Free    | Takeout         | Dining                     |
+| `VENMO`            | Venmo                  | Guilt-Free    | Dining          | Dining                     |
+| `DOORDASH`         | DoorDash               | Guilt-Free    | Takeout         | Dining                     |
+| `CHEVRON`          | Chevron                | Fixed Costs   | Transit         | Gas                        |
+| `DELTA AIR`        | Delta Air Lines        | Savings       | Travel Fund     | Travel                     |
+| `CONEDISON`        | ConEdison              | Fixed Costs   | Utilities       | Other                      |
 
 ---
 
@@ -140,7 +151,10 @@ When evaluating candidate exact rules, iteration order matters. If a broad root 
 The matcher sorts candidate rule tokens by character length in descending order before matching:
 
 ```typescript
-function matchExactRules(cleaned: string, rules: Map<string, NormalizedClassification>): NormalizedClassification | null {
+function matchExactRules(
+  cleaned: string,
+  rules: Map<string, NormalizedClassification>,
+): NormalizedClassification | null {
   const sortedTokens = Array.from(rules.keys()).sort((a, b) => b.length - a.length);
 
   for (const token of sortedTokens) {
@@ -187,6 +201,7 @@ ON merchant_aliases(user_id, normalized_key);
 ```
 
 ### 5.2 Resolution Lifecycle
+
 1. When a transaction is submitted or imported, the normalizer produces a normalized alphanumeric key (`toAlphanumericKey(cleaned)`).
 2. The engine queries `merchant_aliases` for `(user_id, normalized_key)`.
 3. If present, the stored classification and `reward_multiplier_category` are applied with `confidence = 0.99`.
@@ -243,7 +258,16 @@ To ensure compatibility with DeepSeek and OpenAI strict Structured Outputs (`res
           "subcategory": { "type": "string" },
           "reward_multiplier_category": {
             "type": "string",
-            "enum": ["Dining", "Groceries", "Travel", "Gas", "Entertainment", "Drugstores", "Wholesale", "Other"]
+            "enum": [
+              "Dining",
+              "Groceries",
+              "Travel",
+              "Gas",
+              "Entertainment",
+              "Drugstores",
+              "Wholesale",
+              "Other"
+            ]
           },
           "confidence": { "type": "number" },
           "reasoning": { "type": "string" }
@@ -292,7 +316,7 @@ SnapTally operates across two execution environments:
    - Mitigation: Default to conservative baseline multipliers unless an unambiguous merchant rule is present in `src/config/rewards.ts`.
 2. **Aggregator Over-Generalization**:
    - Problem: Square (`SQ*`) processes charges for dental clinics, barbers, and auto mechanics, not just coffee shops.
-   - Mitigation: Never assign a default category purely based on Square or Stripe. Only Toast retains a high-confidence dining heuristic.
+   - Mitigation: Never assign a default category purely based on Square or Stripe. Only Toast and peer-payment Venmo retain high-confidence dining heuristics (excluding explicit cashouts and transfers).
 3. **External Model Outage or Latency**:
    - Problem: DeepSeek or Gemini API experiences an outage or elevated response latency.
    - Mitigation: The edge intake pipeline never fails a user transaction on LLM timeouts. It falls back to title-casing the cleaned string, assigning `parent_bucket = 'Guilt-Free'` and `subcategory = 'Dining'`, and queuing the transaction ID for background re-classification.
