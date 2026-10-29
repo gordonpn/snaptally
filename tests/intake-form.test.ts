@@ -2051,6 +2051,36 @@ describe("intakeForm Merchant Autocomplete Dropdown (#114)", () => {
     assert.strictEqual(form.subcategory, "Groceries");
   });
 
+  it("keeps manual category and card choices when a suggestion is picked", () => {
+    const form = intakeForm();
+    form.allMerchants = ["Trader Joe's"];
+    form.recentTransactions = [
+      {
+        id: "tx-tj",
+        date: "2026-10-28",
+        card: "Amex Gold",
+        parent_bucket: "Fixed Costs",
+        subcategory: "Groceries",
+        merchant: "Trader Joe's",
+        currency: "USD",
+        notes: null,
+        created_at: "2026-10-28T12:00:00Z",
+      },
+    ];
+
+    form.selectBucket("Guilt-Free");
+    form.selectSubcategory("Dining");
+    form.selectCard("Visa");
+
+    form.toggleCustomMerchant();
+    form.updateCustomMerchant("tra");
+    form.chooseMerchantSuggestion("Trader Joe's");
+
+    assert.strictEqual(form.parentBucket, "Guilt-Free");
+    assert.strictEqual(form.subcategory, "Dining");
+    assert.strictEqual(form.card, "Visa");
+  });
+
   it("ignores empty or whitespace suggestions in chooseMerchantSuggestion", () => {
     const form = intakeForm();
     form.customMerchantInput = "Existing";
@@ -2249,6 +2279,35 @@ describe("intakeForm Merchant Autocomplete Dropdown (#114)", () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async () => {
       return new Response(JSON.stringify({ ok: true, id: "tx-autocomplete" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      const result = await form.submitTransaction();
+      assert.strictEqual(result, true);
+      assert.strictEqual(form.merchantSuggestionsOpen, false);
+      assert.strictEqual(form.highlightedMerchantIndex, -1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("closes suggestions upon submission in custom merchant mode", async () => {
+    const form = intakeForm();
+    form.pressDigit(2);
+    form.pressDigit(5);
+    form.pressDigit(0);
+    form.card = "Amex Gold";
+    form.toggleCustomMerchant();
+    form.updateCustomMerchant("Tatte Bakery");
+    form.merchantSuggestionsOpen = true;
+    form.highlightedMerchantIndex = 1;
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(JSON.stringify({ ok: true, id: "tx-custom-autocomplete" }), {
         status: 201,
         headers: { "Content-Type": "application/json" },
       });
