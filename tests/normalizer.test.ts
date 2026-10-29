@@ -128,6 +128,68 @@ describe("Merchant Normalizer", () => {
       }
     });
 
+    it("classifies Ticketmaster as Guilt-Free Entertainment", () => {
+      const result = normalizeMerchant("TICKETMASTER");
+
+      assert.strictEqual(result.canonicalMerchant, "Ticketmaster");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Entertainment");
+      assert.strictEqual(result.matchStrategy, "exact_rule");
+    });
+
+    it("classifies Venmo as Guilt-Free Dining", () => {
+      const result = normalizeMerchant("VENMO");
+
+      assert.strictEqual(result.canonicalMerchant, "Venmo");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Dining");
+      assert.strictEqual(result.matchStrategy, "exact_rule");
+    });
+
+    it("classifies rail-prefixed Venmo payments as Guilt-Free Dining via aggregator heuristic", () => {
+      const result = normalizeMerchant("VENMO *SPLIT PAYMENT");
+
+      assert.strictEqual(result.paymentRail, "Venmo");
+      assert.strictEqual(result.canonicalMerchant, "Split Payment");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Dining");
+      assert.strictEqual(result.rewardCategory, "Dining");
+      assert.strictEqual(result.matchStrategy, "aggregator_heuristic");
+      assert.strictEqual(result.requiresLLM, false);
+    });
+
+    it("classifies generic VENMO PAYMENT as Guilt-Free Dining with Venmo merchant", () => {
+      const result = normalizeMerchant("VENMO PAYMENT");
+
+      assert.strictEqual(result.paymentRail, "Venmo");
+      assert.strictEqual(result.canonicalMerchant, "Venmo");
+      assert.strictEqual(result.parentBucket, "Guilt-Free");
+      assert.strictEqual(result.subcategory, "Dining");
+      assert.strictEqual(result.rewardCategory, "Dining");
+      assert.strictEqual(result.matchStrategy, "aggregator_heuristic");
+      assert.strictEqual(result.requiresLLM, false);
+    });
+
+    it("leaves Venmo transfers and cashouts unresolved rather than defaulting to Dining", () => {
+      const cashout = normalizeMerchant("VENMO CASHOUT");
+      assert.strictEqual(cashout.parentBucket, null);
+      assert.strictEqual(cashout.subcategory, null);
+      assert.strictEqual(cashout.matchStrategy, "unresolved");
+      assert.strictEqual(cashout.requiresLLM, true);
+
+      const railCashout = normalizeMerchant("VENMO *CASHOUT");
+      assert.strictEqual(railCashout.parentBucket, null);
+      assert.strictEqual(railCashout.subcategory, null);
+      assert.strictEqual(railCashout.matchStrategy, "unresolved");
+      assert.strictEqual(railCashout.requiresLLM, true);
+
+      const transfer = normalizeMerchant("VENMO BANK TRANSFER");
+      assert.strictEqual(transfer.parentBucket, null);
+      assert.strictEqual(transfer.subcategory, null);
+      assert.strictEqual(transfer.matchStrategy, "unresolved");
+      assert.strictEqual(transfer.requiresLLM, true);
+    });
+
     it("does not match grocery tokens embedded inside other words", () => {
       const result = normalizeMerchant("Bigarade");
 

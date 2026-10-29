@@ -570,6 +570,18 @@ export const DEFAULT_CANONICAL_RULES: Readonly<Record<string, CategoryRule>> = {
     subcategory: "Entertainment",
     rewardMultiplierCategory: "Entertainment",
   },
+  TICKETMASTER: {
+    canonicalName: "Ticketmaster",
+    parentBucket: "Guilt-Free",
+    subcategory: "Entertainment",
+    rewardMultiplierCategory: "Entertainment",
+  },
+  VENMO: {
+    canonicalName: "Venmo",
+    parentBucket: "Guilt-Free",
+    subcategory: "Dining",
+    rewardMultiplierCategory: "Dining",
+  },
   "CIRQUE DU SOLEIL": {
     canonicalName: "Cirque du Soleil",
     parentBucket: "Guilt-Free",
@@ -819,6 +831,12 @@ export function normalizeMerchant(
   for (const token of sortedTokens) {
     const pattern = new RegExp(`\\b${escapeRegExp(token)}\\b`, "i");
     if (pattern.test(cleaned)) {
+      if (
+        token === "VENMO" &&
+        /\b(?:CASH\s*OUT|CASHOUT|TRANSFER|VERIFICATION|DIRECT\s+DEPOSIT)\b/i.test(cleaned)
+      ) {
+        continue;
+      }
       const rule = rulesRecord[token];
       return {
         rawDescription,
@@ -852,11 +870,30 @@ export function normalizeMerchant(
     }
   }
 
-  if (rail === "Toast") {
+  if (rail === "Toast" || rail === "Venmo") {
+    if (
+      rail === "Venmo" &&
+      /\b(?:CASH\s*OUT|CASHOUT|TRANSFER|VERIFICATION|DIRECT\s+DEPOSIT)\b/i.test(rawDescription)
+    ) {
+      return {
+        rawDescription,
+        cleanedDescription: cleaned,
+        canonicalMerchant: toTitleCase(cleaned) || "Venmo",
+        parentBucket: null,
+        subcategory: null,
+        rewardCategory: null,
+        confidence: 0.2,
+        matchStrategy: "unresolved",
+        paymentRail: rail,
+        requiresLLM: true,
+      };
+    }
+
+    const fallbackName = rail === "Toast" ? "Toast Merchant" : "Venmo";
     return {
       rawDescription,
       cleanedDescription: cleaned,
-      canonicalMerchant: toTitleCase(cleaned) || "Toast Merchant",
+      canonicalMerchant: toTitleCase(cleaned) || fallbackName,
       parentBucket: "Guilt-Free",
       subcategory: "Dining",
       rewardCategory: "Dining",
