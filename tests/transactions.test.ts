@@ -1805,6 +1805,12 @@ describe("Paginated Transactions SQLite Query Integration", () => {
     const totalRow = countStmt.get(null, null) as { total: number };
     assert.strictEqual(totalRow.total, 5);
 
+    const sweetgreenCount = countStmt.get("Sweetgreen", null) as { total: number };
+    assert.strictEqual(sweetgreenCount.total, 1);
+
+    const guiltFreeCount = countStmt.get(null, "Guilt-Free") as { total: number };
+    assert.strictEqual(guiltFreeCount.total, 3);
+
     // 2. Search filter by merchant
     const searchSweetgreen = paginatedStmt.all("Sweetgreen", null, 10, 0) as Array<{ id: string }>;
     assert.strictEqual(searchSweetgreen.length, 1);
