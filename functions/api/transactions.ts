@@ -1,10 +1,12 @@
+import countTransactionsQuery from "../../queries/count_transactions.sql";
 import insertTransactionQuery from "../../queries/insert_transaction.sql";
 import selectDistinctMerchantsQuery from "../../queries/select_distinct_merchants.sql";
-import selectRecentTransactionsQuery from "../../queries/select_recent_transactions.sql";
+import selectMonthSummaryQuery from "../../queries/select_month_summary.sql";
+import selectPaginatedTransactionsQuery from "../../queries/select_paginated_transactions.sql";
 import { isValidDate } from "../../src/utils/date.ts";
 import { validateBearerToken } from "./auth.ts";
 import { logger } from "./logger.ts";
-import { parseLimit } from "./query.ts";
+import { parseLimit, parseOffset } from "./query.ts";
 
 export { isValidDate };
 
@@ -290,16 +292,33 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   );
 };
 
-const DEFAULT_RECENT_LIMIT = 5;
-const MAX_RECENT_LIMIT = 50;
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
+
+export interface MonthSummary {
+  month: string;
+  net_spend: number;
+  total_count: number;
+}
+
+export interface PaginatedTransactionsResponse {
+  transactions: TransactionRecord[];
+  total_count: number;
+  has_more: boolean;
+  next_offset: number | null;
+  month_summary?: MonthSummary;
+}
 
 /**
- * Handles GET requests to retrieve recent transactions ordered by date descending.
+ * Handles GET requests to retrieve paginated, filtered transactions and month summary.
  */
 export async function handleGet(
   request: Request,
   db: D1Database,
   expectedToken?: string,
+  selectQuery: string = selectPaginatedTransactionsQuery,
+  countQuery: string = countTransactionsQuery,
+  monthSummaryQuery: string = selectMonthSummaryQuery,
 ): Promise<Response> {
   const authResponse = await validateBearerToken(request, expectedToken);
   if (authResponse) {
@@ -307,15 +326,47 @@ export async function handleGet(
   }
 
   const url = new URL(request.url);
-  const limit = parseLimit(url.searchParams.get("limit"), DEFAULT_RECENT_LIMIT, MAX_RECENT_LIMIT);
+  const limit = parseLimit(url.searchParams.get("limit"), DEFAULT_LIMIT, MAX_LIMIT);
+  const offset = parseOffset(url.searchParams.get("offset"));
+  const rawSearch = url.searchParams.get("search");
+  const search = rawSearch && rawSearch.trim().length > 0 ? rawSearch.trim() : null;
+  const rawBucket = url.searchParams.get("bucket");
+  const bucket = rawBucket && rawBucket.trim().length > 0 ? rawBucket.trim() : null;
+
+  const rawMonth = url.searchParams.get("month");
+  const targetMonth =
+    rawMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(rawMonth.trim())
+      ? rawMonth.trim()
+      : new Date().toISOString().slice(0, 7);
 
   try {
-    const { results } = await db
-      .prepare(selectRecentTransactionsQuery)
-      .bind(limit)
-      .all<TransactionRecord>();
-    const transactions = results ?? [];
-    return Response.json({ transactions });
+    const [countResult, transactionsResult, monthResult] = await Promise.all([
+      db.prepare(countQuery).bind(search, bucket).first<{ total: number }>(),
+      db.prepare(selectQuery).bind(search, bucket, limit, offset).all<TransactionRecord>(),
+      db.prepare(monthSummaryQuery).bind(targetMonth).first<{
+        month_net_spend: number;
+        month_count: number;
+      }>(),
+    ]);
+
+    const totalCount = countResult?.total ?? 0;
+    const transactions = transactionsResult?.results ?? [];
+    const hasMore = offset + transactions.length < totalCount;
+    const nextOffset = hasMore ? offset + transactions.length : null;
+
+    const responsePayload: PaginatedTransactionsResponse = {
+      transactions,
+      total_count: totalCount,
+      has_more: hasMore,
+      next_offset: nextOffset,
+      month_summary: {
+        month: targetMonth,
+        net_spend: Number(monthResult?.month_net_spend ?? 0),
+        total_count: Number(monthResult?.month_count ?? 0),
+      },
+    };
+
+    return Response.json(responsePayload);
   } catch (error) {
     logger.error("Recent transactions retrieval failed", {
       error: error instanceof Error ? error.message : String(error),

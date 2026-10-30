@@ -3,6 +3,8 @@ const CACHE_NAME = "snaptally-shell-v1";
 const PRECACHE_ASSETS = [
   "/",
   "/index.html",
+  "/activity",
+  "/activity/index.html",
   "/manifest.json",
   "/favicon.svg",
   "/icons/icon.svg",

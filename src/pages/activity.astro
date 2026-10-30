@@ -1,0 +1,236 @@
+---
+import { IconArrowLeft, IconReceipt2, IconRefresh, IconSearch, IconX } from "@tabler/icons-astro";
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="SnapTally - Activity">
+  <div
+    class="flex flex-col h-full min-h-screen max-w-md mx-auto pt-safe pl-safe pr-safe pb-safe justify-between overflow-hidden overflow-x-hidden overscroll-none px-4"
+    x-data="activityView"
+  >
+    <!-- Header -->
+    <header class="flex-none flex items-center justify-between pt-2 pb-2 border-b border-base-content/10">
+      <div class="flex items-center gap-2">
+        <a
+          href="/"
+          class="w-11 h-11 rounded-full neu-raised-sm neu-pressed flex items-center justify-center text-neu-text transition-all min-h-[44px] min-w-[44px]"
+          aria-label="Back to intake"
+        >
+          <IconArrowLeft class="w-5 h-5" />
+        </a>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight text-neu-text leading-none">Activity Log</h1>
+          <span class="text-xs text-neu-text-muted" x-text="`${totalCount} transaction${totalCount === 1 ? '' : 's'}`"></span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          class="w-11 h-11 rounded-full neu-raised-sm neu-pressed flex items-center justify-center text-neu-text transition-all min-h-[44px] min-w-[44px]"
+          @click="refresh()"
+          aria-label="Refresh Activity"
+          :disabled="loading"
+        >
+          <span x-show="loading" class="loading loading-spinner loading-xs text-primary"></span>
+          <span x-show="!loading"><IconRefresh class="w-5 h-5" /></span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Month Spend Summary Banner -->
+    <section class="flex-none my-2 p-3.5 rounded-2xl neu-inset">
+      <div class="flex items-center justify-between">
+        <div>
+          <span class="text-xs font-medium text-neu-text-muted uppercase tracking-wider" x-text="monthLabel"></span>
+          <div class="text-xl font-bold font-mono tracking-tight text-neu-text">
+            $<span x-text="monthSpendFormatted"></span>
+          </div>
+        </div>
+        <div class="text-right">
+          <span class="text-xs text-neu-text-muted">Month Count</span>
+          <div class="text-sm font-semibold text-neu-text">
+            <span x-text="monthCount"></span> recorded
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Search and Filter Bar -->
+    <section class="flex-none space-y-2 mb-2">
+      <!-- Search Input -->
+      <div class="relative flex items-center">
+        <span class="absolute left-3 text-neu-text-muted pointer-events-none">
+          <IconSearch class="w-4 h-4" />
+        </span>
+        <input
+          type="text"
+          placeholder="Search merchant or card..."
+          class="w-full neu-input rounded-xl pl-9 pr-11 py-2.5 text-sm text-neu-text placeholder:text-neu-text-muted focus:outline-none min-h-[44px]"
+          :value="searchQuery"
+          @input="handleSearch($event.target.value)"
+          aria-label="Search transactions"
+        />
+        <button
+          type="button"
+          x-show="searchQuery.length > 0"
+          x-transition
+          class="absolute right-1 w-11 h-11 rounded-full flex items-center justify-center text-neu-text-muted hover:text-neu-text min-h-[44px] min-w-[44px]"
+          @click="clearSearch()"
+          aria-label="Clear search"
+        >
+          <IconX class="w-4 h-4" />
+        </button>
+      </div>
+
+      <!-- Bucket Filter Pills -->
+      <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5" role="group" aria-label="Bucket Filters">
+        <button
+          type="button"
+          class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all min-h-[44px]"
+          :class="selectedBucket === '' ? 'neu-convex text-primary font-bold' : 'neu-flat text-neu-text-muted hover:text-neu-text'"
+          :aria-pressed="selectedBucket === ''"
+          @click="setBucket('')"
+        >
+          All
+        </button>
+        <button
+          type="button"
+          class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all min-h-[44px]"
+          :class="selectedBucket === 'Guilt-Free' ? 'neu-convex text-primary font-bold' : 'neu-flat text-neu-text-muted hover:text-neu-text'"
+          :aria-pressed="selectedBucket === 'Guilt-Free'"
+          @click="setBucket('Guilt-Free')"
+        >
+          Guilt-Free
+        </button>
+        <button
+          type="button"
+          class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all min-h-[44px]"
+          :class="selectedBucket === 'Fixed Costs' ? 'neu-convex text-primary font-bold' : 'neu-flat text-neu-text-muted hover:text-neu-text'"
+          :aria-pressed="selectedBucket === 'Fixed Costs'"
+          @click="setBucket('Fixed Costs')"
+        >
+          Fixed Costs
+        </button>
+        <button
+          type="button"
+          class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all min-h-[44px]"
+          :class="selectedBucket === 'Savings' ? 'neu-convex text-primary font-bold' : 'neu-flat text-neu-text-muted hover:text-neu-text'"
+          :aria-pressed="selectedBucket === 'Savings'"
+          @click="setBucket('Savings')"
+        >
+          Savings
+        </button>
+        <button
+          type="button"
+          class="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all min-h-[44px]"
+          :class="selectedBucket === 'Income' ? 'neu-convex text-primary font-bold' : 'neu-flat text-neu-text-muted hover:text-neu-text'"
+          :aria-pressed="selectedBucket === 'Income'"
+          @click="setBucket('Income')"
+        >
+          Income
+        </button>
+      </div>
+    </section>
+
+    <!-- Error Banner -->
+    <template x-if="error">
+      <div class="flex-none rounded-xl neu-inset border-l-4 border-error p-3 my-2 text-xs text-neu-text flex items-center justify-between gap-2" role="alert">
+        <span class="flex-1" x-text="error"></span>
+        <button
+          type="button"
+          class="text-xs font-bold text-primary underline min-h-[44px] min-w-[44px] flex items-center justify-center"
+          @click="refresh()"
+        >
+          Retry
+        </button>
+      </div>
+    </template>
+
+    <!-- Scrollable Feed -->
+    <section class="overflow-y-auto no-scrollbar flex-1 space-y-4 pb-6">
+      <template x-if="loading && transactions.length === 0">
+        <div class="py-12 flex flex-col items-center justify-center text-neu-text-muted space-y-3">
+          <span class="loading loading-spinner loading-md text-primary"></span>
+          <span class="text-xs">Loading activity...</span>
+        </div>
+      </template>
+
+      <template x-if="!loading && transactions.length === 0 && !error">
+        <div class="py-12 flex flex-col items-center justify-center text-neu-text-muted space-y-2 text-center">
+          <IconReceipt2 class="w-10 h-10 text-neu-text-muted/40" />
+          <p class="text-sm font-medium">No transactions found</p>
+          <p class="text-xs text-neu-text-muted/70">Try adjusting your search query or bucket filter</p>
+        </div>
+      </template>
+
+      <template x-for="group in groupedTransactions" :key="group.date">
+        <div class="space-y-2">
+          <!-- Sticky Date Header -->
+          <div class="sticky top-0 z-10 py-1 bg-[var(--neu-surface)]/95 backdrop-blur-xs flex items-center justify-between">
+            <span class="text-xs font-bold text-neu-text tracking-wide" x-text="group.dateLabel"></span>
+            <span class="text-[11px] font-medium text-neu-text-muted font-mono" x-text="group.date"></span>
+          </div>
+
+          <!-- Transaction Items in Group -->
+          <div class="space-y-2">
+            <template x-for="tx in group.transactions" :key="tx.id">
+              <div class="p-3 rounded-xl neu-flat flex items-center justify-between">
+                <div class="min-w-0 pr-3">
+                  <div class="font-semibold text-sm text-neu-text flex items-center gap-1.5 min-w-0">
+                    <span class="truncate" x-text="tx.merchant"></span>
+                    <template x-if="Number(tx.gross_amount) < 0">
+                      <span class="badge badge-secondary badge-xs shrink-0">Credit</span>
+                    </template>
+                    <template x-if="Number(tx.reimbursement) > 0">
+                      <span class="badge badge-accent badge-xs shrink-0">Split</span>
+                    </template>
+                  </div>
+                  <div class="text-xs text-neu-text-muted flex items-center gap-1.5 mt-0.5">
+                    <span x-text="tx.subcategory"></span>
+                    <span>&bull;</span>
+                    <span x-text="tx.card"></span>
+                    <template x-if="formatTime(tx.created_at)">
+                      <span class="flex items-center gap-1.5">
+                        <span>&bull;</span>
+                        <span x-text="formatTime(tx.created_at)"></span>
+                      </span>
+                    </template>
+                  </div>
+                </div>
+                <div class="text-right whitespace-nowrap">
+                  <div
+                    class="font-mono font-bold text-sm"
+                    :class="Number(tx.net_spend) < 0 ? 'text-secondary' : 'text-neu-text'"
+                  >
+                    <span x-text="Number(tx.net_spend) < 0 ? '-$' + Math.abs(Number(tx.net_spend)).toFixed(2) : '$' + Number(tx.net_spend).toFixed(2)"></span>
+                  </div>
+                  <template x-if="Number(tx.reimbursement) > 0">
+                    <div class="text-[11px] font-mono text-neu-text-muted">
+                      Gross: $<span x-text="Number(tx.gross_amount).toFixed(2)"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- Load More Button -->
+      <template x-if="hasMore">
+        <div class="pt-2 text-center">
+          <button
+            type="button"
+            class="w-full neu-raised-sm neu-pressed rounded-xl py-3 text-xs font-semibold text-neu-text flex items-center justify-center gap-2 min-h-[44px]"
+            @click="loadMore()"
+            :disabled="loadingMore"
+          >
+            <span x-show="loadingMore" class="loading loading-spinner loading-xs text-primary"></span>
+            <span x-text="loadingMore ? 'Loading more transactions...' : 'Load More Transactions'"></span>
+          </button>
+        </div>
+      </template>
+    </section>
+  </div>
+</Layout>

@@ -15,8 +15,11 @@ import {
   toAlphanumericKey,
   toTitleCase,
 } from "../functions/api/transactions.ts";
+import countTransactionsQuery from "../queries/count_transactions.sql";
 import insertTransactionQuery from "../queries/insert_transaction.sql";
 import selectDistinctMerchantsQuery from "../queries/select_distinct_merchants.sql";
+import selectMonthSummaryQuery from "../queries/select_month_summary.sql";
+import selectPaginatedTransactionsQuery from "../queries/select_paginated_transactions.sql";
 import selectRecentTransactionsQuery from "../queries/select_recent_transactions.sql";
 import { createTestDatabase } from "./helpers/db.ts";
 
@@ -1240,8 +1243,8 @@ describe("GET /api/transactions handleGet", () => {
     assert.strictEqual(dbAccessed, false);
   });
 
-  it("returns recent transactions with default limit 5 when authenticated (Scenario 2)", async () => {
-    let boundLimit: unknown = null;
+  it("returns recent transactions with default limit 20 when authenticated (Scenario 2)", async () => {
+    let boundSelectArgs: unknown[] = [];
     const sampleRecord = {
       id: "tx-1",
       date: "2026-09-29",
@@ -1258,10 +1261,32 @@ describe("GET /api/transactions handleGet", () => {
 
     const mockDb = {
       prepare(query: string) {
-        assert.strictEqual(query, selectRecentTransactionsQuery);
+        if (query === countTransactionsQuery) {
+          return {
+            bind() {
+              return {
+                async first() {
+                  return { total: 1 };
+                },
+              };
+            },
+          };
+        }
+        if (query === selectMonthSummaryQuery) {
+          return {
+            bind() {
+              return {
+                async first() {
+                  return { month_net_spend: 18.5, month_count: 1 };
+                },
+              };
+            },
+          };
+        }
+        assert.strictEqual(query, selectPaginatedTransactionsQuery);
         return {
-          bind(limit: unknown) {
-            boundLimit = limit;
+          bind(...args: unknown[]) {
+            boundSelectArgs = args;
             return {
               async all() {
                 return { results: [sampleRecord] };
@@ -1278,19 +1303,53 @@ describe("GET /api/transactions handleGet", () => {
     const response = await handleGetTransactions(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 200);
-    assert.strictEqual(boundLimit, 5);
-    const data = (await response.json()) as { transactions: (typeof sampleRecord)[] };
+    assert.deepStrictEqual(boundSelectArgs, [null, null, 20, 0]);
+    const data = (await response.json()) as {
+      transactions: (typeof sampleRecord)[];
+      total_count: number;
+      has_more: boolean;
+      next_offset: number | null;
+      month_summary: { net_spend: number; total_count: number };
+    };
     assert.deepStrictEqual(data.transactions, [sampleRecord]);
+    assert.strictEqual(data.total_count, 1);
+    assert.strictEqual(data.has_more, false);
+    assert.strictEqual(data.next_offset, null);
+    assert.strictEqual(data.month_summary.net_spend, 18.5);
   });
 
-  it("passes custom clamped limit from query parameters", async () => {
-    let boundLimit: unknown = null;
+  it("passes custom clamped limit, offset, search, and bucket from query parameters", async () => {
+    let boundSelectArgs: unknown[] = [];
+    let boundCountArgs: unknown[] = [];
     const mockDb = {
       prepare(query: string) {
-        assert.strictEqual(query, selectRecentTransactionsQuery);
+        if (query === countTransactionsQuery) {
+          return {
+            bind(...args: unknown[]) {
+              boundCountArgs = args;
+              return {
+                async first() {
+                  return { total: 50 };
+                },
+              };
+            },
+          };
+        }
+        if (query === selectMonthSummaryQuery) {
+          return {
+            bind() {
+              return {
+                async first() {
+                  return { month_net_spend: 120.0, month_count: 4 };
+                },
+              };
+            },
+          };
+        }
+        assert.strictEqual(query, selectPaginatedTransactionsQuery);
         return {
-          bind(limit: unknown) {
-            boundLimit = limit;
+          bind(...args: unknown[]) {
+            boundSelectArgs = args;
             return {
               async all() {
                 return { results: [] };
@@ -1301,25 +1360,107 @@ describe("GET /api/transactions handleGet", () => {
       },
     } as unknown as D1Database;
 
-    const request = new Request("http://localhost/api/transactions?limit=25", {
-      headers: { Authorization: `Bearer ${validToken}` },
-    });
+    const request = new Request(
+      "http://localhost/api/transactions?limit=25&offset=10&search=sweetgreen&bucket=Guilt-Free&month=2026-08",
+      {
+        headers: { Authorization: `Bearer ${validToken}` },
+      },
+    );
     const response = await handleGetTransactions(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 200);
-    assert.strictEqual(boundLimit, 25);
-    const data = (await response.json()) as { transactions: unknown[] };
-    assert.deepStrictEqual(data.transactions, []);
+    assert.deepStrictEqual(boundSelectArgs, ["sweetgreen", "Guilt-Free", 25, 10]);
+    assert.deepStrictEqual(boundCountArgs, ["sweetgreen", "Guilt-Free"]);
+    const data = (await response.json()) as {
+      total_count: number;
+      has_more: boolean;
+      next_offset: number | null;
+    };
+    assert.strictEqual(data.total_count, 50);
+    assert.strictEqual(data.has_more, true);
+    assert.strictEqual(data.next_offset, 10);
   });
 
-  it("clamps excessive limit to maxLimit 50", async () => {
-    let boundLimit: unknown = null;
+  it("falls back to current month when invalid month format or month > 12 is provided", async () => {
+    let boundMonth: unknown = null;
     const mockDb = {
       prepare(query: string) {
-        assert.strictEqual(query, selectRecentTransactionsQuery);
+        if (query === countTransactionsQuery) {
+          return {
+            bind() {
+              return {
+                async first() {
+                  return { total: 0 };
+                },
+              };
+            },
+          };
+        }
+        if (query === selectMonthSummaryQuery) {
+          return {
+            bind(month: unknown) {
+              boundMonth = month;
+              return {
+                async first() {
+                  return { month_net_spend: 0, month_count: 0 };
+                },
+              };
+            },
+          };
+        }
         return {
-          bind(limit: unknown) {
-            boundLimit = limit;
+          bind() {
+            return {
+              async all() {
+                return { results: [] };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const request = new Request("http://localhost/api/transactions?month=2026-13", {
+      headers: { Authorization: `Bearer ${validToken}` },
+    });
+    const monthBeforeCall = new Date().toISOString().slice(0, 7);
+    const response = await handleGetTransactions(request, mockDb, validToken);
+
+    assert.strictEqual(response.status, 200);
+    const monthAfterCall = new Date().toISOString().slice(0, 7);
+    assert.ok(boundMonth === monthBeforeCall || boundMonth === monthAfterCall);
+  });
+
+  it("clamps excessive limit to maxLimit 100", async () => {
+    let boundSelectArgs: unknown[] = [];
+    const mockDb = {
+      prepare(query: string) {
+        if (query === countTransactionsQuery) {
+          return {
+            bind() {
+              return {
+                async first() {
+                  return { total: 0 };
+                },
+              };
+            },
+          };
+        }
+        if (query === selectMonthSummaryQuery) {
+          return {
+            bind() {
+              return {
+                async first() {
+                  return { month_net_spend: 0, month_count: 0 };
+                },
+              };
+            },
+          };
+        }
+        assert.strictEqual(query, selectPaginatedTransactionsQuery);
+        return {
+          bind(...args: unknown[]) {
+            boundSelectArgs = args;
             return {
               async all() {
                 return { results: [] };
@@ -1336,9 +1477,7 @@ describe("GET /api/transactions handleGet", () => {
     const response = await handleGetTransactions(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 200);
-    assert.strictEqual(boundLimit, 50);
-    const data = (await response.json()) as { transactions: unknown[] };
-    assert.deepStrictEqual(data.transactions, []);
+    assert.deepStrictEqual(boundSelectArgs, [null, null, 100, 0]);
   });
 
   it("handles null results from D1 gracefully returning empty array", async () => {
@@ -1347,6 +1486,9 @@ describe("GET /api/transactions handleGet", () => {
         return {
           bind() {
             return {
+              async first() {
+                return null;
+              },
               async all() {
                 return { results: null };
               },
@@ -1362,8 +1504,9 @@ describe("GET /api/transactions handleGet", () => {
     const response = await handleGetTransactions(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 200);
-    const data = (await response.json()) as { transactions: unknown[] };
+    const data = (await response.json()) as { transactions: unknown[]; total_count: number };
     assert.deepStrictEqual(data.transactions, []);
+    assert.strictEqual(data.total_count, 0);
   });
 
   it("returns HTTP 500 when database query throws error", async () => {
@@ -1372,6 +1515,9 @@ describe("GET /api/transactions handleGet", () => {
         return {
           bind() {
             return {
+              async first() {
+                throw new Error("D1 select failure");
+              },
               async all() {
                 throw new Error("D1 select failure");
               },
@@ -1399,10 +1545,24 @@ describe("GET /api/transactions onRequestGet", () => {
 
     const mockDb = {
       prepare: (query: string) => {
-        assert.strictEqual(query, selectRecentTransactionsQuery);
+        if (query === countTransactionsQuery) {
+          return {
+            bind: () => ({
+              first: async () => ({ total: 0 }),
+            }),
+          };
+        }
+        if (query === selectMonthSummaryQuery) {
+          return {
+            bind: () => ({
+              first: async () => ({ month_net_spend: 0, month_count: 0 }),
+            }),
+          };
+        }
+        assert.strictEqual(query, selectPaginatedTransactionsQuery);
         return {
-          bind: (limit: unknown) => {
-            assert.strictEqual(limit, 5);
+          bind: (...args: unknown[]) => {
+            assert.deepStrictEqual(args, [null, null, 20, 0]);
             return {
               run: async () => ({ success: true }),
               all: async () => {
@@ -1561,6 +1721,119 @@ describe("Recent Transactions SQLite Query Integration", () => {
     );
     const row = countStmt.get() as { total: number };
     assert.strictEqual(row.total, 1);
+
+    db.close();
+  });
+});
+
+describe("Paginated Transactions SQLite Query Integration", () => {
+  it("supports limit, offset, search, bucket filtering, and month summary", () => {
+    const db = createTestDatabase();
+    const insertStmt = db.prepare(insertTransactionQuery);
+
+    insertStmt.run(
+      "tx-1",
+      "2026-10-01",
+      "Amex Gold",
+      "Guilt-Free",
+      "Dining",
+      "Sweetgreen",
+      20.0,
+      0,
+      "USD",
+    );
+    insertStmt.run(
+      "tx-2",
+      "2026-10-02",
+      "Chase",
+      "Fixed Costs",
+      "Groceries",
+      "Whole Foods",
+      45.0,
+      0,
+      "USD",
+    );
+    insertStmt.run(
+      "tx-3",
+      "2026-10-05",
+      "Amex Gold",
+      "Guilt-Free",
+      "Coffee",
+      "Blue Bottle",
+      6.5,
+      0,
+      "USD",
+    );
+    insertStmt.run(
+      "tx-4",
+      "2026-09-15",
+      "Apple Card",
+      "Guilt-Free",
+      "Shopping",
+      "Uniqlo",
+      50.0,
+      0,
+      "USD",
+    );
+    insertStmt.run(
+      "tx-5",
+      "2026-10-10",
+      "RBC Visa",
+      "Fixed Costs",
+      "Groceries",
+      "Metro",
+      30.0,
+      0,
+      "CAD",
+    );
+
+    // 1. Unfiltered paginated query (page 1: limit 2, offset 0)
+    const paginatedStmt = db.prepare(selectPaginatedTransactionsQuery);
+    const countStmt = db.prepare(countTransactionsQuery);
+    const monthStmt = db.prepare(selectMonthSummaryQuery);
+
+    const page1 = paginatedStmt.all(null, null, 2, 0) as Array<{ id: string; merchant: string }>;
+    assert.strictEqual(page1.length, 2);
+    assert.strictEqual(page1[0].id, "tx-5");
+    assert.strictEqual(page1[1].id, "tx-3");
+
+    // Page 2: limit 2, offset 2
+    const page2 = paginatedStmt.all(null, null, 2, 2) as Array<{ id: string; merchant: string }>;
+    assert.strictEqual(page2.length, 2);
+    assert.strictEqual(page2[0].id, "tx-2");
+    assert.strictEqual(page2[1].id, "tx-1");
+
+    // Total count unfiltered
+    const totalRow = countStmt.get(null, null) as { total: number };
+    assert.strictEqual(totalRow.total, 5);
+
+    const sweetgreenCount = countStmt.get("Sweetgreen", null) as { total: number };
+    assert.strictEqual(sweetgreenCount.total, 1);
+
+    const guiltFreeCount = countStmt.get(null, "Guilt-Free") as { total: number };
+    assert.strictEqual(guiltFreeCount.total, 3);
+
+    // 2. Search filter by merchant
+    const searchSweetgreen = paginatedStmt.all("Sweetgreen", null, 10, 0) as Array<{ id: string }>;
+    assert.strictEqual(searchSweetgreen.length, 1);
+    assert.strictEqual(searchSweetgreen[0].id, "tx-1");
+
+    // 3. Search filter by card
+    const searchAmex = paginatedStmt.all("Amex", null, 10, 0) as Array<{ id: string }>;
+    assert.strictEqual(searchAmex.length, 2);
+
+    // 4. Bucket filter
+    const guiltFreeRows = paginatedStmt.all(null, "Guilt-Free", 10, 0) as Array<{ id: string }>;
+    assert.strictEqual(guiltFreeRows.length, 3);
+
+    // 5. Month summary
+    const octSummary = monthStmt.get("2026-10") as { month_net_spend: number; month_count: number };
+    assert.strictEqual(octSummary.month_count, 3);
+    assert.strictEqual(octSummary.month_net_spend, 71.5);
+
+    const sepSummary = monthStmt.get("2026-09") as { month_net_spend: number; month_count: number };
+    assert.strictEqual(sepSummary.month_count, 1);
+    assert.strictEqual(sepSummary.month_net_spend, 50.0);
 
     db.close();
   });
