@@ -249,6 +249,11 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
       /<link[^>]+rel=["']apple-touch-icon["'][^>]+href=["']\/icons\/apple-touch-icon\.png["']/,
     );
     assert.match(layoutContent, /viewport-fit=cover/);
+    assert.match(
+      layoutContent,
+      /interactive-widget=resizes-content/,
+      "Layout.astro must specify interactive-widget=resizes-content",
+    );
   });
 
   it("index.astro and global.css enforce iOS safe area insets, no horizontal overflow, and docked header/footer", () => {
@@ -415,6 +420,64 @@ describe("Intake text input assistance", () => {
       indexContent,
       /@click\.outside="closeMerchantSuggestions\(\)"/,
       "custom merchant container must dismiss dropdown on outside clicks",
+    );
+  });
+});
+
+describe("Standalone iOS PWA Viewport and Touch Handling (Issue #105)", () => {
+  it("Layout.astro configures interactive-widget=resizes-content and viewport-fit=cover", () => {
+    const layoutContent = fs.readFileSync(LAYOUT_PATH, "utf-8");
+    assert.match(
+      layoutContent,
+      /<meta\s+[^>]*name=["']viewport["'][^>]*content=["'][^"']*viewport-fit=cover[^"']*["']/s,
+      "Layout.astro must include viewport-fit=cover",
+    );
+    assert.match(
+      layoutContent,
+      /<meta\s+[^>]*name=["']viewport["'][^>]*content=["'][^"']*interactive-widget=resizes-content[^"']*["']/s,
+      "Layout.astro must include interactive-widget=resizes-content",
+    );
+  });
+
+  it("global.css configures touch-action: manipulation and transparent tap highlight for responsive tapping", () => {
+    const cssPath = path.join(ROOT_DIR, "src", "styles", "global.css");
+    const cssContent = fs.readFileSync(cssPath, "utf-8");
+
+    assert.match(
+      cssContent,
+      /button[^}]*touch-action:\s*manipulation/s,
+      "global.css must apply touch-action: manipulation to buttons",
+    );
+    assert.match(
+      cssContent,
+      /button[^}]*-webkit-tap-highlight-color:\s*transparent/s,
+      "global.css must eliminate tap highlight color on buttons",
+    );
+    assert.match(
+      cssContent,
+      /html,\s*body\s*\{[^}]*-webkit-tap-highlight-color:\s*transparent/s,
+      "global.css must eliminate tap highlight color globally on html, body",
+    );
+  });
+
+  it("index.astro ensures the keypad action button is padded above iOS home indicator and meets touch targets", () => {
+    const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
+    const indexContent = fs.readFileSync(indexPath, "utf-8");
+
+    assert.match(
+      indexContent,
+      /<footer[^>]*class="[^"]*pb-safe[^"]*"[^>]*>/,
+      "footer must include pb-safe to keep submit button clear of iOS home bar",
+    );
+
+    const submitBtnMatch = indexContent.match(
+      /<button[\s\S]*?@click="submitTransaction\(\)"[\s\S]*?>/s,
+    );
+    assert.ok(submitBtnMatch, "submit button must exist");
+    assert.match(
+      submitBtnMatch[0],
+      /min-h-\[44px\]/,
+      "submit button must satisfy minimum 44px touch target requirement",
     );
   });
 });

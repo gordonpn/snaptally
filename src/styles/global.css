@@ -44,14 +44,22 @@ body {
   height: 100%;
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+[role="button"],
+.neu-key,
+.neu-pressed {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button,
 [role="button"],
 .neu-key,
 .neu-pressed {
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
