@@ -481,3 +481,118 @@ describe("Standalone iOS PWA Viewport and Touch Handling (Issue #105)", () => {
     );
   });
 });
+
+describe("Configurable UI Themes and Appearance", () => {
+  it("Layout.astro executes inline blocking script to prevent theme FOUC before first paint", () => {
+    const layoutContent = fs.readFileSync(LAYOUT_PATH, "utf-8");
+
+    assert.match(
+      layoutContent,
+      /<script\s+is:inline>/,
+      "Layout.astro must include inline blocking script",
+    );
+    assert.match(
+      layoutContent,
+      /snaptally_theme_style/,
+      "Inline blocking script must read snaptally_theme_style",
+    );
+    assert.match(
+      layoutContent,
+      /snaptally_color_scheme/,
+      "Inline blocking script must read snaptally_color_scheme",
+    );
+    assert.match(
+      layoutContent,
+      /document\.documentElement\.setAttribute\("data-theme-style",\s*"flat"\)/,
+      "Inline blocking script must set data-theme-style attribute",
+    );
+    assert.match(
+      layoutContent,
+      /document\.documentElement\.setAttribute\("data-theme",\s*scheme\)/,
+      "Inline blocking script must set data-theme attribute",
+    );
+  });
+
+  it("global.css declares modern minimal flat theme tokens and component overrides", () => {
+    const cssPath = path.join(ROOT_DIR, "src", "styles", "global.css");
+    const cssContent = fs.readFileSync(cssPath, "utf-8");
+
+    assert.match(
+      cssContent,
+      /\[data-theme-style="flat"\]\s*\{[^}]*--neu-surface:\s*#f8fafc;/s,
+      "global.css must declare light flat surface token",
+    );
+    assert.match(
+      cssContent,
+      /\[data-theme-style="flat"\]\s*\{[^}]*--neu-border:\s*#e2e8f0;/s,
+      "global.css must declare light flat border token",
+    );
+    assert.match(
+      cssContent,
+      /\[data-theme="dark"\]\[data-theme-style="flat"\][^{]*\{[^}]*--neu-surface:\s*#0f172a;/s,
+      "global.css must declare dark flat surface token",
+    );
+    assert.match(
+      cssContent,
+      /\[data-theme-style="flat"\]\s+\.neu-raised[^{]*\{[^}]*box-shadow:\s*0\s+1px\s+2px\s+0/s,
+      "global.css must override .neu-raised for flat theme",
+    );
+    assert.match(
+      cssContent,
+      /\[data-theme-style="flat"\]\s+\.neu-inset[^{]*\{[^}]*background-color:\s*var\(--neu-surface-recessed\);/s,
+      "global.css must override .neu-inset for flat theme",
+    );
+  });
+
+  it("index.astro provides accessible theme style and color scheme controls with 44px touch targets", () => {
+    const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
+    const indexContent = fs.readFileSync(indexPath, "utf-8");
+
+    assert.match(
+      indexContent,
+      /aria-labelledby="settings-dialog-title"/,
+      "Settings modal must have accessible label",
+    );
+    assert.match(
+      indexContent,
+      /aria-label="Theme style selection"/,
+      "Theme style controls must declare accessible group label",
+    );
+    assert.match(
+      indexContent,
+      /aria-label="Color scheme selection"/,
+      "Color scheme controls must declare accessible group label",
+    );
+
+    assert.match(indexContent, /@click="setThemeStyle\('neumorphic'\)"/);
+    assert.match(indexContent, /@click="setThemeStyle\('flat'\)"/);
+    assert.match(indexContent, /@click="setColorScheme\('system'\)"/);
+    assert.match(indexContent, /@click="setColorScheme\('light'\)"/);
+    assert.match(indexContent, /@click="setColorScheme\('dark'\)"/);
+
+    const themeButtons = [
+      ...indexContent.matchAll(
+        /<button[^>]*@click="(?:setThemeStyle|setColorScheme)\([^"]+\)"[^>]*>/g,
+      ),
+    ].map(([btn]) => btn);
+
+    assert.strictEqual(
+      themeButtons.length,
+      5,
+      "index.astro must declare 5 theme setting buttons (2 styles, 3 schemes)",
+    );
+
+    for (const btn of themeButtons) {
+      assert.match(
+        btn,
+        /min-h-\[44px\]/,
+        "Every theme selector button must have min-h-[44px] for touch target compliance",
+      );
+      assert.match(
+        btn,
+        /:aria-pressed=/,
+        "Every theme selector button must bind aria-pressed state",
+      );
+    }
+  });
+});

@@ -18,6 +18,25 @@ const { title = "SnapTally" } = Astro.props;
     />
     <title>{title}</title>
 
+    <script is:inline>
+      (function () {
+        try {
+          var style = localStorage.getItem("snaptally_theme_style");
+          if (style === "flat") {
+            document.documentElement.setAttribute("data-theme-style", "flat");
+          } else {
+            document.documentElement.removeAttribute("data-theme-style");
+          }
+          var scheme = localStorage.getItem("snaptally_color_scheme");
+          if (scheme === "light" || scheme === "dark") {
+            document.documentElement.setAttribute("data-theme", scheme);
+          } else {
+            document.documentElement.removeAttribute("data-theme");
+          }
+        } catch (_) {}
+      })();
+    </script>
+
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />

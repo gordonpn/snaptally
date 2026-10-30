@@ -38,6 +38,11 @@ export const CATEGORIES_BY_BUCKET = BUCKET_SUBCATEGORIES;
 export const TOKEN_STORAGE_KEY = "snaptally_api_token";
 export const CARDS_STORAGE_KEY = "snaptally_cards";
 export const MERCHANTS_STORAGE_KEY = "snaptally_merchants";
+export const THEME_STYLE_STORAGE_KEY = "snaptally_theme_style";
+export const COLOR_SCHEME_STORAGE_KEY = "snaptally_color_scheme";
+
+export type ThemeStyle = "neumorphic" | "flat";
+export type ColorScheme = "system" | "light" | "dark";
 
 const CANONICAL_MERCHANT_RULES = new Map(
   Object.values(DEFAULT_CANONICAL_RULES).map((rule) => [rule.canonicalName.toLowerCase(), rule]),
@@ -116,6 +121,8 @@ export function intakeForm() {
     token: "",
     isSettingsOpen: false,
     settingsTokenInput: "",
+    themeStyle: "neumorphic" as ThemeStyle,
+    colorScheme: "system" as ColorScheme,
 
     // Recent transactions
     recentTransactions: [] as RecentTransaction[],
@@ -634,6 +641,46 @@ export function intakeForm() {
     },
 
     // Settings actions
+    setThemeStyle(style: ThemeStyle): void {
+      this.themeStyle = style;
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(THEME_STYLE_STORAGE_KEY, style);
+        }
+      } catch {
+        // Storage restricted or unavailable
+      }
+      if (typeof document !== "undefined") {
+        if (style === "flat") {
+          document.documentElement.setAttribute("data-theme-style", "flat");
+        } else {
+          document.documentElement.removeAttribute("data-theme-style");
+        }
+      }
+    },
+
+    setColorScheme(scheme: ColorScheme): void {
+      this.colorScheme = scheme;
+      try {
+        if (typeof localStorage !== "undefined") {
+          if (scheme === "system") {
+            localStorage.removeItem(COLOR_SCHEME_STORAGE_KEY);
+          } else {
+            localStorage.setItem(COLOR_SCHEME_STORAGE_KEY, scheme);
+          }
+        }
+      } catch {
+        // Storage restricted or unavailable
+      }
+      if (typeof document !== "undefined") {
+        if (scheme === "light" || scheme === "dark") {
+          document.documentElement.setAttribute("data-theme", scheme);
+        } else {
+          document.documentElement.removeAttribute("data-theme");
+        }
+      }
+    },
+
     openSettings(): void {
       this.settingsTokenInput = this.token;
       this.isSettingsOpen = true;
@@ -930,6 +977,18 @@ export function intakeForm() {
       this.resetDateToToday();
       try {
         if (typeof localStorage !== "undefined") {
+          const storedThemeStyle = localStorage.getItem(THEME_STYLE_STORAGE_KEY);
+          if (storedThemeStyle === "flat" || storedThemeStyle === "neumorphic") {
+            this.themeStyle = storedThemeStyle;
+          }
+          const storedColorScheme = localStorage.getItem(COLOR_SCHEME_STORAGE_KEY);
+          if (
+            storedColorScheme === "light" ||
+            storedColorScheme === "dark" ||
+            storedColorScheme === "system"
+          ) {
+            this.colorScheme = storedColorScheme;
+          }
           const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
           if (storedToken) {
             this.token = storedToken;
@@ -966,6 +1025,19 @@ export function intakeForm() {
         }
       } catch {
         // Storage restricted or unavailable
+      }
+
+      if (typeof document !== "undefined") {
+        if (this.themeStyle === "flat") {
+          document.documentElement.setAttribute("data-theme-style", "flat");
+        } else {
+          document.documentElement.removeAttribute("data-theme-style");
+        }
+        if (this.colorScheme === "light" || this.colorScheme === "dark") {
+          document.documentElement.setAttribute("data-theme", this.colorScheme);
+        } else {
+          document.documentElement.removeAttribute("data-theme");
+        }
       }
 
       if (this.cards.length === 0) {

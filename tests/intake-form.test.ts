@@ -2,13 +2,31 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   CARDS_STORAGE_KEY,
+  COLOR_SCHEME_STORAGE_KEY,
   DEFAULT_FREQUENT_MERCHANTS,
   getTodayDate,
   intakeForm,
   type RecentTransaction,
+  THEME_STYLE_STORAGE_KEY,
   TOKEN_STORAGE_KEY,
 } from "../src/scripts/intake-form.ts";
 import { clearDeadLetterQueue, clearOutbox, clearRetryTimer } from "../src/scripts/outbox.ts";
+
+class MockElement {
+  private attrs: Map<string, string> = new Map();
+
+  setAttribute(name: string, value: string): void {
+    this.attrs.set(name, value);
+  }
+
+  removeAttribute(name: string): void {
+    this.attrs.delete(name);
+  }
+
+  getAttribute(name: string): string | null {
+    return this.attrs.get(name) ?? null;
+  }
+}
 
 class MockLocalStorage {
   private store: Map<string, string> = new Map();
@@ -918,6 +936,110 @@ describe("intakeForm Token Persistence (Scenario 3)", () => {
     form.saveToken();
     assert.strictEqual(form.token, "token-without-crash");
     assert.strictEqual(form.isSettingsOpen, false);
+  });
+
+  describe("intakeForm Theme and Appearance Settings", () => {
+    let mockRoot: MockElement;
+    const originalDoc = globalThis.document;
+
+    beforeEach(() => {
+      mockStorage = new MockLocalStorage();
+      mockRoot = new MockElement();
+      Object.defineProperty(globalThis, "localStorage", {
+        value: mockStorage,
+        writable: true,
+        configurable: true,
+      });
+      Object.defineProperty(globalThis, "document", {
+        value: { documentElement: mockRoot },
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    afterEach(() => {
+      Object.defineProperty(globalThis, "document", {
+        value: originalDoc,
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    it("defaults to neumorphic themeStyle and system colorScheme when storage is empty", () => {
+      const form = intakeForm();
+      form.init();
+      assert.strictEqual(form.themeStyle, "neumorphic");
+      assert.strictEqual(form.colorScheme, "system");
+      assert.strictEqual(mockRoot.getAttribute("data-theme-style"), null);
+      assert.strictEqual(mockRoot.getAttribute("data-theme"), null);
+    });
+
+    it("loads existing themeStyle and colorScheme from localStorage on init", () => {
+      mockStorage.setItem(THEME_STYLE_STORAGE_KEY, "flat");
+      mockStorage.setItem(COLOR_SCHEME_STORAGE_KEY, "dark");
+      const form = intakeForm();
+      form.init();
+      assert.strictEqual(form.themeStyle, "flat");
+      assert.strictEqual(form.colorScheme, "dark");
+      assert.strictEqual(mockRoot.getAttribute("data-theme-style"), "flat");
+      assert.strictEqual(mockRoot.getAttribute("data-theme"), "dark");
+    });
+
+    it("setThemeStyle toggles between flat and neumorphic, updating storage and DOM", () => {
+      const form = intakeForm();
+      form.setThemeStyle("flat");
+      assert.strictEqual(form.themeStyle, "flat");
+      assert.strictEqual(mockStorage.getItem(THEME_STYLE_STORAGE_KEY), "flat");
+      assert.strictEqual(mockRoot.getAttribute("data-theme-style"), "flat");
+
+      form.setThemeStyle("neumorphic");
+      assert.strictEqual(form.themeStyle, "neumorphic");
+      assert.strictEqual(mockStorage.getItem(THEME_STYLE_STORAGE_KEY), "neumorphic");
+      assert.strictEqual(mockRoot.getAttribute("data-theme-style"), null);
+    });
+
+    it("setColorScheme switches between light, dark, and system, updating storage and DOM", () => {
+      const form = intakeForm();
+      form.setColorScheme("light");
+      assert.strictEqual(form.colorScheme, "light");
+      assert.strictEqual(mockStorage.getItem(COLOR_SCHEME_STORAGE_KEY), "light");
+      assert.strictEqual(mockRoot.getAttribute("data-theme"), "light");
+
+      form.setColorScheme("dark");
+      assert.strictEqual(form.colorScheme, "dark");
+      assert.strictEqual(mockStorage.getItem(COLOR_SCHEME_STORAGE_KEY), "dark");
+      assert.strictEqual(mockRoot.getAttribute("data-theme"), "dark");
+
+      form.setColorScheme("system");
+      assert.strictEqual(form.colorScheme, "system");
+      assert.strictEqual(mockStorage.getItem(COLOR_SCHEME_STORAGE_KEY), null);
+      assert.strictEqual(mockRoot.getAttribute("data-theme"), null);
+    });
+
+    it("handles restricted localStorage without throwing", () => {
+      Object.defineProperty(globalThis, "localStorage", {
+        value: {
+          getItem() {
+            throw new Error("SecurityError");
+          },
+          setItem() {
+            throw new Error("QuotaExceededError");
+          },
+          removeItem() {
+            throw new Error("SecurityError");
+          },
+        },
+        writable: true,
+        configurable: true,
+      });
+
+      const form = intakeForm();
+      form.init();
+      form.setThemeStyle("flat");
+      assert.strictEqual(form.themeStyle, "flat");
+      form.setColorScheme("dark");
+      assert.strictEqual(form.colorScheme, "dark");
+    });
   });
 
   it("includes Authorization header in outgoing requests when token is configured", async () => {
