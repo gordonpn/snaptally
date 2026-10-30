@@ -485,15 +485,87 @@ import Layout from "../layouts/Layout.astro";
     </dialog>
 
     <!-- Settings Modal -->
-    <dialog class="modal" :class="{ 'modal-open': isSettingsOpen }">
+    <dialog class="modal" :class="{ 'modal-open': isSettingsOpen }" aria-labelledby="settings-dialog-title">
       <div class="modal-box p-5 max-w-sm rounded-2xl max-h-[85vh] overflow-y-auto neu-raised">
-        <h3 class="font-bold text-lg text-neu-text">Settings</h3>
-        <p class="text-xs text-neu-text-muted mt-1">
-          Configure pre-shared API bearer token stored locally in browser storage.
-        </p>
-        <div class="form-control my-4">
+        <div class="flex items-center justify-between pb-2 border-b border-base-content/10">
+          <h3 id="settings-dialog-title" class="font-bold text-lg text-neu-text">Settings</h3>
+          <button
+            type="button"
+            class="neu-raised-sm rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center text-neu-text"
+            @click="closeSettings()"
+            aria-label="Close Settings"
+          >
+            <IconX class="w-5 h-5" />
+          </button>
+        </div>
+
+        <!-- Appearance: Theme Style -->
+        <div class="my-4">
+          <label class="label py-1">
+            <span class="label-text font-semibold text-xs text-neu-text">Theme Style</span>
+          </label>
+          <div class="grid grid-cols-2 gap-2 mt-1" role="group" aria-label="Theme style selection">
+            <button
+              type="button"
+              class="neu-pressed rounded-xl px-3 py-2 text-xs font-semibold min-h-[44px] flex items-center justify-center transition-all"
+              :class="themeStyle === 'neumorphic' ? 'neu-inset font-bold text-primary bg-primary/10 outline outline-1 outline-primary/60' : 'neu-raised-sm text-neu-text'"
+              :aria-pressed="themeStyle === 'neumorphic'"
+              @click="setThemeStyle('neumorphic')"
+            >
+              Neumorphic
+            </button>
+            <button
+              type="button"
+              class="neu-pressed rounded-xl px-3 py-2 text-xs font-semibold min-h-[44px] flex items-center justify-center transition-all"
+              :class="themeStyle === 'flat' ? 'neu-inset font-bold text-primary bg-primary/10 outline outline-1 outline-primary/60' : 'neu-raised-sm text-neu-text'"
+              :aria-pressed="themeStyle === 'flat'"
+              @click="setThemeStyle('flat')"
+            >
+              Modern Minimal
+            </button>
+          </div>
+        </div>
+
+        <!-- Appearance: Color Scheme -->
+        <div class="my-4">
+          <label class="label py-1">
+            <span class="label-text font-semibold text-xs text-neu-text">Color Scheme</span>
+          </label>
+          <div class="grid grid-cols-3 gap-1.5 mt-1" role="group" aria-label="Color scheme selection">
+            <button
+              type="button"
+              class="neu-pressed rounded-xl px-2 py-2 text-xs font-semibold min-h-[44px] flex items-center justify-center transition-all"
+              :class="colorScheme === 'system' ? 'neu-inset font-bold text-primary bg-primary/10 outline outline-1 outline-primary/60' : 'neu-raised-sm text-neu-text'"
+              :aria-pressed="colorScheme === 'system'"
+              @click="setColorScheme('system')"
+            >
+              System
+            </button>
+            <button
+              type="button"
+              class="neu-pressed rounded-xl px-2 py-2 text-xs font-semibold min-h-[44px] flex items-center justify-center transition-all"
+              :class="colorScheme === 'light' ? 'neu-inset font-bold text-primary bg-primary/10 outline outline-1 outline-primary/60' : 'neu-raised-sm text-neu-text'"
+              :aria-pressed="colorScheme === 'light'"
+              @click="setColorScheme('light')"
+            >
+              Light
+            </button>
+            <button
+              type="button"
+              class="neu-pressed rounded-xl px-2 py-2 text-xs font-semibold min-h-[44px] flex items-center justify-center transition-all"
+              :class="colorScheme === 'dark' ? 'neu-inset font-bold text-primary bg-primary/10 outline outline-1 outline-primary/60' : 'neu-raised-sm text-neu-text'"
+              :aria-pressed="colorScheme === 'dark'"
+              @click="setColorScheme('dark')"
+            >
+              Dark
+            </button>
+          </div>
+        </div>
+
+        <!-- API Bearer Token -->
+        <div class="form-control my-4 pt-2 border-t border-base-content/10">
           <label class="label py-1" for="api-token-input">
-            <span class="label-text font-medium text-xs text-neu-text">API Bearer Token</span>
+            <span class="label-text font-semibold text-xs text-neu-text">API Bearer Token</span>
           </label>
           <input
             type="password"
