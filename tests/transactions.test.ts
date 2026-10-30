@@ -1423,10 +1423,12 @@ describe("GET /api/transactions handleGet", () => {
     const request = new Request("http://localhost/api/transactions?month=2026-13", {
       headers: { Authorization: `Bearer ${validToken}` },
     });
+    const monthBeforeCall = new Date().toISOString().slice(0, 7);
     const response = await handleGetTransactions(request, mockDb, validToken);
 
     assert.strictEqual(response.status, 200);
-    assert.strictEqual(boundMonth, new Date().toISOString().slice(0, 7));
+    const monthAfterCall = new Date().toISOString().slice(0, 7);
+    assert.ok(boundMonth === monthBeforeCall || boundMonth === monthAfterCall);
   });
 
   it("clamps excessive limit to maxLimit 100", async () => {
