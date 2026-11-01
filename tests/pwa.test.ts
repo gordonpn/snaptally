@@ -542,6 +542,11 @@ describe("Configurable UI Themes and Appearance", () => {
       /\[data-theme-style="flat"\]\s+\.neu-inset[^{]*\{[^}]*background-color:\s*var\(--neu-surface-recessed\);/s,
       "global.css must override .neu-inset for flat theme",
     );
+    assert.match(
+      cssContent,
+      /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^}]*\[data-theme-style="flat"\]\s+\.neu-key[^}]*\[data-theme-style="flat"\]\s+\.neu-pressed/s,
+      "global.css must preserve reduced-motion overrides for modern minimal flat theme",
+    );
   });
 
   it("index.astro provides accessible theme style and color scheme controls with 44px touch targets", () => {

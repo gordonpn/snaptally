@@ -371,7 +371,9 @@ input[type="search"] {
 
 @media (prefers-reduced-motion: reduce) {
   .neu-key,
-  .neu-pressed {
+  .neu-pressed,
+  [data-theme-style="flat"] .neu-key,
+  [data-theme-style="flat"] .neu-pressed {
     transition: none;
     &:active {
       transform: none;
