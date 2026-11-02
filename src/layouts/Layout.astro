@@ -21,38 +21,7 @@ const { title = "SnapTally" } = Astro.props;
     <meta name="theme-color" content="#e0e5ec" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#1e232a" media="(prefers-color-scheme: dark)" />
 
-    <script is:inline>
-      (function () {
-        try {
-          var style = localStorage.getItem("snaptally_theme_style");
-          if (style === "flat") {
-            document.documentElement.setAttribute("data-theme-style", "flat");
-          } else {
-            document.documentElement.removeAttribute("data-theme-style");
-          }
-          var scheme = localStorage.getItem("snaptally_color_scheme");
-          if (scheme === "light" || scheme === "dark") {
-            document.documentElement.setAttribute("data-theme", scheme);
-          } else {
-            document.documentElement.removeAttribute("data-theme");
-          }
-          var lightColor = style === "flat" ? "#f8fafc" : "#e0e5ec";
-          var darkColor = style === "flat" ? "#0f172a" : "#1e232a";
-          var metaLight = document.querySelector('meta[name="theme-color"][media*="light"]');
-          var metaDark = document.querySelector('meta[name="theme-color"][media*="dark"]');
-          if (scheme === "light") {
-            if (metaLight) metaLight.setAttribute("content", lightColor);
-            if (metaDark) metaDark.setAttribute("content", lightColor);
-          } else if (scheme === "dark") {
-            if (metaLight) metaLight.setAttribute("content", darkColor);
-            if (metaDark) metaDark.setAttribute("content", darkColor);
-          } else {
-            if (metaLight) metaLight.setAttribute("content", lightColor);
-            if (metaDark) metaDark.setAttribute("content", darkColor);
-          }
-        } catch (_) {}
-      })();
-    </script>
+    <script is:inline src="/theme-init.js"></script>
 
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />

@@ -7,6 +7,7 @@ const PRECACHE_ASSETS = [
   "/activity/index.html",
   "/manifest.json",
   "/favicon.svg",
+  "/theme-init.js",
   "/icons/icon.svg",
   "/icons/icon-192.png",
   "/icons/icon-512.png",

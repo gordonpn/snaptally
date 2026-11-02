@@ -483,33 +483,36 @@ describe("Standalone iOS PWA Viewport and Touch Handling (Issue #105)", () => {
 });
 
 describe("Configurable UI Themes and Appearance", () => {
-  it("Layout.astro executes inline blocking script to prevent theme FOUC before first paint", () => {
+  it("Layout.astro executes external blocking script /theme-init.js to prevent theme FOUC before first paint", () => {
     const layoutContent = fs.readFileSync(LAYOUT_PATH, "utf-8");
+    const themeInitPath = path.join(ROOT_DIR, "public", "theme-init.js");
+    const themeInitContent = fs.readFileSync(themeInitPath, "utf-8");
 
+    assert.strictEqual(fs.existsSync(themeInitPath), true, "public/theme-init.js must exist");
     assert.match(
       layoutContent,
-      /<script\s+is:inline>/,
-      "Layout.astro must include inline blocking script",
+      /<script\s+is:inline\s+src="\/theme-init\.js"><\/script>/,
+      "Layout.astro must load external blocking script /theme-init.js",
     );
     assert.match(
-      layoutContent,
+      themeInitContent,
       /snaptally_theme_style/,
-      "Inline blocking script must read snaptally_theme_style",
+      "theme-init.js must read snaptally_theme_style",
     );
     assert.match(
-      layoutContent,
+      themeInitContent,
       /snaptally_color_scheme/,
-      "Inline blocking script must read snaptally_color_scheme",
+      "theme-init.js must read snaptally_color_scheme",
     );
     assert.match(
-      layoutContent,
+      themeInitContent,
       /document\.documentElement\.setAttribute\("data-theme-style",\s*"flat"\)/,
-      "Inline blocking script must set data-theme-style attribute",
+      "theme-init.js must set data-theme-style attribute",
     );
     assert.match(
-      layoutContent,
+      themeInitContent,
       /document\.documentElement\.setAttribute\("data-theme",\s*scheme\)/,
-      "Inline blocking script must set data-theme attribute",
+      "theme-init.js must set data-theme attribute",
     );
     assert.match(
       layoutContent,
@@ -517,14 +520,14 @@ describe("Configurable UI Themes and Appearance", () => {
       "Layout.astro must apply neu-surface to html to match document canvas",
     );
     assert.match(
-      layoutContent,
-      /metaLight\.setAttribute\("content",\s*lightColor\)/,
-      "Inline blocking script must synchronize light theme-color meta tag",
+      themeInitContent,
+      /metaLight\??\.setAttribute\("content",\s*lightColor\)/,
+      "theme-init.js must synchronize light theme-color meta tag",
     );
     assert.match(
-      layoutContent,
-      /metaDark\.setAttribute\("content",\s*darkColor\)/,
-      "Inline blocking script must synchronize dark theme-color meta tag",
+      themeInitContent,
+      /metaDark\??\.setAttribute\("content",\s*darkColor\)/,
+      "theme-init.js must synchronize dark theme-color meta tag",
     );
   });
 
