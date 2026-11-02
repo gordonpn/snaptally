@@ -44,6 +44,24 @@ export const COLOR_SCHEME_STORAGE_KEY = "snaptally_color_scheme";
 export type ThemeStyle = "neumorphic" | "flat";
 export type ColorScheme = "system" | "light" | "dark";
 
+export function syncThemeColorMeta(themeStyle?: ThemeStyle, colorScheme?: ColorScheme): void {
+  if (typeof document === "undefined" || typeof document.querySelector !== "function") return;
+  const lightColor = themeStyle === "flat" ? "#f8fafc" : "#e0e5ec";
+  const darkColor = themeStyle === "flat" ? "#0f172a" : "#1e232a";
+  const metaLight = document.querySelector('meta[name="theme-color"][media*="light"]');
+  const metaDark = document.querySelector('meta[name="theme-color"][media*="dark"]');
+  if (colorScheme === "light") {
+    metaLight?.setAttribute("content", lightColor);
+    metaDark?.setAttribute("content", lightColor);
+  } else if (colorScheme === "dark") {
+    metaLight?.setAttribute("content", darkColor);
+    metaDark?.setAttribute("content", darkColor);
+  } else {
+    metaLight?.setAttribute("content", lightColor);
+    metaDark?.setAttribute("content", darkColor);
+  }
+}
+
 const CANONICAL_MERCHANT_RULES = new Map(
   Object.values(DEFAULT_CANONICAL_RULES).map((rule) => [rule.canonicalName.toLowerCase(), rule]),
 );
@@ -657,6 +675,7 @@ export function intakeForm() {
           document.documentElement.removeAttribute("data-theme-style");
         }
       }
+      syncThemeColorMeta(style, this.colorScheme);
     },
 
     setColorScheme(scheme: ColorScheme): void {
@@ -679,6 +698,7 @@ export function intakeForm() {
           document.documentElement.removeAttribute("data-theme");
         }
       }
+      syncThemeColorMeta(this.themeStyle, scheme);
     },
 
     openSettings(): void {
@@ -989,6 +1009,7 @@ export function intakeForm() {
           ) {
             this.colorScheme = storedColorScheme;
           }
+          syncThemeColorMeta(this.themeStyle, this.colorScheme);
           const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
           if (storedToken) {
             this.token = storedToken;

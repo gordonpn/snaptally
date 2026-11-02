@@ -9,7 +9,7 @@ const { title = "SnapTally" } = Astro.props;
 ---
 
 <!doctype html>
-<html lang="en" class="h-full overscroll-none">
+<html lang="en" class="h-full overscroll-none neu-surface">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -17,6 +17,9 @@ const { title = "SnapTally" } = Astro.props;
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <title>{title}</title>
+
+    <meta name="theme-color" content="#e0e5ec" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1e232a" media="(prefers-color-scheme: dark)" />
 
     <script is:inline>
       (function () {
@@ -33,6 +36,20 @@ const { title = "SnapTally" } = Astro.props;
           } else {
             document.documentElement.removeAttribute("data-theme");
           }
+          var lightColor = style === "flat" ? "#f8fafc" : "#e0e5ec";
+          var darkColor = style === "flat" ? "#0f172a" : "#1e232a";
+          var metaLight = document.querySelector('meta[name="theme-color"][media*="light"]');
+          var metaDark = document.querySelector('meta[name="theme-color"][media*="dark"]');
+          if (scheme === "light") {
+            if (metaLight) metaLight.setAttribute("content", lightColor);
+            if (metaDark) metaDark.setAttribute("content", lightColor);
+          } else if (scheme === "dark") {
+            if (metaLight) metaLight.setAttribute("content", darkColor);
+            if (metaDark) metaDark.setAttribute("content", darkColor);
+          } else {
+            if (metaLight) metaLight.setAttribute("content", lightColor);
+            if (metaDark) metaDark.setAttribute("content", darkColor);
+          }
         } catch (_) {}
       })();
     </script>
@@ -45,9 +62,6 @@ const { title = "SnapTally" } = Astro.props;
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="SnapTally" />
-
-    <meta name="theme-color" content="#e0e5ec" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#1e232a" media="(prefers-color-scheme: dark)" />
   </head>
   <body class="h-full overscroll-none neu-surface antialiased">
     <slot />

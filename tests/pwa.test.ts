@@ -511,11 +511,37 @@ describe("Configurable UI Themes and Appearance", () => {
       /document\.documentElement\.setAttribute\("data-theme",\s*scheme\)/,
       "Inline blocking script must set data-theme attribute",
     );
+    assert.match(
+      layoutContent,
+      /<html[^>]+class="[^"]*neu-surface/,
+      "Layout.astro must apply neu-surface to html to match document canvas",
+    );
+    assert.match(
+      layoutContent,
+      /metaLight\.setAttribute\("content",\s*lightColor\)/,
+      "Inline blocking script must synchronize light theme-color meta tag",
+    );
+    assert.match(
+      layoutContent,
+      /metaDark\.setAttribute\("content",\s*darkColor\)/,
+      "Inline blocking script must synchronize dark theme-color meta tag",
+    );
   });
 
   it("global.css declares modern minimal flat theme tokens and component overrides", () => {
     const cssPath = path.join(ROOT_DIR, "src", "styles", "global.css");
     const cssContent = fs.readFileSync(cssPath, "utf-8");
+
+    assert.match(
+      cssContent,
+      /html,\s*body\s*\{[^}]*background-color:\s*var\(--neu-surface\);/s,
+      "global.css must bind background-color: var(--neu-surface) on html, body",
+    );
+    assert.match(
+      cssContent,
+      /:root,\s*\[data-theme\]\s*\{[^}]*--root-bg:\s*var\(--neu-surface\);/s,
+      "global.css must bind --root-bg: var(--neu-surface) to override DaisyUI root canvas color",
+    );
 
     assert.match(
       cssContent,

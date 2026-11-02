@@ -7,6 +7,7 @@ import {
   getTodayDate,
   intakeForm,
   type RecentTransaction,
+  syncThemeColorMeta,
   THEME_STYLE_STORAGE_KEY,
   TOKEN_STORAGE_KEY,
 } from "../src/scripts/intake-form.ts";
@@ -1039,6 +1040,64 @@ describe("intakeForm Token Persistence (Scenario 3)", () => {
       assert.strictEqual(form.themeStyle, "flat");
       form.setColorScheme("dark");
       assert.strictEqual(form.colorScheme, "dark");
+    });
+
+    describe("syncThemeColorMeta", () => {
+      let mockMetaLight: MockElement;
+      let mockMetaDark: MockElement;
+
+      beforeEach(() => {
+        mockMetaLight = new MockElement();
+        mockMetaDark = new MockElement();
+        Object.defineProperty(globalThis, "document", {
+          value: {
+            querySelector(selector: string) {
+              if (selector.includes('media*="light"')) return mockMetaLight;
+              if (selector.includes('media*="dark"')) return mockMetaDark;
+              return null;
+            },
+          },
+          writable: true,
+          configurable: true,
+        });
+      });
+
+      it("synchronizes flat theme colors across color schemes", () => {
+        syncThemeColorMeta("flat", "light");
+        assert.strictEqual(mockMetaLight.getAttribute("content"), "#f8fafc");
+        assert.strictEqual(mockMetaDark.getAttribute("content"), "#f8fafc");
+
+        syncThemeColorMeta("flat", "dark");
+        assert.strictEqual(mockMetaLight.getAttribute("content"), "#0f172a");
+        assert.strictEqual(mockMetaDark.getAttribute("content"), "#0f172a");
+
+        syncThemeColorMeta("flat", "system");
+        assert.strictEqual(mockMetaLight.getAttribute("content"), "#f8fafc");
+        assert.strictEqual(mockMetaDark.getAttribute("content"), "#0f172a");
+      });
+
+      it("synchronizes neumorphic theme colors across color schemes", () => {
+        syncThemeColorMeta("neumorphic", "light");
+        assert.strictEqual(mockMetaLight.getAttribute("content"), "#e0e5ec");
+        assert.strictEqual(mockMetaDark.getAttribute("content"), "#e0e5ec");
+
+        syncThemeColorMeta("neumorphic", "dark");
+        assert.strictEqual(mockMetaLight.getAttribute("content"), "#1e232a");
+        assert.strictEqual(mockMetaDark.getAttribute("content"), "#1e232a");
+
+        syncThemeColorMeta("neumorphic", "system");
+        assert.strictEqual(mockMetaLight.getAttribute("content"), "#e0e5ec");
+        assert.strictEqual(mockMetaDark.getAttribute("content"), "#1e232a");
+      });
+
+      it("safely handles missing document or missing querySelector without errors", () => {
+        Object.defineProperty(globalThis, "document", {
+          value: undefined,
+          writable: true,
+          configurable: true,
+        });
+        assert.doesNotThrow(() => syncThemeColorMeta("flat", "dark"));
+      });
     });
   });
 

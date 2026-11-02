@@ -45,6 +45,13 @@ body {
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+  background-color: var(--neu-surface);
+  color: var(--neu-text);
+}
+
+:root,
+[data-theme] {
+  --root-bg: var(--neu-surface);
 }
 
 button,
