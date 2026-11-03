@@ -18,6 +18,7 @@ import {
   saveOutboxItem,
   setupSyncListeners,
   syncOutbox,
+  type TransactionCurrency,
 } from "./outbox.ts";
 
 export interface RecentTransaction {
@@ -30,6 +31,7 @@ export interface RecentTransaction {
   gross_amount: number;
   reimbursement: number;
   net_spend: number;
+  currency?: string;
   created_at: string;
 }
 
@@ -99,6 +101,7 @@ export function intakeForm() {
     // Keypad and amount state
     amountCents: 0,
     maxCents: 10000000,
+    currency: "USD" as TransactionCurrency,
 
     // Credit / Reimbursement sign state
     isNegative: false,
@@ -190,7 +193,8 @@ export function intakeForm() {
     },
 
     get amountFontSizeClass(): string {
-      const displayLength = (this.isNegative ? 1 : 0) + this.formattedAmount.length;
+      const displayLength =
+        (this.isNegative ? 1 : 0) + this.currency.length + 1 + this.formattedAmount.length;
       if (displayLength >= 10) {
         return "text-2xl sm:text-3xl";
       }
@@ -205,6 +209,10 @@ export function intakeForm() {
         return "Save Credit";
       }
       return "Save Transaction";
+    },
+
+    setCurrency(currency: TransactionCurrency): void {
+      this.currency = currency;
     },
 
     get subcategories(): string[] {
@@ -998,6 +1006,7 @@ export function intakeForm() {
               gross_amount: item.gross_amount,
               reimbursement: item.reimbursement,
               net_spend: item.gross_amount - item.reimbursement,
+              currency: item.currency ?? "USD",
               created_at: item.created_at,
             };
             this.recentTransactions = [
@@ -1145,6 +1154,7 @@ export function intakeForm() {
           : submittedAmountCents / 100;
         const submittedReimbursement = 0.0;
         const formattedGross = (submittedAmountCents / 100).toFixed(2);
+        const currencyLabel = this.currency === "CAD" ? "CAD " : "";
 
         const outboxItem: OutboxItem = {
           id:
@@ -1158,6 +1168,7 @@ export function intakeForm() {
           merchant: trimmedMerchant,
           gross_amount: submittedGrossAmount,
           reimbursement: submittedReimbursement,
+          currency: this.currency,
           created_at: new Date().toISOString(),
         };
 
@@ -1167,9 +1178,9 @@ export function intakeForm() {
 
         // 2. 0ms UI reset
         if (isCredit) {
-          this.statusMessage = `Saved credit of $${formattedGross} at ${trimmedMerchant}`;
+          this.statusMessage = `Saved credit of ${currencyLabel}$${formattedGross} at ${trimmedMerchant}`;
         } else {
-          this.statusMessage = `Saved $${formattedGross} at ${trimmedMerchant}`;
+          this.statusMessage = `Saved ${currencyLabel}$${formattedGross} at ${trimmedMerchant}`;
         }
         this.isError = false;
         this.amountCents = 0;

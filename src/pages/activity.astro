@@ -185,6 +185,9 @@ import Layout from "../layouts/Layout.astro";
                     <template x-if="Number(tx.reimbursement) > 0">
                       <span class="badge badge-accent badge-xs shrink-0">Split</span>
                     </template>
+                    <template x-if="tx.currency === 'CAD'">
+                      <span class="badge badge-primary badge-xs shrink-0">CAD</span>
+                    </template>
                   </div>
                   <div class="text-xs text-neu-text-muted flex items-center gap-1.5 mt-0.5">
                     <span x-text="tx.subcategory"></span>
@@ -203,11 +206,11 @@ import Layout from "../layouts/Layout.astro";
                     class="font-mono font-bold text-sm"
                     :class="Number(tx.net_spend) < 0 ? 'text-secondary' : 'text-neu-text'"
                   >
-                    <span x-text="Number(tx.net_spend) < 0 ? '-$' + Math.abs(Number(tx.net_spend)).toFixed(2) : '$' + Number(tx.net_spend).toFixed(2)"></span>
+                    <span x-text="(tx.currency === 'CAD' ? 'CAD ' : '') + (Number(tx.net_spend) < 0 ? '-$' + Math.abs(Number(tx.net_spend)).toFixed(2) : '$' + Number(tx.net_spend).toFixed(2))"></span>
                   </div>
                   <template x-if="Number(tx.reimbursement) > 0">
                     <div class="text-[11px] font-mono text-neu-text-muted">
-                      Gross: $<span x-text="Number(tx.gross_amount).toFixed(2)"></span>
+                      Gross: <span x-text="tx.currency === 'CAD' ? 'CAD ' : ''"></span>$<span x-text="Number(tx.gross_amount).toFixed(2)"></span>
                     </div>
                   </template>
                 </div>
