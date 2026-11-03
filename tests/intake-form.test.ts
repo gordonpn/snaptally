@@ -1885,52 +1885,62 @@ describe("intakeForm Credit and Reimbursement Workflows (Issue #89)", () => {
   it("scales amountFontSizeClass responsively based on rendered character length", () => {
     const form = intakeForm();
 
-    // Default $0.00 (5 chars) -> text-4xl sm:text-5xl
-    assert.strictEqual(form.amountFontSizeClass, "text-4xl sm:text-5xl");
+    // USD $0.00 (9 chars) -> text-3xl sm:text-4xl
+    assert.strictEqual(form.amountFontSizeClass, "text-3xl sm:text-4xl");
 
-    // $999.99 (7 chars) -> text-4xl sm:text-5xl
+    // USD $9.99 (9 chars) -> text-3xl sm:text-4xl
+    form.amountCents = 999;
+    assert.strictEqual(form.formattedAmount, "$9.99");
+    assert.strictEqual(form.amountFontSizeClass, "text-3xl sm:text-4xl");
+
+    // USD $99.99 (10 chars) -> text-2xl sm:text-3xl
+    form.amountCents = 9999;
+    assert.strictEqual(form.formattedAmount, "$99.99");
+    assert.strictEqual(form.amountFontSizeClass, "text-2xl sm:text-3xl");
+
+    // USD $999.99 (11 chars) -> text-2xl sm:text-3xl
     form.amountCents = 99999;
     assert.strictEqual(form.formattedAmount, "$999.99");
-    assert.strictEqual(form.amountFontSizeClass, "text-4xl sm:text-5xl");
+    assert.strictEqual(form.amountFontSizeClass, "text-2xl sm:text-3xl");
 
-    // -$999.99 (8 chars) -> text-3xl sm:text-4xl
+    // -USD $999.99 (12 chars) -> text-2xl sm:text-3xl
     form.isNegative = true;
-    assert.strictEqual(form.amountFontSizeClass, "text-3xl sm:text-4xl");
+    assert.strictEqual(form.amountFontSizeClass, "text-2xl sm:text-3xl");
 
     // $9999.99 (8 chars) -> text-3xl sm:text-4xl
     form.isNegative = false;
     form.amountCents = 999999;
     assert.strictEqual(form.formattedAmount, "$9999.99");
-    assert.strictEqual(form.amountFontSizeClass, "text-3xl sm:text-4xl");
+    assert.strictEqual(form.amountFontSizeClass, "text-2xl sm:text-3xl");
 
-    // -$9999.99 (9 chars) -> text-3xl sm:text-4xl
-    form.isNegative = true;
-    assert.strictEqual(form.amountFontSizeClass, "text-3xl sm:text-4xl");
-
-    // $10000.00 (9 chars) -> text-3xl sm:text-4xl
-    form.isNegative = false;
-    form.amountCents = 1000000;
-    assert.strictEqual(form.formattedAmount, "$10000.00");
-    assert.strictEqual(form.amountFontSizeClass, "text-3xl sm:text-4xl");
-
-    // -$10000.00 (10 chars) -> text-2xl sm:text-3xl
+    // -USD $9999.99 (13 chars) -> text-2xl sm:text-3xl
     form.isNegative = true;
     assert.strictEqual(form.amountFontSizeClass, "text-2xl sm:text-3xl");
 
-    // $100000.00 (10 chars) -> text-2xl sm:text-3xl
+    // USD $10000.00 (13 chars) -> text-2xl sm:text-3xl
+    form.isNegative = false;
+    form.amountCents = 1000000;
+    assert.strictEqual(form.formattedAmount, "$10000.00");
+    assert.strictEqual(form.amountFontSizeClass, "text-2xl sm:text-3xl");
+
+    // -USD $10000.00 (14 chars) -> text-2xl sm:text-3xl
+    form.isNegative = true;
+    assert.strictEqual(form.amountFontSizeClass, "text-2xl sm:text-3xl");
+
+    // USD $100000.00 (14 chars) -> text-2xl sm:text-3xl
     form.isNegative = false;
     form.amountCents = 10000000;
     assert.strictEqual(form.formattedAmount, "$100000.00");
     assert.strictEqual(form.amountFontSizeClass, "text-2xl sm:text-3xl");
 
-    // -$100000.00 (11 chars) -> text-2xl sm:text-3xl
+    // -USD $100000.00 (15 chars) -> text-2xl sm:text-3xl
     form.isNegative = true;
     assert.strictEqual(form.amountFontSizeClass, "text-2xl sm:text-3xl");
 
-    // Clear restores text-4xl sm:text-5xl
+    // Clear restores the zero-amount tier for the retained currency.
     form.pressClear();
     form.isNegative = false;
-    assert.strictEqual(form.amountFontSizeClass, "text-4xl sm:text-5xl");
+    assert.strictEqual(form.amountFontSizeClass, "text-3xl sm:text-4xl");
   });
 
   it("submits credit transaction with negative gross_amount and zero reimbursement", async () => {

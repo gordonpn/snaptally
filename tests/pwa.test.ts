@@ -358,11 +358,17 @@ describe("Currency selection and display", () => {
     for (const button of currencyButtons) {
       assert.match(button, /min-h-\[44px\]/);
       assert.match(button, /min-w-\[44px\]/);
-      assert.match(button, /:aria-pressed=/);
     }
+    assert.match(indexContent, /:aria-pressed="currency === 'USD'"/);
+    assert.match(indexContent, /:aria-pressed="currency === 'CAD'"/);
 
     assert.match(activityContent, /tx\.currency === 'CAD'/);
     assert.match(activityContent, />CAD<\/span>/);
+    assert.match(activityContent, /tx\.currency === 'CAD' \? 'CAD ' : ''/);
+    assert.match(
+      activityContent,
+      /Gross: <span x-text="tx\.currency === 'CAD' \? 'CAD ' : ''"><\/span>\$/,
+    );
   });
 });
 

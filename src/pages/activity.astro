@@ -210,7 +210,7 @@ import Layout from "../layouts/Layout.astro";
                   </div>
                   <template x-if="Number(tx.reimbursement) > 0">
                     <div class="text-[11px] font-mono text-neu-text-muted">
-                      Gross: $<span x-text="Number(tx.gross_amount).toFixed(2)"></span>
+                      Gross: <span x-text="tx.currency === 'CAD' ? 'CAD ' : ''"></span>$<span x-text="Number(tx.gross_amount).toFixed(2)"></span>
                     </div>
                   </template>
                 </div>

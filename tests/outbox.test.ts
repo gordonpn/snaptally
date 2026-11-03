@@ -761,6 +761,7 @@ describe("IndexedDB Native Storage Branch", () => {
         merchant: "Bank",
         gross_amount: 100,
         reimbursement: 0,
+        currency: "CAD",
         created_at: new Date().toISOString(),
       };
 
@@ -768,6 +769,7 @@ describe("IndexedDB Native Storage Branch", () => {
       const items = await getOutbox();
       assert.strictEqual(items.length, 1);
       assert.strictEqual(items[0].id, "idb-1");
+      assert.strictEqual(items[0].currency, "CAD");
 
       await deleteOutboxItem("idb-1");
       assert.strictEqual(await getOutboxCount(), 0);

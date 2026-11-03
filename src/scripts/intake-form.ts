@@ -193,7 +193,8 @@ export function intakeForm() {
     },
 
     get amountFontSizeClass(): string {
-      const displayLength = (this.isNegative ? 1 : 0) + this.formattedAmount.length;
+      const displayLength =
+        (this.isNegative ? 1 : 0) + this.currency.length + 1 + this.formattedAmount.length;
       if (displayLength >= 10) {
         return "text-2xl sm:text-3xl";
       }
