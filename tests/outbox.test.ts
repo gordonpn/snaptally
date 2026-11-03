@@ -114,6 +114,7 @@ describe("Background Sync Manager", () => {
       merchant: "Sweetgreen",
       gross_amount: 18.5,
       reimbursement: 0,
+      currency: "CAD",
       created_at: new Date().toISOString(),
     };
 
@@ -139,9 +140,14 @@ describe("Background Sync Manager", () => {
       globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
         const urlStr = String(url);
         if (urlStr.includes("/api/transactions") && init?.method === "POST") {
-          const body = JSON.parse(String(init.body)) as { merchant: string; id: string };
+          const body = JSON.parse(String(init.body)) as {
+            merchant: string;
+            id: string;
+            currency: string;
+          };
           syncedIds.push(body.merchant);
           assert.strictEqual(body.id, `tx-${syncedIds.length}`);
+          assert.strictEqual(body.currency, syncedIds.length === 1 ? "CAD" : "USD");
           return new Response(JSON.stringify({ ok: true, id: `server-${syncedIds.length}` }), {
             status: 201,
             headers: { "Content-Type": "application/json" },

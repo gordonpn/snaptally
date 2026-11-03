@@ -340,6 +340,32 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
   });
 });
 
+describe("Currency selection and display", () => {
+  it("provides accessible USD and CAD controls and labels CAD activity", () => {
+    const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
+    const activityPath = path.join(ROOT_DIR, "src", "pages", "activity.astro");
+    const indexContent = fs.readFileSync(indexPath, "utf-8");
+    const activityContent = fs.readFileSync(activityPath, "utf-8");
+
+    assert.match(indexContent, /aria-label="Transaction currency"/);
+    assert.match(indexContent, /@click="setCurrency\('USD'\)"/);
+    assert.match(indexContent, /@click="setCurrency\('CAD'\)"/);
+
+    const currencyButtons = [
+      ...indexContent.matchAll(/<button[^>]*@click="setCurrency\('[A-Z]{3}'\)"[^>]*>/g),
+    ].map(([button]) => button);
+    assert.strictEqual(currencyButtons.length, 2);
+    for (const button of currencyButtons) {
+      assert.match(button, /min-h-\[44px\]/);
+      assert.match(button, /min-w-\[44px\]/);
+      assert.match(button, /:aria-pressed=/);
+    }
+
+    assert.match(activityContent, /tx\.currency === 'CAD'/);
+    assert.match(activityContent, />CAD<\/span>/);
+  });
+});
+
 describe("Intake text input assistance", () => {
   it("disables native text assistance on merchant, card, and token inputs", () => {
     const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");

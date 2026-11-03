@@ -1,6 +1,8 @@
 /**
  * Outbox item representing an un-synced transaction.
  */
+export type TransactionCurrency = "USD" | "CAD";
+
 export interface OutboxItem {
   id: string;
   date: string;
@@ -10,6 +12,7 @@ export interface OutboxItem {
   merchant: string;
   gross_amount: number;
   reimbursement: number;
+  currency?: TransactionCurrency;
   created_at: string;
   retry_count?: number;
   server_retry_count?: number;
@@ -594,6 +597,7 @@ async function flushOutbox(options: SyncOptions): Promise<SyncResult> {
         merchant: item.merchant,
         gross_amount: item.gross_amount,
         reimbursement: item.reimbursement,
+        currency: item.currency ?? "USD",
       };
 
       const headers: Record<string, string> = {

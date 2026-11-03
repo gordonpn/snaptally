@@ -71,7 +71,7 @@ flowchart TD
 The application uses native IndexedDB (`snaptally_db`, object store `outbox`) with resilient local storage fallback:
 
 1. The user taps **Save**.
-2. The transaction record is written immediately to the local IndexedDB outbox with a client-generated UUID, timestamp, and zero initial retry count.
+2. The transaction record, including its selected USD or CAD currency, is written immediately to the local IndexedDB outbox with a client-generated UUID, timestamp, and zero initial retry count.
 3. The UI resets the input fields immediately and provides instant feedback with 0ms perceived latency.
 4. The background sync runner flushes queued items sequentially to `POST /api/transactions` with the pre-shared Bearer token.
 5. Upon receiving an HTTP 201 response, the record is removed from IndexedDB and prepended to the local recent activity feed.

@@ -137,7 +137,7 @@ import Layout from "../layouts/Layout.astro";
               isNegative ? 'text-secondary' : 'text-neu-text',
               amountFontSizeClass
             ]"
-            x-text="(isNegative ? '-' : '') + formattedAmount"
+            x-text="(isNegative ? '-' : '') + currency + ' ' + formattedAmount"
             aria-live="off"
           >
             $0.00
@@ -149,6 +149,23 @@ import Layout from "../layouts/Layout.astro";
         <div class="w-11 min-w-[44px] pointer-events-none" aria-hidden="true"></div>
       </div>
     </section>
+
+    <div class="flex justify-center gap-2" role="group" aria-label="Transaction currency">
+      <button
+        type="button"
+        class="neu-pressed rounded-full min-h-[44px] min-w-[44px] px-3 text-xs font-semibold"
+        :class="currency === 'USD' ? 'neu-inset-sm text-primary' : 'neu-raised-sm text-neu-text'"
+        :aria-pressed="currency === 'USD'"
+        @click="setCurrency('USD')"
+      >USD</button>
+      <button
+        type="button"
+        class="neu-pressed rounded-full min-h-[44px] min-w-[44px] px-3 text-xs font-semibold"
+        :class="currency === 'CAD' ? 'neu-inset-sm text-primary' : 'neu-raised-sm text-neu-text'"
+        :aria-pressed="currency === 'CAD'"
+        @click="setCurrency('CAD')"
+      >CAD</button>
+    </div>
 
     <!-- Selectors Section -->
     <section class="space-y-1.5 text-xs sm:text-sm">
@@ -428,7 +445,7 @@ import Layout from "../layouts/Layout.astro";
                 <article class="neu-inset rounded-xl p-3 mb-2 text-sm">
                   <div class="flex justify-between gap-2 font-semibold">
                     <span class="break-words min-w-0" x-text="item.merchant"></span>
-                    <span class="font-mono whitespace-nowrap" x-text="item.gross_amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })"></span>
+                    <span class="font-mono whitespace-nowrap" x-text="item.gross_amount.toLocaleString('en-US', { style: 'currency', currency: item.currency ?? 'USD' })"></span>
                   </div>
                   <p class="text-xs text-neu-text mt-1"><span x-text="item.date"></span> · Retries: <span x-text="retryCount(item)"></span></p>
                 </article>
@@ -440,7 +457,7 @@ import Layout from "../layouts/Layout.astro";
                 <article class="neu-inset rounded-xl p-3 mb-2 text-sm">
                   <div class="flex justify-between gap-2 font-semibold">
                     <span class="break-words min-w-0" x-text="item.payload.merchant"></span>
-                    <span class="font-mono whitespace-nowrap" x-text="item.payload.gross_amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })"></span>
+                    <span class="font-mono whitespace-nowrap" x-text="item.payload.gross_amount.toLocaleString('en-US', { style: 'currency', currency: item.payload.currency ?? 'USD' })"></span>
                   </div>
                   <p class="text-xs text-neu-text mt-1"><span x-text="item.payload.date"></span> · Retries: <span x-text="Math.max(item.retry_count, retryCount(item.payload))"></span></p>
                   <template x-if="item.http_status !== undefined">

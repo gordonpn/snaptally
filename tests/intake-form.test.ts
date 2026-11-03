@@ -1465,6 +1465,32 @@ describe("intakeForm Primary Intake Date Handling (Scenario 5)", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("submits CAD when selected and confirms the currency", async () => {
+    const form = intakeForm();
+    let postedPayload: Record<string, unknown> = {};
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: unknown, options?: RequestInit) => {
+      postedPayload = JSON.parse(String(options?.body));
+      return new Response(JSON.stringify({ ok: true, id: "tx-cad" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      form.amountCents = 4500;
+      form.card = "Amex Gold";
+      form.merchant = "IGA";
+      form.setCurrency("CAD");
+
+      assert.strictEqual(await form.submitTransaction(), true);
+      assert.strictEqual(postedPayload.currency, "CAD");
+      assert.strictEqual(form.statusMessage, "Saved CAD $45.00 at IGA");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 describe("intakeForm Secondary Date Selection & Reset (Scenario 6)", () => {

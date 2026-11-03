@@ -9,6 +9,7 @@ Logging transactions at checkout using full spreadsheet applications or heavy pe
 - Single-tap pill chips and numeric amount entry for sub-5-second logging.
 - Custom merchant, card, and API token fields ask browsers and keyboards to suppress text assistance while retaining local merchant suggestions.
 - Instant submission with an optimistic client-side outbox using IndexedDB.
+- USD and CAD transaction entry, retained while queued offline and synchronized in the selected currency.
 - Planned monthly Conscious Spending Plan budget analysis, burn-rate pacing, and sinking fund balance tracking.
 - Zero server maintenance and durable persistence on Cloudflare edge infrastructure.
 - Periodic reconciliation or export back to macro budget spreadsheets (such as Google Sheets).
