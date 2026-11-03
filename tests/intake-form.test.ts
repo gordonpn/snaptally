@@ -802,30 +802,22 @@ describe("intakeForm Card and Merchant Selection", () => {
     assert.strictEqual(form.card, "Apple Card");
   });
 
-  it("allows selecting a merchant from frequent merchant pills", () => {
+  it("allows selecting a merchant directly or via suggestions", () => {
     const form = intakeForm();
-    assert.strictEqual(form.merchant, DEFAULT_FREQUENT_MERCHANTS[0]);
+    assert.strictEqual(form.merchant, "");
     form.selectMerchant("Dig");
     assert.strictEqual(form.merchant, "Dig");
     assert.strictEqual(form.isCustomMerchant, false);
   });
 
-  it("allows toggling and updating custom merchant input", () => {
+  it("allows updating merchant input directly", () => {
     const form = intakeForm();
-    form.toggleCustomMerchant();
-    assert.strictEqual(form.isCustomMerchant, true);
-
-    form.updateCustomMerchant("Local Bakery");
+    form.updateMerchant("Local Bakery");
+    assert.strictEqual(form.merchant, "Local Bakery");
     assert.strictEqual(form.customMerchantInput, "Local Bakery");
-    assert.strictEqual(form.merchant, "Local Bakery");
 
-    form.toggleCustomMerchant();
-    assert.strictEqual(form.isCustomMerchant, false);
-    assert.strictEqual(form.merchant, DEFAULT_FREQUENT_MERCHANTS[0]);
-
-    form.toggleCustomMerchant();
-    assert.strictEqual(form.isCustomMerchant, true);
-    assert.strictEqual(form.merchant, "Local Bakery");
+    form.updateMerchant("Another Bakery");
+    assert.strictEqual(form.merchant, "Another Bakery");
   });
 });
 
@@ -1367,7 +1359,7 @@ describe("intakeForm Frequent Merchants Loading", () => {
     try {
       await form.loadFrequentMerchants();
       assert.deepStrictEqual(form.frequentMerchants, ["Market Basket", "Star Market"]);
-      assert.strictEqual(form.merchant, "Market Basket");
+      assert.strictEqual(form.merchant, "");
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -1668,7 +1660,7 @@ describe("intakeForm Submission Validation and Error Handling", () => {
       assert.strictEqual(success, true);
       assert.strictEqual(form.isCustomMerchant, false);
       assert.strictEqual(form.customMerchantInput, "");
-      assert.strictEqual(form.merchant, DEFAULT_FREQUENT_MERCHANTS[0]);
+      assert.strictEqual(form.merchant, "");
       assert.strictEqual(form.statusMessage, "Saved $2.50 at Neighborhood Pharmacy");
     } finally {
       globalThis.fetch = originalFetch;
@@ -2078,14 +2070,17 @@ describe("intakeForm Merchant Autocomplete Dropdown (#114)", () => {
     };
   }
 
-  it("returns empty suggestions when customMerchantInput is empty or whitespace", () => {
+  it("returns top frequent merchants when input is empty or whitespace", () => {
     const form = intakeForm();
-    form.allMerchants = ["Trader Joe's", "Tatte Bakery", "Whole Foods"];
+    form.frequentMerchants = ["Trader Joe's", "Tatte Bakery", "Whole Foods"];
 
-    form.customMerchantInput = "";
-    assert.deepStrictEqual(form.merchantSuggestions, []);
+    form.merchant = "";
+    assert.deepStrictEqual(form.merchantSuggestions, ["Trader Joe's", "Tatte Bakery", "Whole Foods"]);
 
-    form.customMerchantInput = "   ";
+    form.merchant = "   ";
+    assert.deepStrictEqual(form.merchantSuggestions, ["Trader Joe's", "Tatte Bakery", "Whole Foods"]);
+
+    form.frequentMerchants = [];
     assert.deepStrictEqual(form.merchantSuggestions, []);
   });
 
@@ -2272,25 +2267,32 @@ describe("intakeForm Merchant Autocomplete Dropdown (#114)", () => {
     assert.strictEqual(form.customMerchantInput, "Existing");
   });
 
-  it("opens suggestions on focus when text is present and matches exist", () => {
+  it("opens suggestions on focus when text is present or frequent merchants exist", () => {
     const form = intakeForm();
     form.allMerchants = ["Tatte Bakery"];
-    form.customMerchantInput = "tat";
+    form.merchant = "tat";
     form.merchantSuggestionsOpen = false;
 
-    form.onCustomMerchantFocus();
+    form.onMerchantFocus();
     assert.strictEqual(form.merchantSuggestionsOpen, true);
 
-    // Empty input: does not open on focus
-    form.customMerchantInput = "";
+    // Empty input with frequent merchants: opens on focus
+    form.merchant = "";
+    form.frequentMerchants = ["Star Market", "Trader Joe's"];
     form.merchantSuggestionsOpen = false;
-    form.onCustomMerchantFocus();
+    form.onMerchantFocus();
+    assert.strictEqual(form.merchantSuggestionsOpen, true);
+
+    // Empty input with no frequent merchants: does not open on focus
+    form.frequentMerchants = [];
+    form.merchantSuggestionsOpen = false;
+    form.onMerchantFocus();
     assert.strictEqual(form.merchantSuggestionsOpen, false);
 
-    // No matches: does not open on focus
-    form.customMerchantInput = "xyz";
+    // No matches for typed text: does not open on focus
+    form.merchant = "xyz";
     form.merchantSuggestionsOpen = false;
-    form.onCustomMerchantFocus();
+    form.onMerchantFocus();
     assert.strictEqual(form.merchantSuggestionsOpen, false);
   });
 
@@ -2648,5 +2650,118 @@ describe("intakeForm Merchant Autocomplete Dropdown (#114)", () => {
 
     assert.strictEqual(form.highlightedMerchantIndex, -1);
     assert.strictEqual(form.highlightedMerchant, null);
+  });
+});
+
+describe("Direct merchant autocomplete input (Issue #144)", () => {
+  it("initializes with empty merchant input and displays top frequent merchants on focus (Scenario 1 & 2)", () => {
+    const form = intakeForm();
+    assert.strictEqual(form.merchant, "");
+    assert.strictEqual(form.merchantSuggestionsOpen, false);
+
+    form.frequentMerchants = ["Star Market", "Trader Joe's", "Whole Foods"];
+    form.onMerchantFocus();
+    assert.strictEqual(form.merchantSuggestionsOpen, true);
+    assert.deepStrictEqual(form.merchantSuggestions, ["Star Market", "Trader Joe's", "Whole Foods"]);
+
+    // Tapping a frequent merchant populates the field and closes dropdown
+    form.chooseMerchantSuggestion("Trader Joe's");
+    assert.strictEqual(form.merchant, "Trader Joe's");
+    assert.strictEqual(form.merchantSuggestionsOpen, false);
+  });
+
+  it("filters suggestions interactively and automatically infers category when suggestion is selected (Scenario 3)", () => {
+    const form = intakeForm();
+    form.allMerchants = ["Tatte Bakery", "Trader Joe's", "Star Market"];
+    form.onMerchantFocus();
+
+    form.updateMerchant("tat");
+    assert.strictEqual(form.merchantSuggestionsOpen, true);
+    assert.deepStrictEqual(form.merchantSuggestions, ["Tatte Bakery"]);
+
+    // Selecting Tatte Bakery auto-infers parent bucket and subcategory
+    form.chooseMerchantSuggestion("Tatte Bakery");
+    assert.strictEqual(form.merchant, "Tatte Bakery");
+    assert.strictEqual(form.merchantSuggestionsOpen, false);
+    assert.strictEqual(form.parentBucket, "Guilt-Free");
+    assert.strictEqual(form.subcategory, "Coffee & Snacks");
+  });
+
+  it("stores a novel merchant directly without requiring mode toggle or state switch (Scenario 4)", async () => {
+    const form = intakeForm();
+    form.init();
+    form.token = "test-token";
+    form.pressDigit(1);
+    form.pressDigit(2);
+    form.pressDigit(5);
+    form.pressDigit(0); // $12.50
+    form.selectCard("Visa");
+
+    let submittedPayload: Record<string, unknown> | null = null;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        submittedPayload = JSON.parse(init.body as string);
+        return new Response(JSON.stringify({ ok: true, id: "tx-novel" }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ merchants: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      // Type novel merchant directly
+      form.updateMerchant("Corner Bodega");
+      assert.strictEqual(form.merchant, "Corner Bodega");
+
+      const success = await form.submitTransaction();
+      assert.strictEqual(success, true);
+      assert.ok(submittedPayload);
+      assert.strictEqual(submittedPayload?.merchant, "Corner Bodega");
+      assert.ok(form.allMerchants.includes("Corner Bodega"));
+      assert.strictEqual(form.merchant, "Corner Bodega");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("exposes autoInferCategory helper that updates merchant and applies defaults", () => {
+    const form = intakeForm();
+    form.autoInferCategory("Tatte Bakery");
+    assert.strictEqual(form.merchant, "Tatte Bakery");
+    assert.strictEqual(form.parentBucket, "Guilt-Free");
+    assert.strictEqual(form.subcategory, "Coffee & Snacks");
+  });
+
+  it("preserves typed merchant when frequent merchants request resolves afterwards", async () => {
+    const form = intakeForm();
+    form.token = "test-token";
+
+    const response = Promise.withResolvers<Response>();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () => response.promise;
+
+    try {
+      const loading = form.loadFrequentMerchants();
+      form.updateMerchant("Corner Bodega");
+      assert.strictEqual(form.merchant, "Corner Bodega");
+
+      response.resolve(
+        new Response(JSON.stringify({ merchants: ["Star Market", "Trader Joe's"] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      await loading;
+
+      assert.strictEqual(form.merchant, "Corner Bodega");
+      assert.deepStrictEqual(form.frequentMerchants, ["Star Market", "Trader Joe's"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
