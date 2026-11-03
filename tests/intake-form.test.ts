@@ -2699,7 +2699,7 @@ describe("Direct merchant autocomplete input (Issue #144)", () => {
 
     let submittedPayload: Record<string, unknown> | null = null;
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
       if (init?.method === "POST") {
         submittedPayload = JSON.parse(init.body as string);
         return new Response(JSON.stringify({ ok: true, id: "tx-novel" }), {
