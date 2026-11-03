@@ -125,7 +125,7 @@ export function intakeForm() {
     // Merchant selection and autocomplete cache
     frequentMerchants: [...DEFAULT_FREQUENT_MERCHANTS],
     allMerchants: [...DEFAULT_FREQUENT_MERCHANTS],
-    merchant: DEFAULT_FREQUENT_MERCHANTS[0],
+    merchant: "",
     isCustomMerchant: false,
     customMerchantInput: "",
     merchantSuggestionsOpen: false,
@@ -212,9 +212,22 @@ export function intakeForm() {
     },
 
     get merchantSuggestions(): string[] {
-      const query = this.customMerchantInput.trim().toLowerCase();
+      const query = (this.customMerchantInput.trim() || this.merchant.trim()).toLowerCase();
       if (!query) {
-        return [];
+        const seen = new Set<string>();
+        const list: string[] = [];
+        for (const m of this.frequentMerchants) {
+          if (typeof m !== "string") continue;
+          const trimmed = m.trim();
+          if (!trimmed) continue;
+          const lower = trimmed.toLowerCase();
+          if (!seen.has(lower)) {
+            seen.add(lower);
+            list.push(trimmed);
+          }
+          if (list.length >= 5) break;
+        }
+        return list;
       }
       const seen = new Set<string>();
       const distinct: string[] = [];
@@ -412,6 +425,7 @@ export function intakeForm() {
       this.merchantInferenceRequested = true;
       this.merchantUserSelected = true;
       this.merchant = merchant;
+      this.customMerchantInput = merchant;
       this.isCustomMerchant = false;
       this.applyMerchantDefaults();
     },
@@ -508,12 +522,12 @@ export function intakeForm() {
       }
     },
 
-    updateCustomMerchant(value: string): void {
+    updateMerchant(value: string): void {
       this.clearInferredDefaults();
       this.merchantInferenceRequested = false;
       this.merchantUserSelected = false;
-      this.customMerchantInput = value;
       this.merchant = value;
+      this.customMerchantInput = value;
       this.highlightedMerchantIndex = -1;
       this.highlightedMerchant = null;
       const name = value.trim().toLowerCase();
@@ -540,19 +554,33 @@ export function intakeForm() {
       }
     },
 
+    updateCustomMerchant(value: string): void {
+      this.updateMerchant(value);
+    },
+
     chooseMerchantSuggestion(suggestion: string): void {
       const trimmed = suggestion.trim();
       if (!trimmed) {
         return;
       }
-      this.updateCustomMerchant(trimmed);
+      this.clearInferredDefaults();
+      this.merchant = trimmed;
+      this.customMerchantInput = trimmed;
+      this.merchantUserSelected = true;
+      this.merchantInferenceRequested = true;
       this.closeMerchantSuggestions();
+      const normalized = normalizeIntakeMerchant(trimmed);
+      this.applyMerchantDefaults(normalized);
+    },
+
+    onMerchantFocus(): void {
+      if (this.merchantSuggestions.length > 0) {
+        this.merchantSuggestionsOpen = true;
+      }
     },
 
     onCustomMerchantFocus(): void {
-      if (this.customMerchantInput.trim().length > 0 && this.merchantSuggestions.length > 0) {
-        this.merchantSuggestionsOpen = true;
-      }
+      this.onMerchantFocus();
     },
 
     closeMerchantSuggestions(): void {
@@ -575,7 +603,7 @@ export function intakeForm() {
       }
     },
 
-    handleCustomMerchantKeydown(event: KeyboardEvent): void {
+    handleMerchantKeydown(event: KeyboardEvent): void {
       if (event.isComposing) {
         return;
       }
@@ -634,6 +662,17 @@ export function intakeForm() {
           this.chooseMerchantSuggestion(suggestions[this.highlightedMerchantIndex]);
         }
       }
+    },
+
+    handleCustomMerchantKeydown(event: KeyboardEvent): void {
+      this.handleMerchantKeydown(event);
+    },
+
+    autoInferCategory(merchant?: string): void {
+      if (typeof merchant === "string") {
+        this.merchant = merchant;
+      }
+      this.applyMerchantDefaults();
     },
 
     persistMerchants(): void {
@@ -782,7 +821,8 @@ export function intakeForm() {
           if (
             !this.isCustomMerchant &&
             !this.merchantUserSelected &&
-            (!this.merchant || !this.frequentMerchants.includes(this.merchant))
+            this.merchant &&
+            !this.frequentMerchants.includes(this.merchant)
           ) {
             this.merchant = this.frequentMerchants[0];
           }
@@ -1143,9 +1183,6 @@ export function intakeForm() {
         this.isError = false;
         this.amountCents = 0;
         this.isNegative = false;
-        if (this.isCustomMerchant) {
-          this.clearInferredDefaults();
-        }
         this.categoryManuallySelected = false;
         this.cardManuallySelected = false;
         this.merchantInferenceRequested = false;
@@ -1159,10 +1196,11 @@ export function intakeForm() {
         }
 
         if (this.isCustomMerchant) {
+          this.clearInferredDefaults();
           this.isCustomMerchant = false;
           this.merchantUserSelected = false;
+          this.merchant = "";
           this.customMerchantInput = "";
-          this.merchant = this.frequentMerchants[0] || "";
         }
 
         if (this.isCustomCard) {

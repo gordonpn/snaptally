@@ -341,12 +341,12 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
 });
 
 describe("Intake text input assistance", () => {
-  it("disables native text assistance on custom merchant, card, and token inputs", () => {
+  it("disables native text assistance on merchant, card, and token inputs", () => {
     const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
     const indexContent = fs.readFileSync(indexPath, "utf-8");
     const inputTags = [...indexContent.matchAll(/<input\b[^>]*>/g)].map(([input]) => input);
     const fields = [
-      ["custom merchant", 'x-model="customMerchantInput"'],
+      ["merchant", 'id="merchant-input"'],
       ["custom card", 'x-model="customCardInput"'],
       ["API token", 'id="api-token-input"'],
     ] as const;
@@ -366,43 +366,53 @@ describe("Intake text input assistance", () => {
     }
   });
 
-  it("declares combobox and listbox accessibility attributes on custom merchant input and dropdown", () => {
+  it("declares combobox and listbox accessibility attributes on merchant input and dropdown", () => {
     const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
     const indexContent = fs.readFileSync(indexPath, "utf-8");
 
-    const inputMatch = indexContent.match(/<input[\s\S]*?id="custom-merchant-input"[\s\S]*?\/>/);
-    assert.ok(inputMatch, "custom merchant input must exist");
-    const customMerchantInput = inputMatch[0];
+    const inputMatch = indexContent.match(/<input[\s\S]*?id="merchant-input"[\s\S]*?\/>/);
+    assert.ok(inputMatch, "merchant input must exist");
+    const merchantInput = inputMatch[0];
 
     assert.match(
-      customMerchantInput,
+      merchantInput,
+      /placeholder="Merchant name\.\.\."/,
+      "merchant input must specify placeholder 'Merchant name...'",
+    );
+    assert.match(
+      merchantInput,
       /role="combobox"/,
-      "custom merchant input must declare combobox role",
+      "merchant input must declare combobox role",
     );
     assert.match(
-      customMerchantInput,
+      merchantInput,
+      /x-model="merchant"/,
+      "merchant input must bind x-model='merchant'",
+    );
+    assert.match(
+      merchantInput,
       /aria-autocomplete="list"/,
-      "custom merchant input must declare aria-autocomplete list",
+      "merchant input must declare aria-autocomplete list",
     );
     assert.match(
-      customMerchantInput,
+      merchantInput,
       /:aria-expanded="merchantSuggestionsOpen && merchantSuggestions\.length > 0"/,
-      "custom merchant input must bind aria-expanded",
+      "merchant input must bind aria-expanded",
     );
     assert.match(
-      customMerchantInput,
+      merchantInput,
       /aria-controls="merchant-suggestions-list"/,
-      "custom merchant input must link to suggestions list via aria-controls",
+      "merchant input must link to suggestions list via aria-controls",
     );
     assert.match(
-      customMerchantInput,
+      merchantInput,
       /:aria-activedescendant="highlightedMerchantIndex >= 0 \? `merchant-opt-\$\{highlightedMerchantIndex\}` : undefined"/,
-      "custom merchant input must bind aria-activedescendant",
+      "merchant input must bind aria-activedescendant",
     );
     assert.match(
-      customMerchantInput,
-      /@keydown="handleCustomMerchantKeydown\(\$event\)"/,
-      "custom merchant input must handle keyboard navigation",
+      merchantInput,
+      /@keydown="handleMerchantKeydown\(\$event\)"/,
+      "merchant input must handle keyboard navigation",
     );
 
     assert.match(
@@ -419,7 +429,19 @@ describe("Intake text input assistance", () => {
     assert.match(
       indexContent,
       /@click\.outside="closeMerchantSuggestions\(\)"/,
-      "custom merchant container must dismiss dropdown on outside clicks",
+      "merchant container must dismiss dropdown on outside clicks",
+    );
+
+    // Pill row and Other... button must not exist
+    assert.doesNotMatch(
+      indexContent,
+      /frequentMerchants/,
+      "merchant section must not render frequent merchant pill buttons",
+    );
+    assert.doesNotMatch(
+      indexContent,
+      /toggleCustomMerchant\(\)/,
+      "merchant section must not contain an Other... toggle button",
     );
   });
 });
