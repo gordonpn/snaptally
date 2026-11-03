@@ -817,15 +817,6 @@ export function intakeForm() {
           }
           this.allMerchants = merged;
           this.persistMerchants();
-
-          if (
-            !this.isCustomMerchant &&
-            !this.merchantUserSelected &&
-            this.merchant &&
-            !this.frequentMerchants.includes(this.merchant)
-          ) {
-            this.merchant = this.frequentMerchants[0];
-          }
           this.syncHighlightedMerchant();
         }
       } catch {

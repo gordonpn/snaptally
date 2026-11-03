@@ -2736,4 +2736,32 @@ describe("Direct merchant autocomplete input (Issue #144)", () => {
     assert.strictEqual(form.parentBucket, "Guilt-Free");
     assert.strictEqual(form.subcategory, "Coffee & Snacks");
   });
+
+  it("preserves typed merchant when frequent merchants request resolves afterwards", async () => {
+    const form = intakeForm();
+    form.token = "test-token";
+
+    const response = Promise.withResolvers<Response>();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () => response.promise;
+
+    try {
+      const loading = form.loadFrequentMerchants();
+      form.updateMerchant("Corner Bodega");
+      assert.strictEqual(form.merchant, "Corner Bodega");
+
+      response.resolve(
+        new Response(JSON.stringify({ merchants: ["Star Market", "Trader Joe's"] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      await loading;
+
+      assert.strictEqual(form.merchant, "Corner Bodega");
+      assert.deepStrictEqual(form.frequentMerchants, ["Star Market", "Trader Joe's"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
