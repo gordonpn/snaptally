@@ -51,6 +51,22 @@ backfill-dry-run:
 backfill-local:
     node scripts/backfill.ts --local
 
+# Preview historical backfill row classification against local D1
+backfill-plan-local:
+    node scripts/backfill.ts plan --local
+
+# Preview historical backfill row classification against production D1
+backfill-plan-remote:
+    node scripts/backfill.ts plan --remote
+
+# Verify consistency between local D1 database and source sheets
+backfill-verify-local:
+    node scripts/backfill.ts verify --local
+
+# Verify consistency between production D1 database and source sheets
+backfill-verify-remote:
+    node scripts/backfill.ts verify --remote
+
 # Build static assets with Astro
 build:
     pnpm run build
