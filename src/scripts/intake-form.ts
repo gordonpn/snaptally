@@ -39,10 +39,12 @@ export { BUCKET_SUBCATEGORIES, DEFAULT_FREQUENT_MERCHANTS };
 export const CATEGORIES_BY_BUCKET = BUCKET_SUBCATEGORIES;
 export const TOKEN_STORAGE_KEY = "snaptally_api_token";
 export const CARDS_STORAGE_KEY = "snaptally_cards";
+export const CARD_SORT_STORAGE_KEY = "snaptally_cards_sort";
 export const MERCHANTS_STORAGE_KEY = "snaptally_merchants";
 export const THEME_STYLE_STORAGE_KEY = "snaptally_theme_style";
 export const COLOR_SCHEME_STORAGE_KEY = "snaptally_color_scheme";
 
+export type CardSortMode = "default" | "frequency" | "recency" | "frecency";
 export type ThemeStyle = "neumorphic" | "flat";
 export type ColorScheme = "system" | "light" | "dark";
 
@@ -95,6 +97,94 @@ function isExactIntakeRule(normalized: NormalizedTransaction): boolean {
 
 export { getTodayDate };
 
+export interface CardUsageStats {
+  count: number;
+  latestTimestamp: number;
+}
+
+export function computeCardUsage(
+  transactions: Array<{ card?: string; date?: string; created_at?: string }>,
+): Map<string, CardUsageStats> {
+  const stats = new Map<string, CardUsageStats>();
+
+  for (const tx of transactions) {
+    if (!tx || typeof tx.card !== "string") continue;
+    const cardName = tx.card.trim();
+    if (!cardName) continue;
+
+    let timestamp = 0;
+    if (tx.created_at) {
+      const parsed = Date.parse(tx.created_at);
+      if (!Number.isNaN(parsed)) {
+        timestamp = parsed;
+      }
+    }
+    if (timestamp === 0 && tx.date) {
+      const parsed = Date.parse(`${tx.date}T00:00:00Z`);
+      if (!Number.isNaN(parsed)) {
+        timestamp = parsed;
+      }
+    }
+
+    const current = stats.get(cardName) ?? { count: 0, latestTimestamp: 0 };
+    stats.set(cardName, {
+      count: current.count + 1,
+      latestTimestamp: Math.max(current.latestTimestamp, timestamp),
+    });
+  }
+
+  return stats;
+}
+
+export function sortCards(
+  cards: string[],
+  transactions: Array<{ card?: string; date?: string; created_at?: string }>,
+  mode: CardSortMode = "default",
+): string[] {
+  if (mode === "default" || cards.length <= 1) {
+    return [...cards];
+  }
+
+  const usage = computeCardUsage(transactions);
+
+  return [...cards].sort((a, b) => {
+    const aStats = usage.get(a.trim()) ?? { count: 0, latestTimestamp: 0 };
+    const bStats = usage.get(b.trim()) ?? { count: 0, latestTimestamp: 0 };
+
+    if (mode === "frequency") {
+      if (bStats.count !== aStats.count) {
+        return bStats.count - aStats.count;
+      }
+      if (bStats.latestTimestamp !== aStats.latestTimestamp) {
+        return bStats.latestTimestamp - aStats.latestTimestamp;
+      }
+      return a.localeCompare(b, undefined, { sensitivity: "base" });
+    }
+
+    if (mode === "recency") {
+      if (bStats.latestTimestamp !== aStats.latestTimestamp) {
+        return bStats.latestTimestamp - aStats.latestTimestamp;
+      }
+      if (bStats.count !== aStats.count) {
+        return bStats.count - aStats.count;
+      }
+      return a.localeCompare(b, undefined, { sensitivity: "base" });
+    }
+
+    if (mode === "frecency") {
+      if (bStats.count !== aStats.count) {
+        return bStats.count - aStats.count;
+      }
+      if (bStats.latestTimestamp !== aStats.latestTimestamp) {
+        return bStats.latestTimestamp - aStats.latestTimestamp;
+      }
+      return a.localeCompare(b, undefined, { sensitivity: "base" });
+    }
+
+    return 0;
+  });
+}
+
 /** Creates state and actions for local transaction entry and queue recovery. */
 export function intakeForm() {
   return {
@@ -109,9 +199,14 @@ export function intakeForm() {
     // Card selection (dynamically populated from recent transactions with Other... fallback)
     cards: [] as string[],
     card: "",
+    cardSortMode: "default" as CardSortMode,
     isCustomCard: false,
     customCardInput: "",
     autoCustomCard: false,
+
+    get sortedCards(): string[] {
+      return sortCards(this.cards, this.recentTransactions, this.cardSortMode);
+    },
 
     // Bucket and subcategory selection
     buckets: Object.keys(BUCKET_SUBCATEGORIES),
@@ -406,6 +501,24 @@ export function intakeForm() {
       } catch {
         // Storage restricted or unavailable
       }
+    },
+
+    setCardSortMode(mode: CardSortMode): void {
+      this.cardSortMode = mode;
+      try {
+        if (typeof sessionStorage !== "undefined") {
+          sessionStorage.setItem(CARD_SORT_STORAGE_KEY, mode);
+        }
+      } catch {
+        // Storage restricted or unavailable
+      }
+    },
+
+    cycleCardSort(): void {
+      const modes: CardSortMode[] = ["default", "frequency", "recency"];
+      const currentIndex = modes.indexOf(this.cardSortMode);
+      const nextIndex = (currentIndex + 1) % modes.length;
+      this.setCardSortMode(modes[nextIndex]);
     },
 
     selectBucket(bucket: string): void {
@@ -1065,6 +1178,17 @@ export function intakeForm() {
               if (parsed.length > 0) {
                 this.card = parsed[0];
               }
+            }
+          }
+          if (typeof sessionStorage !== "undefined") {
+            const storedSort = sessionStorage.getItem(CARD_SORT_STORAGE_KEY);
+            if (
+              storedSort === "default" ||
+              storedSort === "frequency" ||
+              storedSort === "recency" ||
+              storedSort === "frecency"
+            ) {
+              this.cardSortMode = storedSort;
             }
           }
           const storedMerchants = localStorage.getItem(MERCHANTS_STORAGE_KEY);

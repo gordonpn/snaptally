@@ -476,6 +476,37 @@ describe("Intake text input assistance", () => {
       "merchant section must not contain an Other... toggle button",
     );
   });
+
+  it("declares card sort controls and renders sorted cards list in index.astro", () => {
+    const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
+    const indexContent = fs.readFileSync(indexPath, "utf-8");
+
+    assert.match(
+      indexContent,
+      /aria-label="Card sort order"/,
+      "index.astro must declare card sort order group",
+    );
+    assert.match(
+      indexContent,
+      /@click="setCardSortMode\('default'\)"/,
+      "index.astro must declare default sort button",
+    );
+    assert.match(
+      indexContent,
+      /@click="setCardSortMode\('frequency'\)"/,
+      "index.astro must declare frequency sort button",
+    );
+    assert.match(
+      indexContent,
+      /@click="setCardSortMode\('recency'\)"/,
+      "index.astro must declare recency sort button",
+    );
+    assert.match(
+      indexContent,
+      /<template x-for="c in sortedCards" :key="c">/,
+      "index.astro must iterate over sortedCards template",
+    );
+  });
 });
 
 describe("Standalone iOS PWA Viewport and Touch Handling (Issue #105)", () => {
