@@ -95,6 +95,154 @@ function isExactIntakeRule(normalized: NormalizedTransaction): boolean {
 
 export { getTodayDate };
 
+/** Usage frequency and latest activity timestamps for a credit card. */
+export interface CardUsageStats {
+  count: number;
+  latestTimestamp: number;
+  latestCreatedTimestamp?: number;
+}
+
+function parseCreatedTimestamp(createdAtStr?: string): number {
+  if (!createdAtStr || typeof createdAtStr !== "string") return 0;
+  let normalized = createdAtStr.trim();
+  if (normalized.includes(" ") && !normalized.includes("T")) {
+    normalized = normalized.replace(" ", "T");
+  }
+  if (!normalized.endsWith("Z") && !/[+-]\d{2}(:?\d{2})?$/.test(normalized)) {
+    normalized += "Z";
+  }
+  const parsed = Date.parse(normalized);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+/** Parses transaction date and creation timestamp into a UTC millisecond value, ranking transaction date first. */
+export function parseTimestamp(dateStr?: string, createdAtStr?: string): number {
+  let baseDateMs = 0;
+  if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr.trim())) {
+    baseDateMs = Date.parse(`${dateStr.trim()}T00:00:00Z`);
+  }
+
+  const createdMs = parseCreatedTimestamp(createdAtStr);
+
+  if (baseDateMs > 0 && createdMs > 0) {
+    const createdDate = new Date(createdMs);
+    const timeOfDayMs =
+      (createdDate.getUTCHours() * 3600 +
+        createdDate.getUTCMinutes() * 60 +
+        createdDate.getUTCSeconds()) *
+        1000 +
+      createdDate.getUTCMilliseconds();
+    return baseDateMs + timeOfDayMs;
+  }
+
+  if (baseDateMs > 0) {
+    return baseDateMs;
+  }
+
+  return createdMs;
+}
+
+/** Compares two strings alphabetically using case-insensitive base comparison with a deterministic fallback. */
+export function compareAlphabetical(a: string, b: string): number {
+  const baseDiff = a.localeCompare(b, undefined, { sensitivity: "base" });
+  if (baseDiff !== 0) {
+    return baseDiff;
+  }
+  return a.localeCompare(b);
+}
+
+/** Aggregates per-card usage counts and latest transaction timestamps. */
+export function computeCardUsage(
+  transactions: Array<{ card?: string; date?: string; created_at?: string }>,
+): Map<string, CardUsageStats> {
+  const stats = new Map<string, CardUsageStats>();
+
+  for (const tx of transactions) {
+    if (!tx || typeof tx.card !== "string") continue;
+    const cardName = tx.card.trim();
+    if (!cardName) continue;
+
+    const timestamp = parseTimestamp(tx.date, tx.created_at);
+    const createdTimestamp = parseCreatedTimestamp(tx.created_at);
+
+    const current = stats.get(cardName) ?? {
+      count: 0,
+      latestTimestamp: 0,
+      latestCreatedTimestamp: 0,
+    };
+    const isNewerTimestamp = timestamp > current.latestTimestamp;
+    const isSameTimestamp = timestamp === current.latestTimestamp;
+    stats.set(cardName, {
+      count: current.count + 1,
+      latestTimestamp: Math.max(current.latestTimestamp, timestamp),
+      latestCreatedTimestamp: isNewerTimestamp
+        ? createdTimestamp
+        : isSameTimestamp
+          ? Math.max(current.latestCreatedTimestamp ?? 0, createdTimestamp)
+          : (current.latestCreatedTimestamp ?? 0),
+    });
+  }
+
+  return stats;
+}
+
+/** Sorts card names by usage frequency descending, then latest timestamp descending, then alphabetically. */
+export function sortCards(
+  cards: string[],
+  transactions: Array<{ card?: string; date?: string; created_at?: string }>,
+): string[] {
+  if (cards.length <= 1) {
+    return [...cards];
+  }
+
+  const usage = computeCardUsage(transactions);
+
+  return [...cards].sort((a, b) => {
+    const aStats = usage.get(a.trim()) ?? {
+      count: 0,
+      latestTimestamp: 0,
+      latestCreatedTimestamp: 0,
+    };
+    const bStats = usage.get(b.trim()) ?? {
+      count: 0,
+      latestTimestamp: 0,
+      latestCreatedTimestamp: 0,
+    };
+
+    if (bStats.count !== aStats.count) {
+      return bStats.count - aStats.count;
+    }
+    if (bStats.latestTimestamp !== aStats.latestTimestamp) {
+      return bStats.latestTimestamp - aStats.latestTimestamp;
+    }
+    const aCreated = aStats.latestCreatedTimestamp ?? 0;
+    const bCreated = bStats.latestCreatedTimestamp ?? 0;
+    if (bCreated !== aCreated) {
+      return bCreated - aCreated;
+    }
+    return compareAlphabetical(a, b);
+  });
+}
+
+/** Deduplicates pending, recent, and historical transactions by ID for card usage calculation. */
+function getUsageTransactions(
+  pending: Array<{ id: string; card: string; date: string; created_at: string }>,
+  recent: RecentTransaction[],
+  history: RecentTransaction[],
+): Array<{ id: string; card: string; date: string; created_at: string }> {
+  const map = new Map<string, { id: string; card: string; date: string; created_at: string }>();
+  for (const tx of history) {
+    if (tx?.id) map.set(tx.id, tx);
+  }
+  for (const tx of recent) {
+    if (tx?.id) map.set(tx.id, tx);
+  }
+  for (const tx of pending) {
+    if (tx?.id) map.set(tx.id, tx);
+  }
+  return Array.from(map.values());
+}
+
 /** Creates state and actions for local transaction entry and queue recovery. */
 export function intakeForm() {
   return {
@@ -109,6 +257,14 @@ export function intakeForm() {
     // Card selection (dynamically populated from recent transactions with Other... fallback)
     cards: [] as string[],
     card: "",
+    pendingTransactions: [] as Array<{
+      id: string;
+      card: string;
+      date: string;
+      created_at: string;
+    }>,
+    recentlySyncedTransactions: [] as RecentTransaction[],
+    cardHistoryTransactions: [] as RecentTransaction[],
     isCustomCard: false,
     customCardInput: "",
     autoCustomCard: false,
@@ -838,8 +994,9 @@ export function intakeForm() {
       }
       const requestToken = this.token;
       const requestSequence = ++this.recentRequestSequence;
+      const preFetchSyncedIds = new Set(this.recentlySyncedTransactions.map((tx) => tx.id));
       try {
-        const response = await fetch("/api/transactions?limit=5", {
+        const response = await fetch("/api/transactions?limit=50", {
           headers: { Authorization: `Bearer ${requestToken}` },
         });
         if (this.token !== requestToken || requestSequence !== this.recentRequestSequence) return;
@@ -853,15 +1010,32 @@ export function intakeForm() {
           return;
         }
         if (data.transactions) {
-          this.recentTransactions = [...data.transactions].sort((a, b) => {
+          const fetchedMap = new Map<string, RecentTransaction>();
+          for (const tx of data.transactions) {
+            fetchedMap.set(tx.id, tx);
+          }
+          // Preserve only transactions synced concurrently while this request was in flight
+          const remainingSynced: RecentTransaction[] = [];
+          for (const tx of this.recentlySyncedTransactions) {
+            if (!fetchedMap.has(tx.id) && !preFetchSyncedIds.has(tx.id)) {
+              fetchedMap.set(tx.id, tx);
+              remainingSynced.push(tx);
+            }
+          }
+          this.recentlySyncedTransactions = remainingSynced;
+
+          const allMerged = Array.from(fetchedMap.values()).sort((a, b) => {
             const dateDiff = b.date.localeCompare(a.date);
             if (dateDiff !== 0) return dateDiff;
             return (b.created_at || "").localeCompare(a.created_at || "");
           });
 
+          this.recentTransactions = allMerged.slice(0, 5);
+          this.cardHistoryTransactions = allMerged;
+
           // Dynamically extract distinct merchants from recent transactions
           const extractedMerchants: string[] = [];
-          for (const tx of data.transactions) {
+          for (const tx of allMerged) {
             const merchantName = tx.merchant?.trim();
             if (merchantName && !extractedMerchants.includes(merchantName)) {
               extractedMerchants.push(merchantName);
@@ -878,22 +1052,30 @@ export function intakeForm() {
             this.persistMerchants();
           }
 
-          // Dynamically extract distinct cards from recent transactions
+          // Dynamically extract distinct cards from recent transactions and sort by frequency + recency
           const extractedCards: string[] = [];
-          for (const tx of data.transactions) {
+          for (const tx of allMerged) {
             const cardName = tx.card?.trim();
             if (cardName && !extractedCards.includes(cardName)) {
               extractedCards.push(cardName);
             }
           }
           if (extractedCards.length > 0) {
+            const previousDefaultCard = this.cards[0];
             const merged = [...this.cards];
             for (const c of extractedCards) {
               if (!merged.includes(c)) {
                 merged.push(c);
               }
             }
-            this.cards = merged;
+            this.cards = sortCards(
+              merged,
+              getUsageTransactions(
+                this.pendingTransactions,
+                this.recentTransactions,
+                this.cardHistoryTransactions,
+              ),
+            );
             if (this.autoCustomCard && !this.cardManuallySelected) {
               this.isCustomCard = false;
               this.autoCustomCard = false;
@@ -901,9 +1083,22 @@ export function intakeForm() {
             if (
               !this.cardManuallySelected &&
               !this.isCustomCard &&
-              (!this.card || !this.cards.includes(this.card))
+              (!this.card || this.card === previousDefaultCard || !this.cards.includes(this.card))
             ) {
               this.card = this.cards[0];
+            }
+            if (this.inferredCardBaseline && !this.cardManuallySelected) {
+              if (
+                !this.inferredCardBaseline.card ||
+                this.inferredCardBaseline.card === previousDefaultCard ||
+                this.inferredCardBaseline.auto
+              ) {
+                this.inferredCardBaseline = {
+                  card: this.cards[0] || "",
+                  custom: false,
+                  auto: false,
+                };
+              }
             }
             this.persistCards();
           }
@@ -925,6 +1120,47 @@ export function intakeForm() {
       if (this.isOutboxOpen) {
         this.outboxItems = pending;
         this.deadLetterItems = failed;
+      }
+      const nextPending = pending.map((item) => ({
+        id: item.id,
+        card: item.card,
+        date: item.date,
+        created_at: item.created_at,
+      }));
+      const prevIds = this.pendingTransactions.map((t) => t.id).join(",");
+      const nextIds = nextPending.map((t) => t.id).join(",");
+      this.pendingTransactions = nextPending;
+      if (prevIds !== nextIds) {
+        const previousDefaultCard = this.cards[0];
+        const merged = [...this.cards];
+        for (const item of nextPending) {
+          const c = item.card?.trim();
+          if (c && !merged.includes(c)) {
+            merged.push(c);
+          }
+        }
+        if (merged.length > 0) {
+          this.cards = sortCards(
+            merged,
+            getUsageTransactions(
+              this.pendingTransactions,
+              this.recentTransactions,
+              this.cardHistoryTransactions,
+            ),
+          );
+          if (this.autoCustomCard && !this.cardManuallySelected) {
+            this.isCustomCard = false;
+            this.autoCustomCard = false;
+          }
+          if (
+            !this.cardManuallySelected &&
+            !this.isCustomCard &&
+            (!this.card || this.card === previousDefaultCard || !this.cards.includes(this.card))
+          ) {
+            this.card = this.cards[0];
+          }
+          this.persistCards();
+        }
       }
     },
 
@@ -995,6 +1231,7 @@ export function intakeForm() {
           token: this.token,
           force,
           onItemSynced: (item) => {
+            this.pendingTransactions = this.pendingTransactions.filter((t) => t.id !== item.id);
             // Prepend newly synced record to local recent feed
             const newTx: RecentTransaction = {
               id: item.id,
@@ -1009,10 +1246,45 @@ export function intakeForm() {
               currency: item.currency ?? "USD",
               created_at: item.created_at,
             };
+            this.recentlySyncedTransactions = [
+              newTx,
+              ...this.recentlySyncedTransactions.filter((t) => t.id !== item.id),
+            ];
             this.recentTransactions = [
               newTx,
               ...this.recentTransactions.filter((t) => t.id !== item.id),
             ].slice(0, 5);
+            this.cardHistoryTransactions = [
+              newTx,
+              ...this.cardHistoryTransactions.filter((t) => t.id !== item.id),
+            ];
+            const syncedCard = item.card?.trim();
+            if (syncedCard) {
+              const previousDefaultCard = this.cards[0];
+              const nextCards = this.cards.includes(syncedCard)
+                ? [...this.cards]
+                : [syncedCard, ...this.cards];
+              this.cards = sortCards(
+                nextCards,
+                getUsageTransactions(
+                  this.pendingTransactions,
+                  this.recentTransactions,
+                  this.cardHistoryTransactions,
+                ),
+              );
+              if (this.autoCustomCard && !this.cardManuallySelected) {
+                this.isCustomCard = false;
+                this.autoCustomCard = false;
+              }
+              if (
+                !this.cardManuallySelected &&
+                !this.isCustomCard &&
+                (!this.card || this.card === previousDefaultCard || !this.cards.includes(this.card))
+              ) {
+                this.card = this.cards[0];
+              }
+              this.persistCards();
+            }
           },
           onStatusChange: (_syncing, count) => {
             this.outboxCount = count;
@@ -1035,13 +1307,25 @@ export function intakeForm() {
     // Initialization lifecycle
     init(): void {
       this.resetDateToToday();
+      let storage: Storage | undefined;
       try {
         if (typeof localStorage !== "undefined") {
-          const storedThemeStyle = localStorage.getItem(THEME_STYLE_STORAGE_KEY);
+          storage = localStorage;
+        }
+      } catch {
+        // Storage restricted or unavailable
+      }
+      if (storage) {
+        try {
+          const storedThemeStyle = storage.getItem(THEME_STYLE_STORAGE_KEY);
           if (storedThemeStyle === "flat" || storedThemeStyle === "neumorphic") {
             this.themeStyle = storedThemeStyle;
           }
-          const storedColorScheme = localStorage.getItem(COLOR_SCHEME_STORAGE_KEY);
+        } catch {
+          // Storage restricted or unavailable
+        }
+        try {
+          const storedColorScheme = storage.getItem(COLOR_SCHEME_STORAGE_KEY);
           if (
             storedColorScheme === "light" ||
             storedColorScheme === "dark" ||
@@ -1049,12 +1333,22 @@ export function intakeForm() {
           ) {
             this.colorScheme = storedColorScheme;
           }
-          syncThemeColorMeta(this.themeStyle, this.colorScheme);
-          const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+        } catch {
+          // Storage restricted or unavailable
+        }
+        syncThemeColorMeta(this.themeStyle, this.colorScheme);
+
+        try {
+          const storedToken = storage.getItem(TOKEN_STORAGE_KEY);
           if (storedToken) {
             this.token = storedToken;
           }
-          const storedCards = localStorage.getItem(CARDS_STORAGE_KEY);
+        } catch {
+          // Storage restricted or unavailable
+        }
+
+        try {
+          const storedCards = storage.getItem(CARDS_STORAGE_KEY);
           if (storedCards) {
             const parsed = JSON.parse(storedCards) as unknown;
             if (
@@ -1067,7 +1361,12 @@ export function intakeForm() {
               }
             }
           }
-          const storedMerchants = localStorage.getItem(MERCHANTS_STORAGE_KEY);
+        } catch {
+          // Storage restricted or unavailable
+        }
+
+        try {
+          const storedMerchants = storage.getItem(MERCHANTS_STORAGE_KEY);
           if (storedMerchants) {
             const parsed = JSON.parse(storedMerchants) as unknown;
             if (
@@ -1083,9 +1382,9 @@ export function intakeForm() {
               this.allMerchants = merged;
             }
           }
+        } catch {
+          // Storage restricted or unavailable
         }
-      } catch {
-        // Storage restricted or unavailable
       }
 
       if (typeof document !== "undefined") {
@@ -1175,6 +1474,15 @@ export function intakeForm() {
         // 1. Optimistic write to IndexedDB outbox
         await saveOutboxItem(outboxItem);
         this.outboxCount = await getOutboxCount();
+        this.pendingTransactions = [
+          {
+            id: outboxItem.id,
+            card: outboxItem.card,
+            date: outboxItem.date,
+            created_at: outboxItem.created_at,
+          },
+          ...this.pendingTransactions.filter((t) => t.id !== outboxItem.id),
+        ];
 
         // 2. 0ms UI reset
         if (isCredit) {
@@ -1205,11 +1513,20 @@ export function intakeForm() {
           this.customMerchantInput = "";
         }
 
+        const nextCards = this.cards.includes(trimmedCard)
+          ? [...this.cards]
+          : [trimmedCard, ...this.cards];
+        this.cards = sortCards(
+          nextCards,
+          getUsageTransactions(
+            this.pendingTransactions,
+            this.recentTransactions,
+            this.cardHistoryTransactions,
+          ),
+        );
+        this.persistCards();
+
         if (this.isCustomCard) {
-          if (!this.cards.includes(trimmedCard)) {
-            this.cards.unshift(trimmedCard);
-            this.persistCards();
-          }
           this.isCustomCard = false;
           this.autoCustomCard = false;
           this.customCardInput = "";
