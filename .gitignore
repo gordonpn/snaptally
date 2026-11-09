@@ -15,4 +15,5 @@ data/
 *.csv
 !tests/fixtures/backfill/*.csv
 .backups/
+.backfill-runs/
 .agent/HANDOFF.md
