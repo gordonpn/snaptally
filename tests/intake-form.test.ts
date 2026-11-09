@@ -2,13 +2,16 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   CARD_SORT_STORAGE_KEY,
+  CARD_USAGE_STORAGE_KEY,
   CARDS_STORAGE_KEY,
   type CardSortMode,
   COLOR_SCHEME_STORAGE_KEY,
+  compareAlphabetical,
   computeCardUsage,
   DEFAULT_FREQUENT_MERCHANTS,
   getTodayDate,
   intakeForm,
+  parseTimestamp,
   type RecentTransaction,
   sortCards,
   syncThemeColorMeta,
@@ -1162,7 +1165,7 @@ describe("intakeForm Recent Transactions Feed (Scenario 4)", () => {
 
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (url: unknown) => {
-      assert.strictEqual(String(url), "/api/transactions?limit=5");
+      assert.strictEqual(String(url), "/api/transactions?limit=50");
       return new Response(JSON.stringify({ transactions: sampleTransactions }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -1849,10 +1852,17 @@ describe("intakeForm Card Lifecycle and Storage", () => {
 });
 
 describe("Credit Card Sorting by Frequency and Recency (Issue #164)", () => {
+  let mockStorage: MockLocalStorage;
   let mockSessionStorage: MockLocalStorage;
 
   beforeEach(() => {
+    mockStorage = new MockLocalStorage();
     mockSessionStorage = new MockLocalStorage();
+    Object.defineProperty(globalThis, "localStorage", {
+      value: mockStorage,
+      writable: true,
+      configurable: true,
+    });
     Object.defineProperty(globalThis, "sessionStorage", {
       value: mockSessionStorage,
       writable: true,
@@ -2045,6 +2055,105 @@ describe("Credit Card Sorting by Frequency and Recency (Issue #164)", () => {
     form.selectCard(form.sortedCards[0]);
     assert.strictEqual(form.card, "Card A");
     assert.strictEqual(form.isCustomCard, false);
+  });
+
+  it("parseTimestamp ranks transaction date before entry creation time for backdated expenses", () => {
+    // Transaction on Nov 1 entered on Nov 9 afternoon
+    const backdatedTs = parseTimestamp("2026-11-01", "2026-11-09 15:30:00");
+    // Transaction on Nov 8 entered on Nov 8 morning
+    const newerTs = parseTimestamp("2026-11-08", "2026-11-08 09:00:00");
+
+    assert.ok(
+      newerTs > backdatedTs,
+      "Nov 8 purchase must rank more recent than backdated Nov 1 purchase",
+    );
+  });
+
+  it("parseTimestamp normalizes timezone-naive SQLite timestamp strings to UTC", () => {
+    const sqliteTs = parseTimestamp("2026-11-05", "2026-11-05 12:00:00");
+    const expectedUtc = Date.parse("2026-11-05T12:00:00Z");
+    assert.strictEqual(sqliteTs, expectedUtc);
+  });
+
+  it("compareAlphabetical provides deterministic tie-break for case or accent differences", () => {
+    assert.ok(compareAlphabetical("Visa", "visa") !== 0);
+    assert.strictEqual(compareAlphabetical("Visa", "Visa"), 0);
+    const sorted = ["Visa", "visa"].sort(compareAlphabetical);
+    assert.deepStrictEqual(sorted, ["visa", "Visa"]);
+  });
+
+  it("intakeForm restores sort mode independently if cards storage contains invalid JSON", () => {
+    mockStorage.setItem(CARDS_STORAGE_KEY, "invalid-json{{");
+    mockSessionStorage.setItem(CARD_SORT_STORAGE_KEY, "frequency");
+    const form = intakeForm();
+    form.init();
+
+    assert.strictEqual(form.cardSortMode, "frequency");
+  });
+
+  it("intakeForm loads cardUsage from localStorage on init", () => {
+    mockStorage.setItem(
+      CARD_USAGE_STORAGE_KEY,
+      JSON.stringify({ "Amex Gold": { count: 8, latestTimestamp: 1000 } }),
+    );
+    const form = intakeForm();
+    form.init();
+
+    assert.deepStrictEqual(form.cardUsage["Amex Gold"], { count: 8, latestTimestamp: 1000 });
+  });
+
+  it("intakeForm setCardSortMode resets horizontal scroll on cards container", () => {
+    const form = intakeForm();
+    let scrollArgs: unknown = null;
+    form.$refs = {
+      cardsContainer: {
+        scrollTo: (args: unknown) => {
+          scrollArgs = args;
+        },
+      } as unknown as HTMLElement,
+    };
+
+    form.setCardSortMode("recency");
+    assert.deepStrictEqual(scrollArgs, { left: 0, behavior: "smooth" });
+  });
+
+  it("intakeForm sortedCards immediately reflects offline pending transactions", () => {
+    const form = intakeForm();
+    form.cards = ["Chase", "Amex Gold"];
+    form.setCardSortMode("frequency");
+
+    assert.deepStrictEqual(form.sortedCards, ["Amex Gold", "Chase"]); // alphabetical default tie
+
+    // Add pending offline transaction
+    form.pendingTransactions = [
+      {
+        id: "offline-1",
+        card: "Chase",
+        date: "2026-11-09",
+        created_at: "2026-11-09T12:00:00Z",
+      },
+    ];
+
+    assert.deepStrictEqual(form.sortedCards, ["Chase", "Amex Gold"]);
+  });
+
+  it("intakeForm sortedCards utilizes broader transaction history beyond the 5-item feed", () => {
+    const form = intakeForm();
+    form.cards = ["Amex Gold", "Chase"];
+    form.setCardSortMode("frequency");
+
+    // Feed has 5 transactions using Amex Gold
+    form.recentTransactions = [
+      createTx("Amex Gold", "2026-11-09"),
+      createTx("Amex Gold", "2026-11-08"),
+    ];
+
+    // Broader history has 10 transactions using Chase
+    form.cardHistoryTransactions = Array.from({ length: 10 }, (_, i) =>
+      createTx("Chase", `2026-10-${String(i + 1).padStart(2, "0")}`),
+    );
+
+    assert.deepStrictEqual(form.sortedCards, ["Chase", "Amex Gold"]);
   });
 });
 
@@ -2315,10 +2424,18 @@ describe("intakeForm Merchant Autocomplete Dropdown (#114)", () => {
     form.frequentMerchants = ["Trader Joe's", "Tatte Bakery", "Whole Foods"];
 
     form.merchant = "";
-    assert.deepStrictEqual(form.merchantSuggestions, ["Trader Joe's", "Tatte Bakery", "Whole Foods"]);
+    assert.deepStrictEqual(form.merchantSuggestions, [
+      "Trader Joe's",
+      "Tatte Bakery",
+      "Whole Foods",
+    ]);
 
     form.merchant = "   ";
-    assert.deepStrictEqual(form.merchantSuggestions, ["Trader Joe's", "Tatte Bakery", "Whole Foods"]);
+    assert.deepStrictEqual(form.merchantSuggestions, [
+      "Trader Joe's",
+      "Tatte Bakery",
+      "Whole Foods",
+    ]);
 
     form.frequentMerchants = [];
     assert.deepStrictEqual(form.merchantSuggestions, []);
@@ -2902,7 +3019,11 @@ describe("Direct merchant autocomplete input (Issue #144)", () => {
     form.frequentMerchants = ["Star Market", "Trader Joe's", "Whole Foods"];
     form.onMerchantFocus();
     assert.strictEqual(form.merchantSuggestionsOpen, true);
-    assert.deepStrictEqual(form.merchantSuggestions, ["Star Market", "Trader Joe's", "Whole Foods"]);
+    assert.deepStrictEqual(form.merchantSuggestions, [
+      "Star Market",
+      "Trader Joe's",
+      "Whole Foods",
+    ]);
 
     // Tapping a frequent merchant populates the field and closes dropdown
     form.chooseMerchantSuggestion("Trader Joe's");

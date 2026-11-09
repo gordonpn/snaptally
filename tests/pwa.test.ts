@@ -411,11 +411,7 @@ describe("Intake text input assistance", () => {
       /placeholder="Merchant name\.\.\."/,
       "merchant input must specify placeholder 'Merchant name...'",
     );
-    assert.match(
-      merchantInput,
-      /role="combobox"/,
-      "merchant input must declare combobox role",
-    );
+    assert.match(merchantInput, /role="combobox"/, "merchant input must declare combobox role");
     assert.match(
       merchantInput,
       /x-model="merchant"/,
@@ -505,6 +501,16 @@ describe("Intake text input assistance", () => {
       indexContent,
       /<template x-for="c in sortedCards" :key="c">/,
       "index.astro must iterate over sortedCards template",
+    );
+    assert.match(
+      indexContent,
+      /x-ref="cardsContainer"/,
+      "index.astro must assign cardsContainer ref for scroll reset",
+    );
+    assert.match(
+      indexContent,
+      /min-h-\[44px\] inline-flex items-center justify-center text-xs transition-all/,
+      "sort buttons must meet minimum 44px touch target height",
     );
   });
 });

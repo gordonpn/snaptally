@@ -40,6 +40,7 @@ export const CATEGORIES_BY_BUCKET = BUCKET_SUBCATEGORIES;
 export const TOKEN_STORAGE_KEY = "snaptally_api_token";
 export const CARDS_STORAGE_KEY = "snaptally_cards";
 export const CARD_SORT_STORAGE_KEY = "snaptally_cards_sort";
+export const CARD_USAGE_STORAGE_KEY = "snaptally_card_usage";
 export const MERCHANTS_STORAGE_KEY = "snaptally_merchants";
 export const THEME_STYLE_STORAGE_KEY = "snaptally_theme_style";
 export const COLOR_SCHEME_STORAGE_KEY = "snaptally_color_scheme";
@@ -102,29 +103,78 @@ export interface CardUsageStats {
   latestTimestamp: number;
 }
 
+export function parseTimestamp(dateStr?: string, createdAtStr?: string): number {
+  let baseDateMs = 0;
+  if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr.trim())) {
+    baseDateMs = Date.parse(`${dateStr.trim()}T00:00:00Z`);
+  }
+
+  let createdMs = 0;
+  if (createdAtStr && typeof createdAtStr === "string") {
+    let normalized = createdAtStr.trim();
+    if (normalized.includes(" ") && !normalized.includes("T")) {
+      normalized = normalized.replace(" ", "T");
+    }
+    if (!normalized.endsWith("Z") && !/[+-]\d{2}(:?\d{2})?$/.test(normalized)) {
+      normalized += "Z";
+    }
+    const parsed = Date.parse(normalized);
+    if (!Number.isNaN(parsed)) {
+      createdMs = parsed;
+    }
+  }
+
+  if (baseDateMs > 0 && createdMs > 0) {
+    const createdDate = new Date(createdMs);
+    const timeOfDayMs =
+      (createdDate.getUTCHours() * 3600 +
+        createdDate.getUTCMinutes() * 60 +
+        createdDate.getUTCSeconds()) *
+        1000 +
+      createdDate.getUTCMilliseconds();
+    return baseDateMs + timeOfDayMs;
+  }
+
+  if (baseDateMs > 0) {
+    return baseDateMs;
+  }
+
+  return createdMs;
+}
+
+export function compareAlphabetical(a: string, b: string): number {
+  const baseDiff = a.localeCompare(b, undefined, { sensitivity: "base" });
+  if (baseDiff !== 0) {
+    return baseDiff;
+  }
+  return a.localeCompare(b);
+}
+
 export function computeCardUsage(
   transactions: Array<{ card?: string; date?: string; created_at?: string }>,
+  initialUsage?: Map<string, CardUsageStats> | Record<string, CardUsageStats>,
 ): Map<string, CardUsageStats> {
   const stats = new Map<string, CardUsageStats>();
+
+  if (initialUsage) {
+    const entries =
+      initialUsage instanceof Map ? initialUsage.entries() : Object.entries(initialUsage);
+    for (const [cardName, currentStats] of entries) {
+      if (cardName && currentStats) {
+        stats.set(cardName.trim(), {
+          count: currentStats.count || 0,
+          latestTimestamp: currentStats.latestTimestamp || 0,
+        });
+      }
+    }
+  }
 
   for (const tx of transactions) {
     if (!tx || typeof tx.card !== "string") continue;
     const cardName = tx.card.trim();
     if (!cardName) continue;
 
-    let timestamp = 0;
-    if (tx.created_at) {
-      const parsed = Date.parse(tx.created_at);
-      if (!Number.isNaN(parsed)) {
-        timestamp = parsed;
-      }
-    }
-    if (timestamp === 0 && tx.date) {
-      const parsed = Date.parse(`${tx.date}T00:00:00Z`);
-      if (!Number.isNaN(parsed)) {
-        timestamp = parsed;
-      }
-    }
+    const timestamp = parseTimestamp(tx.date, tx.created_at);
 
     const current = stats.get(cardName) ?? { count: 0, latestTimestamp: 0 };
     stats.set(cardName, {
@@ -140,12 +190,13 @@ export function sortCards(
   cards: string[],
   transactions: Array<{ card?: string; date?: string; created_at?: string }>,
   mode: CardSortMode = "default",
+  initialUsage?: Map<string, CardUsageStats> | Record<string, CardUsageStats>,
 ): string[] {
   if (mode === "default" || cards.length <= 1) {
     return [...cards];
   }
 
-  const usage = computeCardUsage(transactions);
+  const usage = computeCardUsage(transactions, initialUsage);
 
   return [...cards].sort((a, b) => {
     const aStats = usage.get(a.trim()) ?? { count: 0, latestTimestamp: 0 };
@@ -158,7 +209,7 @@ export function sortCards(
       if (bStats.latestTimestamp !== aStats.latestTimestamp) {
         return bStats.latestTimestamp - aStats.latestTimestamp;
       }
-      return a.localeCompare(b, undefined, { sensitivity: "base" });
+      return compareAlphabetical(a, b);
     }
 
     if (mode === "recency") {
@@ -168,7 +219,7 @@ export function sortCards(
       if (bStats.count !== aStats.count) {
         return bStats.count - aStats.count;
       }
-      return a.localeCompare(b, undefined, { sensitivity: "base" });
+      return compareAlphabetical(a, b);
     }
 
     if (mode === "frecency") {
@@ -178,7 +229,7 @@ export function sortCards(
       if (bStats.latestTimestamp !== aStats.latestTimestamp) {
         return bStats.latestTimestamp - aStats.latestTimestamp;
       }
-      return a.localeCompare(b, undefined, { sensitivity: "base" });
+      return compareAlphabetical(a, b);
     }
 
     return 0;
@@ -200,12 +251,26 @@ export function intakeForm() {
     cards: [] as string[],
     card: "",
     cardSortMode: "default" as CardSortMode,
+    cardUsage: {} as Record<string, CardUsageStats>,
+    pendingTransactions: [] as Array<{
+      id: string;
+      card: string;
+      date: string;
+      created_at: string;
+    }>,
+    recentlySyncedTransactions: [] as RecentTransaction[],
+    cardHistoryTransactions: [] as RecentTransaction[],
     isCustomCard: false,
     customCardInput: "",
     autoCustomCard: false,
 
     get sortedCards(): string[] {
-      return sortCards(this.cards, this.recentTransactions, this.cardSortMode);
+      const allTx = [
+        ...this.pendingTransactions,
+        ...this.recentTransactions,
+        ...this.cardHistoryTransactions,
+      ];
+      return sortCards(this.cards, allTx, this.cardSortMode, this.cardUsage);
     },
 
     // Bucket and subcategory selection
@@ -503,6 +568,28 @@ export function intakeForm() {
       }
     },
 
+    persistCardUsage(): void {
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(CARD_USAGE_STORAGE_KEY, JSON.stringify(this.cardUsage));
+        }
+      } catch {
+        // Storage restricted or unavailable
+      }
+    },
+
+    recordCardUsage(cardName: string, date: string, createdAt: string): void {
+      const trimmed = cardName.trim();
+      if (!trimmed) return;
+      const ts = parseTimestamp(date, createdAt);
+      const current = this.cardUsage[trimmed] ?? { count: 0, latestTimestamp: 0 };
+      this.cardUsage[trimmed] = {
+        count: current.count + 1,
+        latestTimestamp: Math.max(current.latestTimestamp, ts),
+      };
+      this.persistCardUsage();
+    },
+
     setCardSortMode(mode: CardSortMode): void {
       this.cardSortMode = mode;
       try {
@@ -511,6 +598,17 @@ export function intakeForm() {
         }
       } catch {
         // Storage restricted or unavailable
+      }
+      if (
+        this.$refs &&
+        typeof (this.$refs as Record<string, unknown>).cardsContainer === "object" &&
+        (this.$refs as Record<string, HTMLElement>).cardsContainer !== null &&
+        typeof (this.$refs as Record<string, HTMLElement>).cardsContainer.scrollTo === "function"
+      ) {
+        (this.$refs as Record<string, HTMLElement>).cardsContainer.scrollTo({
+          left: 0,
+          behavior: "smooth",
+        });
       }
     },
 
@@ -952,7 +1050,7 @@ export function intakeForm() {
       const requestToken = this.token;
       const requestSequence = ++this.recentRequestSequence;
       try {
-        const response = await fetch("/api/transactions?limit=5", {
+        const response = await fetch("/api/transactions?limit=50", {
           headers: { Authorization: `Bearer ${requestToken}` },
         });
         if (this.token !== requestToken || requestSequence !== this.recentRequestSequence) return;
@@ -966,15 +1064,48 @@ export function intakeForm() {
           return;
         }
         if (data.transactions) {
-          this.recentTransactions = [...data.transactions].sort((a, b) => {
+          const fetchedMap = new Map<string, RecentTransaction>();
+          for (const tx of data.transactions) {
+            fetchedMap.set(tx.id, tx);
+          }
+          // Preserve concurrently synced transactions not yet returned in fetched response
+          const remainingSynced: RecentTransaction[] = [];
+          for (const tx of this.recentlySyncedTransactions) {
+            if (!fetchedMap.has(tx.id)) {
+              fetchedMap.set(tx.id, tx);
+              remainingSynced.push(tx);
+            }
+          }
+          this.recentlySyncedTransactions = remainingSynced;
+
+          const allMerged = Array.from(fetchedMap.values()).sort((a, b) => {
             const dateDiff = b.date.localeCompare(a.date);
             if (dateDiff !== 0) return dateDiff;
             return (b.created_at || "").localeCompare(a.created_at || "");
           });
 
+          this.recentTransactions = allMerged.slice(0, 5);
+          this.cardHistoryTransactions = allMerged;
+
+          // Update cardUsage with fetched transactions
+          for (const tx of allMerged) {
+            if (tx.card) {
+              const cardName = tx.card.trim();
+              if (cardName) {
+                const ts = parseTimestamp(tx.date, tx.created_at);
+                const current = this.cardUsage[cardName] ?? { count: 0, latestTimestamp: 0 };
+                this.cardUsage[cardName] = {
+                  count: Math.max(current.count, 1),
+                  latestTimestamp: Math.max(current.latestTimestamp, ts),
+                };
+              }
+            }
+          }
+          this.persistCardUsage();
+
           // Dynamically extract distinct merchants from recent transactions
           const extractedMerchants: string[] = [];
-          for (const tx of data.transactions) {
+          for (const tx of allMerged) {
             const merchantName = tx.merchant?.trim();
             if (merchantName && !extractedMerchants.includes(merchantName)) {
               extractedMerchants.push(merchantName);
@@ -993,7 +1124,7 @@ export function intakeForm() {
 
           // Dynamically extract distinct cards from recent transactions
           const extractedCards: string[] = [];
-          for (const tx of data.transactions) {
+          for (const tx of allMerged) {
             const cardName = tx.card?.trim();
             if (cardName && !extractedCards.includes(cardName)) {
               extractedCards.push(cardName);
@@ -1108,6 +1239,7 @@ export function intakeForm() {
           token: this.token,
           force,
           onItemSynced: (item) => {
+            this.pendingTransactions = this.pendingTransactions.filter((t) => t.id !== item.id);
             // Prepend newly synced record to local recent feed
             const newTx: RecentTransaction = {
               id: item.id,
@@ -1122,10 +1254,19 @@ export function intakeForm() {
               currency: item.currency ?? "USD",
               created_at: item.created_at,
             };
+            this.recentlySyncedTransactions = [
+              newTx,
+              ...this.recentlySyncedTransactions.filter((t) => t.id !== item.id),
+            ];
             this.recentTransactions = [
               newTx,
               ...this.recentTransactions.filter((t) => t.id !== item.id),
             ].slice(0, 5);
+            this.cardHistoryTransactions = [
+              newTx,
+              ...this.cardHistoryTransactions.filter((t) => t.id !== item.id),
+            ];
+            this.recordCardUsage(item.card, item.date, item.created_at);
           },
           onStatusChange: (_syncing, count) => {
             this.outboxCount = count;
@@ -1148,12 +1289,16 @@ export function intakeForm() {
     // Initialization lifecycle
     init(): void {
       this.resetDateToToday();
-      try {
-        if (typeof localStorage !== "undefined") {
+      if (typeof localStorage !== "undefined") {
+        try {
           const storedThemeStyle = localStorage.getItem(THEME_STYLE_STORAGE_KEY);
           if (storedThemeStyle === "flat" || storedThemeStyle === "neumorphic") {
             this.themeStyle = storedThemeStyle;
           }
+        } catch {
+          // Storage restricted or unavailable
+        }
+        try {
           const storedColorScheme = localStorage.getItem(COLOR_SCHEME_STORAGE_KEY);
           if (
             storedColorScheme === "light" ||
@@ -1162,11 +1307,21 @@ export function intakeForm() {
           ) {
             this.colorScheme = storedColorScheme;
           }
-          syncThemeColorMeta(this.themeStyle, this.colorScheme);
+        } catch {
+          // Storage restricted or unavailable
+        }
+        syncThemeColorMeta(this.themeStyle, this.colorScheme);
+
+        try {
           const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
           if (storedToken) {
             this.token = storedToken;
           }
+        } catch {
+          // Storage restricted or unavailable
+        }
+
+        try {
           const storedCards = localStorage.getItem(CARDS_STORAGE_KEY);
           if (storedCards) {
             const parsed = JSON.parse(storedCards) as unknown;
@@ -1180,17 +1335,23 @@ export function intakeForm() {
               }
             }
           }
-          if (typeof sessionStorage !== "undefined") {
-            const storedSort = sessionStorage.getItem(CARD_SORT_STORAGE_KEY);
-            if (
-              storedSort === "default" ||
-              storedSort === "frequency" ||
-              storedSort === "recency" ||
-              storedSort === "frecency"
-            ) {
-              this.cardSortMode = storedSort;
+        } catch {
+          // Storage restricted or unavailable
+        }
+
+        try {
+          const storedUsage = localStorage.getItem(CARD_USAGE_STORAGE_KEY);
+          if (storedUsage) {
+            const parsed = JSON.parse(storedUsage) as unknown;
+            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+              this.cardUsage = parsed as Record<string, CardUsageStats>;
             }
           }
+        } catch {
+          // Storage restricted or unavailable
+        }
+
+        try {
           const storedMerchants = localStorage.getItem(MERCHANTS_STORAGE_KEY);
           if (storedMerchants) {
             const parsed = JSON.parse(storedMerchants) as unknown;
@@ -1207,9 +1368,25 @@ export function intakeForm() {
               this.allMerchants = merged;
             }
           }
+        } catch {
+          // Storage restricted or unavailable
         }
-      } catch {
-        // Storage restricted or unavailable
+      }
+
+      if (typeof sessionStorage !== "undefined") {
+        try {
+          const storedSort = sessionStorage.getItem(CARD_SORT_STORAGE_KEY);
+          if (
+            storedSort === "default" ||
+            storedSort === "frequency" ||
+            storedSort === "recency" ||
+            storedSort === "frecency"
+          ) {
+            this.cardSortMode = storedSort;
+          }
+        } catch {
+          // Storage restricted or unavailable
+        }
       }
 
       if (typeof document !== "undefined") {
@@ -1299,6 +1476,16 @@ export function intakeForm() {
         // 1. Optimistic write to IndexedDB outbox
         await saveOutboxItem(outboxItem);
         this.outboxCount = await getOutboxCount();
+        this.pendingTransactions = [
+          {
+            id: outboxItem.id,
+            card: outboxItem.card,
+            date: outboxItem.date,
+            created_at: outboxItem.created_at,
+          },
+          ...this.pendingTransactions.filter((t) => t.id !== outboxItem.id),
+        ];
+        this.recordCardUsage(trimmedCard, outboxItem.date, outboxItem.created_at);
 
         // 2. 0ms UI reset
         if (isCredit) {
