@@ -2036,36 +2036,80 @@ describe("Credit Card Sorting by Frequency and Recency (Issue #164)", () => {
     }
   });
   it("intakeForm loadRecentTransactions preserves newly synced transactions when a concurrent older response arrives", async () => {
-    mockStorage.setItem(TOKEN_STORAGE_KEY, "valid-token");
     const form = intakeForm();
-    form.init();
+    form.token = "valid-token";
     form.cards = ["Amex Gold", "RBC Visa"];
 
-    // Simulate a newly synced transaction not yet included in the in-flight GET response
-    const syncedTx = createTx("RBC Visa", "2026-11-09", "2026-11-09 15:00:00");
-    form.recentlySyncedTransactions = [syncedTx];
-
+    const getResponse = Promise.withResolvers<Response>();
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => {
-      return new Response(
-        JSON.stringify({
-          transactions: [createTx("Amex Gold", "2026-11-01", "2026-11-01 10:00:00")],
-        }),
-        {
-          status: 200,
+    globalThis.fetch = (async (input: unknown, options?: RequestInit) => {
+      if (options?.method === "POST") {
+        return new Response(JSON.stringify({ ok: true, id: "synced-1" }), {
+          status: 201,
           headers: { "Content-Type": "application/json" },
-        },
-      );
+        });
+      }
+      if (String(input).includes("/api/transactions")) {
+        return getResponse.promise;
+      }
+      return new Response(JSON.stringify({ merchants: [] }), { status: 200 });
     }) as unknown as typeof fetch;
 
     try {
-      await form.loadRecentTransactions();
+      // 1. Start deferred GET /api/transactions?limit=50
+      const loadingPromise = form.loadRecentTransactions();
+
+      // 2. Submit and sync a transaction while the GET is still in flight
+      form.selectCard("RBC Visa");
+      form.merchant = "Coffee";
+      form.amountCents = 450;
+      form.date = "2026-11-09";
+      const submitted = await form.submitTransaction();
+      assert.strictEqual(submitted, true);
+
+      // 3. Resolve the older GET response without the newly synced transaction
+      getResponse.resolve(
+        new Response(
+          JSON.stringify({
+            transactions: [createTx("Amex Gold", "2026-11-01", "2026-11-01 10:00:00")],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      );
+      await loadingPromise;
+
       assert.strictEqual(form.recentTransactions.length, 2);
       // Both have 1 tx, RBC Visa is newer (Nov 9 vs Nov 1)
       assert.deepStrictEqual(form.cards, ["RBC Visa", "Amex Gold"]);
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("sortCards breaks same-date and same-time-of-day ties using full creation timestamp", () => {
+    const cards = ["Card A", "Card B"];
+    const transactions = [
+      // Both backdated to 2026-11-01 at 09:00:00 UTC, but Card B was created on a later day
+      createTx("Card A", "2026-11-01", "2026-11-02T09:00:00Z"),
+      createTx("Card B", "2026-11-01", "2026-11-05T09:00:00Z"),
+    ];
+    assert.deepStrictEqual(sortCards(cards, transactions), ["Card B", "Card A"]);
+  });
+
+  it("intakeForm init handles restricted localStorage getter without throwing", () => {
+    Object.defineProperty(globalThis, "localStorage", {
+      get() {
+        throw new Error("SecurityError: Storage is disabled");
+      },
+      configurable: true,
+    });
+    const form = intakeForm();
+    assert.doesNotThrow(() => form.init());
+    assert.strictEqual(form.isCustomCard, true);
+    assert.strictEqual(form.autoCustomCard, true);
   });
 });
 

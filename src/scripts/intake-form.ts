@@ -95,10 +95,24 @@ function isExactIntakeRule(normalized: NormalizedTransaction): boolean {
 
 export { getTodayDate };
 
-/** Usage frequency and latest activity timestamp for a credit card. */
+/** Usage frequency and latest activity timestamps for a credit card. */
 export interface CardUsageStats {
   count: number;
   latestTimestamp: number;
+  latestCreatedTimestamp?: number;
+}
+
+function parseCreatedTimestamp(createdAtStr?: string): number {
+  if (!createdAtStr || typeof createdAtStr !== "string") return 0;
+  let normalized = createdAtStr.trim();
+  if (normalized.includes(" ") && !normalized.includes("T")) {
+    normalized = normalized.replace(" ", "T");
+  }
+  if (!normalized.endsWith("Z") && !/[+-]\d{2}(:?\d{2})?$/.test(normalized)) {
+    normalized += "Z";
+  }
+  const parsed = Date.parse(normalized);
+  return Number.isNaN(parsed) ? 0 : parsed;
 }
 
 /** Parses transaction date and creation timestamp into a UTC millisecond value, ranking transaction date first. */
@@ -108,20 +122,7 @@ export function parseTimestamp(dateStr?: string, createdAtStr?: string): number 
     baseDateMs = Date.parse(`${dateStr.trim()}T00:00:00Z`);
   }
 
-  let createdMs = 0;
-  if (createdAtStr && typeof createdAtStr === "string") {
-    let normalized = createdAtStr.trim();
-    if (normalized.includes(" ") && !normalized.includes("T")) {
-      normalized = normalized.replace(" ", "T");
-    }
-    if (!normalized.endsWith("Z") && !/[+-]\d{2}(:?\d{2})?$/.test(normalized)) {
-      normalized += "Z";
-    }
-    const parsed = Date.parse(normalized);
-    if (!Number.isNaN(parsed)) {
-      createdMs = parsed;
-    }
-  }
+  const createdMs = parseCreatedTimestamp(createdAtStr);
 
   if (baseDateMs > 0 && createdMs > 0) {
     const createdDate = new Date(createdMs);
@@ -162,11 +163,23 @@ export function computeCardUsage(
     if (!cardName) continue;
 
     const timestamp = parseTimestamp(tx.date, tx.created_at);
+    const createdTimestamp = parseCreatedTimestamp(tx.created_at);
 
-    const current = stats.get(cardName) ?? { count: 0, latestTimestamp: 0 };
+    const current = stats.get(cardName) ?? {
+      count: 0,
+      latestTimestamp: 0,
+      latestCreatedTimestamp: 0,
+    };
+    const isNewerTimestamp = timestamp > current.latestTimestamp;
+    const isSameTimestamp = timestamp === current.latestTimestamp;
     stats.set(cardName, {
       count: current.count + 1,
       latestTimestamp: Math.max(current.latestTimestamp, timestamp),
+      latestCreatedTimestamp: isNewerTimestamp
+        ? createdTimestamp
+        : isSameTimestamp
+          ? Math.max(current.latestCreatedTimestamp ?? 0, createdTimestamp)
+          : (current.latestCreatedTimestamp ?? 0),
     });
   }
 
@@ -185,14 +198,27 @@ export function sortCards(
   const usage = computeCardUsage(transactions);
 
   return [...cards].sort((a, b) => {
-    const aStats = usage.get(a.trim()) ?? { count: 0, latestTimestamp: 0 };
-    const bStats = usage.get(b.trim()) ?? { count: 0, latestTimestamp: 0 };
+    const aStats = usage.get(a.trim()) ?? {
+      count: 0,
+      latestTimestamp: 0,
+      latestCreatedTimestamp: 0,
+    };
+    const bStats = usage.get(b.trim()) ?? {
+      count: 0,
+      latestTimestamp: 0,
+      latestCreatedTimestamp: 0,
+    };
 
     if (bStats.count !== aStats.count) {
       return bStats.count - aStats.count;
     }
     if (bStats.latestTimestamp !== aStats.latestTimestamp) {
       return bStats.latestTimestamp - aStats.latestTimestamp;
+    }
+    const aCreated = aStats.latestCreatedTimestamp ?? 0;
+    const bCreated = bStats.latestCreatedTimestamp ?? 0;
+    if (bCreated !== aCreated) {
+      return bCreated - aCreated;
     }
     return compareAlphabetical(a, b);
   });
@@ -968,6 +994,7 @@ export function intakeForm() {
       }
       const requestToken = this.token;
       const requestSequence = ++this.recentRequestSequence;
+      const preFetchSyncedIds = new Set(this.recentlySyncedTransactions.map((tx) => tx.id));
       try {
         const response = await fetch("/api/transactions?limit=50", {
           headers: { Authorization: `Bearer ${requestToken}` },
@@ -987,10 +1014,10 @@ export function intakeForm() {
           for (const tx of data.transactions) {
             fetchedMap.set(tx.id, tx);
           }
-          // Preserve concurrently synced transactions not yet returned in fetched response
+          // Preserve only transactions synced concurrently while this request was in flight
           const remainingSynced: RecentTransaction[] = [];
           for (const tx of this.recentlySyncedTransactions) {
-            if (!fetchedMap.has(tx.id)) {
+            if (!fetchedMap.has(tx.id) && !preFetchSyncedIds.has(tx.id)) {
               fetchedMap.set(tx.id, tx);
               remainingSynced.push(tx);
             }
@@ -1060,6 +1087,19 @@ export function intakeForm() {
             ) {
               this.card = this.cards[0];
             }
+            if (this.inferredCardBaseline && !this.cardManuallySelected) {
+              if (
+                !this.inferredCardBaseline.card ||
+                this.inferredCardBaseline.card === previousDefaultCard ||
+                this.inferredCardBaseline.auto
+              ) {
+                this.inferredCardBaseline = {
+                  card: this.cards[0] || "",
+                  custom: false,
+                  auto: false,
+                };
+              }
+            }
             this.persistCards();
           }
           if (this.merchantInferenceRequested) {
@@ -1080,6 +1120,47 @@ export function intakeForm() {
       if (this.isOutboxOpen) {
         this.outboxItems = pending;
         this.deadLetterItems = failed;
+      }
+      const nextPending = pending.map((item) => ({
+        id: item.id,
+        card: item.card,
+        date: item.date,
+        created_at: item.created_at,
+      }));
+      const prevIds = this.pendingTransactions.map((t) => t.id).join(",");
+      const nextIds = nextPending.map((t) => t.id).join(",");
+      this.pendingTransactions = nextPending;
+      if (prevIds !== nextIds) {
+        const previousDefaultCard = this.cards[0];
+        const merged = [...this.cards];
+        for (const item of nextPending) {
+          const c = item.card?.trim();
+          if (c && !merged.includes(c)) {
+            merged.push(c);
+          }
+        }
+        if (merged.length > 0) {
+          this.cards = sortCards(
+            merged,
+            getUsageTransactions(
+              this.pendingTransactions,
+              this.recentTransactions,
+              this.cardHistoryTransactions,
+            ),
+          );
+          if (this.autoCustomCard && !this.cardManuallySelected) {
+            this.isCustomCard = false;
+            this.autoCustomCard = false;
+          }
+          if (
+            !this.cardManuallySelected &&
+            !this.isCustomCard &&
+            (!this.card || this.card === previousDefaultCard || !this.cards.includes(this.card))
+          ) {
+            this.card = this.cards[0];
+          }
+          this.persistCards();
+        }
       }
     },
 
@@ -1179,6 +1260,7 @@ export function intakeForm() {
             ];
             const syncedCard = item.card?.trim();
             if (syncedCard) {
+              const previousDefaultCard = this.cards[0];
               const nextCards = this.cards.includes(syncedCard)
                 ? [...this.cards]
                 : [syncedCard, ...this.cards];
@@ -1190,6 +1272,17 @@ export function intakeForm() {
                   this.cardHistoryTransactions,
                 ),
               );
+              if (this.autoCustomCard && !this.cardManuallySelected) {
+                this.isCustomCard = false;
+                this.autoCustomCard = false;
+              }
+              if (
+                !this.cardManuallySelected &&
+                !this.isCustomCard &&
+                (!this.card || this.card === previousDefaultCard || !this.cards.includes(this.card))
+              ) {
+                this.card = this.cards[0];
+              }
               this.persistCards();
             }
           },
@@ -1214,9 +1307,17 @@ export function intakeForm() {
     // Initialization lifecycle
     init(): void {
       this.resetDateToToday();
-      if (typeof localStorage !== "undefined") {
+      let storage: Storage | undefined;
+      try {
+        if (typeof localStorage !== "undefined") {
+          storage = localStorage;
+        }
+      } catch {
+        // Storage restricted or unavailable
+      }
+      if (storage) {
         try {
-          const storedThemeStyle = localStorage.getItem(THEME_STYLE_STORAGE_KEY);
+          const storedThemeStyle = storage.getItem(THEME_STYLE_STORAGE_KEY);
           if (storedThemeStyle === "flat" || storedThemeStyle === "neumorphic") {
             this.themeStyle = storedThemeStyle;
           }
@@ -1224,7 +1325,7 @@ export function intakeForm() {
           // Storage restricted or unavailable
         }
         try {
-          const storedColorScheme = localStorage.getItem(COLOR_SCHEME_STORAGE_KEY);
+          const storedColorScheme = storage.getItem(COLOR_SCHEME_STORAGE_KEY);
           if (
             storedColorScheme === "light" ||
             storedColorScheme === "dark" ||
@@ -1238,7 +1339,7 @@ export function intakeForm() {
         syncThemeColorMeta(this.themeStyle, this.colorScheme);
 
         try {
-          const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+          const storedToken = storage.getItem(TOKEN_STORAGE_KEY);
           if (storedToken) {
             this.token = storedToken;
           }
@@ -1247,7 +1348,7 @@ export function intakeForm() {
         }
 
         try {
-          const storedCards = localStorage.getItem(CARDS_STORAGE_KEY);
+          const storedCards = storage.getItem(CARDS_STORAGE_KEY);
           if (storedCards) {
             const parsed = JSON.parse(storedCards) as unknown;
             if (
@@ -1265,7 +1366,7 @@ export function intakeForm() {
         }
 
         try {
-          const storedMerchants = localStorage.getItem(MERCHANTS_STORAGE_KEY);
+          const storedMerchants = storage.getItem(MERCHANTS_STORAGE_KEY);
           if (storedMerchants) {
             const parsed = JSON.parse(storedMerchants) as unknown;
             if (
