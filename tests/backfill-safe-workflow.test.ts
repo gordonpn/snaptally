@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it, type TestContext } from "node:test";
+import { writeRunArtifact } from "../scripts/backfill/artifact.ts";
 import {
   loadCheckpoint,
   resolveCheckpointPath,
@@ -20,6 +28,7 @@ import { acquireBackfillLock } from "../scripts/backfill/lock.ts";
 import { buildManifest, validateManifestMatch } from "../scripts/backfill/manifest.ts";
 import {
   applyBackfill,
+  loadSourceTransactions,
   planBackfill,
   resumeBackfill,
   verifyBackfill,
@@ -29,6 +38,7 @@ import {
   type BackfillOptions,
   type BackfillTransaction,
   type ExistingDbTransaction,
+  type RunArtifact,
 } from "../scripts/backfill/types.ts";
 import { createTestDatabase } from "./helpers/db.ts";
 
@@ -84,6 +94,31 @@ describe("Backfill Manifest and Integrity", () => {
     const manifest = buildManifest(dir, { userId: "usr_default", defaultCard: "Historical" });
     assert.doesNotThrow(() => {
       validateManifestMatch(manifest, dir, { userId: "usr_default", defaultCard: "Historical" });
+    });
+  });
+
+  it("validates manifest match when single file scope is specified", (t) => {
+    const dir = createTempDir(t);
+    const file1 = "Budgeting - Bikeshare.csv";
+    const file2 = "Budgeting - Ride-hail.csv";
+    copyFileSync(join(FIXTURES_DIR, file1), join(dir, file1));
+    copyFileSync(join(FIXTURES_DIR, file2), join(dir, file2));
+
+    const manifest = buildManifest(
+      dir,
+      { userId: "usr_default", defaultCard: "Historical" },
+      file1,
+    );
+    assert.equal(manifest.files.length, 1);
+    assert.equal(manifest.files[0].filename, file1);
+
+    assert.doesNotThrow(() => {
+      validateManifestMatch(
+        manifest,
+        dir,
+        { userId: "usr_default", defaultCard: "Historical" },
+        file1,
+      );
     });
   });
 
@@ -189,6 +224,48 @@ describe("Backfill Concurrency Lock", () => {
     });
     release();
   });
+
+  it("treats unreadable lock metadata as locked without unlinking", (t) => {
+    const artifactsDir = createTempDir(t);
+    const lockFile = join(artifactsDir, "backfill.lock");
+    writeFileSync(lockFile, "invalid-json-content");
+
+    assert.throws(
+      () =>
+        acquireBackfillLock(artifactsDir, {
+          userId: "usr_default",
+          target: "local",
+          card: "Historical",
+        }),
+      /existing lock file at .* is unreadable or currently being acquired/,
+    );
+
+    assert.ok(existsSync(lockFile));
+  });
+
+  it("release does not delete lock file owned by a different PID", (t) => {
+    const artifactsDir = createTempDir(t);
+    const lockFile = join(artifactsDir, "backfill.lock");
+    const release = acquireBackfillLock(artifactsDir, {
+      userId: "usr_default",
+      target: "local",
+      card: "Historical",
+    });
+
+    writeFileSync(
+      lockFile,
+      JSON.stringify({
+        pid: 99999999,
+        userId: "usr_default",
+        target: "local",
+        card: "Historical",
+        acquiredAt: new Date().toISOString(),
+      }),
+    );
+
+    release();
+    assert.ok(existsSync(lockFile));
+  });
 });
 
 describe("Backfill Row Classifier", () => {
@@ -263,6 +340,35 @@ describe("Backfill Row Classifier", () => {
     assert.equal(report.conflicts[0].dbValue, 10.0);
   });
 
+  it("detects field conflicts on mismatched reimbursement", () => {
+    const src = createSampleTransaction({ grossAmount: 10.0, reimbursement: 5.0 });
+    const dbTx: ExistingDbTransaction = {
+      id: src.id,
+      user_id: src.userId,
+      date: src.date,
+      card: src.card,
+      parent_bucket: src.parentBucket,
+      subcategory: src.subcategory,
+      merchant: src.merchant,
+      gross_amount: 10.0,
+      reimbursement: 0.0, // mismatched reimbursement
+      currency: src.currency,
+    };
+
+    const report = classifyTransactions([src], [dbTx], {
+      manifestHash: "test-hash",
+      target: "local",
+      userId: "usr_default",
+      card: "Historical",
+    });
+
+    assert.equal(report.counts.conflicting, 1);
+    assert.equal(report.conflicts.length, 1);
+    assert.equal(report.conflicts[0].field, "reimbursement");
+    assert.equal(report.conflicts[0].sourceValue, 5.0);
+    assert.equal(report.conflicts[0].dbValue, 0.0);
+  });
+
   it("detects row-shift duplicate where content signature matches under a different ID", () => {
     const src = createSampleTransaction({ id: "new-shifted-id-1234" });
     const dbTx: ExistingDbTransaction = {
@@ -313,6 +419,60 @@ describe("Backfill Row Classifier", () => {
 
     assert.equal(report.counts.extra, 1);
     assert.equal(report.sampleExtraIds[0], "extra-id-9999");
+  });
+
+  it("counts single transaction with multiple field mismatches as one conflict", () => {
+    const src = createSampleTransaction();
+    const dbTx: ExistingDbTransaction = {
+      id: src.id,
+      user_id: src.userId,
+      date: src.date,
+      card: src.card,
+      parent_bucket: "Different Bucket",
+      subcategory: "Different Subcategory",
+      merchant: "Different Merchant",
+      gross_amount: src.grossAmount,
+      reimbursement: src.reimbursement,
+      currency: src.currency,
+    };
+
+    const report = classifyTransactions([src], [dbTx], {
+      manifestHash: "test-hash",
+      target: "local",
+      userId: src.userId,
+      card: src.card,
+    });
+
+    assert.equal(report.counts.conflicting, 1);
+    assert.equal(report.conflicts.length, 3);
+  });
+
+  it("does not flag row shift if duplicate content signature belongs to exact-matched source transaction", () => {
+    const src1 = createSampleTransaction();
+    const src2 = { ...createSampleTransaction(), id: "different-id-same-content", sourceRow: 2 };
+    const dbTx1: ExistingDbTransaction = {
+      id: src1.id,
+      user_id: src1.userId,
+      date: src1.date,
+      card: src1.card,
+      parent_bucket: src1.parentBucket,
+      subcategory: src1.subcategory,
+      merchant: src1.merchant,
+      gross_amount: src1.grossAmount,
+      reimbursement: src1.reimbursement,
+      currency: src1.currency,
+    };
+
+    const report = classifyTransactions([src1, src2], [dbTx1], {
+      manifestHash: "test-hash",
+      target: "local",
+      userId: src1.userId,
+      card: src1.card,
+    });
+
+    assert.equal(report.counts.alreadyPresent, 1);
+    assert.equal(report.counts.missing, 1);
+    assert.equal(report.counts.conflicting, 0);
   });
 });
 
@@ -575,6 +735,129 @@ describe("Backfill Pipeline Plan, Apply, and Resume", () => {
 
     assert.equal(result.status, BACKFILL_EXIT_CODES.EXECUTION_ERROR);
     assert.match(result.stderr, /Unknown command: invalid-cmd/);
+  });
+
+  it("redacts conflict values when writing run artifacts", (t) => {
+    const dir = createTempDir(t);
+    const artifact: RunArtifact = {
+      runId: "test-redact-run",
+      command: "plan",
+      target: "local",
+      userId: "usr_default",
+      defaultCard: "Historical",
+      manifestHash: "hash",
+      manifest: {
+        manifestVersion: "1.0.0",
+        manifestHash: "hash",
+        sourceDir: dir,
+        userId: "usr_default",
+        defaultCard: "Historical",
+        parserVersion: "1.0.0",
+        files: [],
+        totalValidTransactions: 0,
+        totalSkippedRows: 0,
+        createdAt: new Date().toISOString(),
+      },
+      parserVersion: "1.0.0",
+      counts: {
+        considered: 1,
+        alreadyPresent: 0,
+        missing: 0,
+        conflicting: 1,
+        extra: 0,
+        written: 0,
+        skipped: 0,
+        failed: 0,
+      },
+      sampleMissingIds: [],
+      sampleAlreadyPresentIds: [],
+      sampleExtraIds: [],
+      conflicts: [
+        {
+          id: "tx-conf",
+          field: "merchant",
+          sourceValue: "Sensitive Merchant",
+          dbValue: "Old Merchant",
+        },
+      ],
+      verification: {
+        preCount: 1,
+        postCount: 1,
+        expectedPostCount: 1,
+        passed: true,
+      },
+      exitCode: BACKFILL_EXIT_CODES.SUCCESS,
+      createdAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+    };
+
+    const artifactPath = writeRunArtifact(dir, artifact, "plan");
+    const writtenJson = readFileSync(artifactPath, "utf-8");
+    assert.doesNotMatch(writtenJson, /Sensitive Merchant/);
+    assert.match(writtenJson, /\[REDACTED\]/);
+  });
+
+  it("resume rejects target mismatch between options and checkpoint", async (t) => {
+    const { dir, artifactsDir, options } = setupTestEnv(t);
+    const runId = "test-mismatch-target";
+    const checkpointPath = resolveCheckpointPath(artifactsDir, runId);
+    saveCheckpoint(checkpointPath, {
+      runId,
+      manifestHash: buildManifest(dir, options).manifestHash,
+      target: "remote",
+      userId: options.userId,
+      defaultCard: options.defaultCard,
+      totalBatches: 1,
+      completedBatches: [],
+      writtenCount: 0,
+      lastUpdated: new Date().toISOString(),
+    });
+
+    await assert.rejects(
+      resumeBackfill({ ...options, runId, dryRun: false, local: true, remote: false }),
+      /Options target \(local\) does not match checkpoint target \(remote\)/,
+    );
+  });
+
+  it("resume blocks and reports error when conflicts are detected", async (t) => {
+    const { dir, artifactsDir, db, client, options, filename } = setupTestEnv(t);
+    const runId = "test-resume-conflicts";
+    const checkpointPath = resolveCheckpointPath(artifactsDir, runId);
+
+    const { transactions } = loadSourceTransactions(dir, { ...options, file: filename });
+    const src = transactions[0];
+
+    // Insert a conflicting row into database sharing the same ID but with a different merchant
+    db.exec(
+      `INSERT INTO transactions (id, user_id, date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement, currency) VALUES ('${src.id}', 'usr_default', '${src.date}', '${src.card}', '${src.parentBucket}', '${src.subcategory}', 'Conflicting Merchant', 99.99, 0, '${src.currency}');`,
+    );
+
+    saveCheckpoint(checkpointPath, {
+      runId,
+      manifestHash: buildManifest(dir, options, filename).manifestHash,
+      target: "memory",
+      userId: options.userId,
+      defaultCard: options.defaultCard,
+      totalBatches: 1,
+      completedBatches: [],
+      writtenCount: 0,
+      lastUpdated: new Date().toISOString(),
+    });
+
+    const result = await resumeBackfill(
+      { ...options, runId, file: filename, yes: true, dryRun: false },
+      client,
+    );
+
+    assert.equal(result.exitCode, BACKFILL_EXIT_CODES.EXECUTION_ERROR);
+    assert.match(result.artifact.error ?? "", /conflicting record\(s\) detected/);
+  });
+
+  it("includes categoryBreakdown in plan artifact", async (t) => {
+    const { client, options } = setupTestEnv(t);
+    const result = await planBackfill(options, client);
+    assert.ok(result.artifact.categoryBreakdown);
+    assert.equal(typeof result.artifact.categoryBreakdown, "object");
   });
 });
 

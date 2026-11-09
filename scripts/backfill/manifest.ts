@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { ALL_ADAPTERS } from "./adapters.ts";
 import { parseCsv } from "./csv.ts";
 import { computeSha256 } from "./idempotency.ts";
@@ -7,6 +7,17 @@ import type { BackfillManifest, BackfillOptions, SourceFileManifest } from "./ty
 
 export const BACKFILL_PARSER_VERSION = "1.0.0";
 export const BACKFILL_MANIFEST_VERSION = "1.0";
+
+function resolveFilePath(dir: string, file: string): string {
+  if (isAbsolute(file)) {
+    return file;
+  }
+  const fromCwd = resolve(file);
+  if (existsSync(fromCwd)) {
+    return fromCwd;
+  }
+  return join(dir, file);
+}
 
 /**
  * Builds a deterministic, versioned BackfillManifest from source CSV files.
@@ -20,7 +31,7 @@ export function buildManifest(
   let filePaths: string[] = [];
 
   if (specificFile) {
-    const resolvedPath = resolve(specificFile);
+    const resolvedPath = resolveFilePath(resolvedDir, specificFile);
     if (!existsSync(resolvedPath)) {
       throw new Error(`Specified file not found: ${specificFile}`);
     }
@@ -106,6 +117,7 @@ export function validateManifestMatch(
   manifest: BackfillManifest,
   currentDir: string,
   options: Pick<BackfillOptions, "userId" | "defaultCard">,
+  singleFile?: string,
 ): void {
   if (manifest.userId !== options.userId) {
     throw new Error(
@@ -119,7 +131,7 @@ export function validateManifestMatch(
     );
   }
 
-  const currentManifest = buildManifest(currentDir, options);
+  const currentManifest = buildManifest(currentDir, options, singleFile);
 
   if (currentManifest.manifestHash !== manifest.manifestHash) {
     const expectedMap = new Map(manifest.files.map((f) => [f.filename, f.sha256]));

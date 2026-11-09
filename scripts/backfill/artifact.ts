@@ -18,7 +18,19 @@ export function writeRunArtifact(
 ): string {
   mkdirSync(artifactsDir, { recursive: true });
   const artifactPath = resolveArtifactPath(artifactsDir, artifact.runId, prefix);
-  const content = JSON.stringify(artifact, null, 2);
+
+  const sanitizedConflicts = artifact.conflicts.map((c) => ({
+    ...c,
+    sourceValue: "[REDACTED]",
+    dbValue: "[REDACTED]",
+  }));
+
+  const sanitizedArtifact: RunArtifact = {
+    ...artifact,
+    conflicts: sanitizedConflicts,
+  };
+
+  const content = JSON.stringify(sanitizedArtifact, null, 2);
   writeFileSync(artifactPath, content, { encoding: "utf-8", mode: 0o600 });
   return artifactPath;
 }

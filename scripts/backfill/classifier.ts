@@ -44,6 +44,7 @@ export function classifyTransactions(
     dbBySignature.set(sig, list);
   }
 
+  const sourceIds = new Set(sourceTransactions.map((t) => t.id));
   const seenDbIds = new Set<string>();
   const missingTransactions: BackfillTransaction[] = [];
   const conflicts: ConflictDetail[] = [];
@@ -110,6 +111,13 @@ export function classifyTransactions(
           db: existing.gross_amount,
         });
       }
+      if (roundToTwo(src.reimbursement) !== roundToTwo(existing.reimbursement)) {
+        fieldMismatches.push({
+          field: "reimbursement",
+          source: src.reimbursement,
+          db: existing.reimbursement,
+        });
+      }
       if (src.currency !== existing.currency) {
         fieldMismatches.push({
           field: "currency",
@@ -139,17 +147,17 @@ export function classifyTransactions(
       // ID not in DB; check for row-shift / duplicate signature under another ID
       const sig = computeContentSignature(src.date, src.merchant, src.grossAmount, src.currency);
       const matches = dbBySignature.get(sig);
+      const rowShiftCandidate = matches?.find((dbRow) => !sourceIds.has(dbRow.id));
 
-      if (matches && matches.length > 0) {
-        // Content signature matches an existing DB row under a different ID
-        const matchedDbTx = matches[0];
+      if (rowShiftCandidate) {
+        // Content signature matches an existing DB row under a different ID not in source
         conflicts.push({
           id: src.id,
           sourceFile: src.sourceFile,
           sourceRow: src.sourceRow,
           field: "row_shift_duplicate",
           sourceValue: src.id,
-          dbValue: matchedDbTx.id,
+          dbValue: rowShiftCandidate.id,
           isRowShiftRisk: true,
         });
       } else {
@@ -174,6 +182,8 @@ export function classifyTransactions(
     }
   }
 
+  const uniqueConflictingCount = new Set(conflicts.map((c) => c.id)).size;
+
   return {
     manifestHash: options.manifestHash,
     target: options.target,
@@ -184,7 +194,7 @@ export function classifyTransactions(
       totalDb: existingDbTransactions.length,
       alreadyPresent: alreadyPresentCount,
       missing: missingTransactions.length,
-      conflicting: conflicts.length,
+      conflicting: uniqueConflictingCount,
       extra: extraCount,
     },
     missingTransactions,

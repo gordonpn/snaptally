@@ -157,6 +157,7 @@ export interface RunArtifact {
   sampleMissingIds: string[];
   sampleAlreadyPresentIds: string[];
   sampleExtraIds: string[];
+  categoryBreakdown?: Record<string, number>;
   conflicts: ConflictDetail[];
   verification: RunArtifactVerification;
   exitCode: number;

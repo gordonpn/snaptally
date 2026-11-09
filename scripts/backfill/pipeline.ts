@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { ALL_ADAPTERS } from "./adapters.ts";
 import { writeRunArtifact } from "./artifact.ts";
 import {
@@ -128,6 +128,17 @@ export function resolveTargetDir(baseDir: string): string {
   return resolved;
 }
 
+function resolveFilePath(dir: string, file: string): string {
+  if (isAbsolute(file)) {
+    return file;
+  }
+  const fromCwd = resolve(file);
+  if (existsSync(fromCwd)) {
+    return fromCwd;
+  }
+  return join(dir, file);
+}
+
 export function loadSourceTransactions(
   targetDir: string,
   options: BackfillOptions,
@@ -135,7 +146,7 @@ export function loadSourceTransactions(
   let filePaths: string[] = [];
 
   if (options.file) {
-    const resolvedPath = resolve(options.file);
+    const resolvedPath = resolveFilePath(targetDir, options.file);
     if (!existsSync(resolvedPath)) {
       throw new Error(`Specified file not found: ${options.file}`);
     }
@@ -279,6 +290,7 @@ export async function planBackfill(
     sampleMissingIds: report.sampleMissingIds,
     sampleAlreadyPresentIds: report.sampleAlreadyPresentIds,
     sampleExtraIds: report.sampleExtraIds,
+    categoryBreakdown: report.categoryBreakdown,
     conflicts: report.conflicts,
     verification: {
       preCount: report.counts.totalDb,
@@ -338,7 +350,7 @@ export async function applyBackfill(
     if (options.planFile) {
       const planContent = readFileSync(resolve(options.planFile), "utf-8");
       const planData = JSON.parse(planContent) as RunArtifact;
-      validateManifestMatch(planData.manifest, targetDir, options);
+      validateManifestMatch(planData.manifest, targetDir, options, options.file);
     }
 
     const client = resolveDbClient(options, dbClient);
@@ -430,6 +442,7 @@ export async function applyBackfill(
       sampleMissingIds: report.sampleMissingIds,
       sampleAlreadyPresentIds: report.sampleAlreadyPresentIds,
       sampleExtraIds: report.sampleExtraIds,
+      categoryBreakdown: report.categoryBreakdown,
       conflicts: [],
       verification: {
         preCount,
@@ -485,6 +498,13 @@ export async function resumeBackfill(
   }
 
   const target = checkpoint.target;
+  const optionsTarget = options.remote ? "remote" : options.local ? "local" : undefined;
+  if (!dbClient && optionsTarget && optionsTarget !== target) {
+    throw new Error(
+      `Options target (${optionsTarget}) does not match checkpoint target (${target}). Cannot safely resume.`,
+    );
+  }
+
   const releaseLock = acquireBackfillLock(artifactsDir, {
     userId: checkpoint.userId,
     target,
@@ -492,7 +512,11 @@ export async function resumeBackfill(
   });
 
   try {
-    const client = resolveDbClient(options, dbClient);
+    const client =
+      dbClient ??
+      (target === "memory"
+        ? new OfflineDatabaseClient()
+        : new WranglerD1Client(target === "remote" ? "remote" : "local"));
     const { transactions } = loadSourceTransactions(targetDir, options);
     const preExisting = await client.queryExistingTransactions(options.userId, options.defaultCard);
     const preCount = preExisting.length;
@@ -503,6 +527,46 @@ export async function resumeBackfill(
       userId: checkpoint.userId,
       card: checkpoint.defaultCard,
     });
+
+    if (report.counts.conflicting > 0) {
+      const artifact: RunArtifact = {
+        runId: checkpoint.runId,
+        command: "resume",
+        target,
+        userId: checkpoint.userId,
+        defaultCard: checkpoint.defaultCard,
+        manifestHash: currentManifest.manifestHash,
+        manifest: currentManifest,
+        parserVersion: BACKFILL_PARSER_VERSION,
+        counts: {
+          considered: transactions.length,
+          alreadyPresent: report.counts.alreadyPresent,
+          missing: report.missingTransactions.length,
+          conflicting: report.counts.conflicting,
+          extra: report.counts.extra,
+          written: checkpoint.writtenCount,
+          skipped: report.counts.alreadyPresent,
+          failed: report.missingTransactions.length,
+        },
+        sampleMissingIds: report.sampleMissingIds,
+        sampleAlreadyPresentIds: report.sampleAlreadyPresentIds,
+        sampleExtraIds: report.sampleExtraIds,
+        categoryBreakdown: report.categoryBreakdown,
+        conflicts: report.conflicts,
+        verification: {
+          preCount,
+          postCount: preCount,
+          expectedPostCount: preCount,
+          passed: false,
+        },
+        exitCode: BACKFILL_EXIT_CODES.EXECUTION_ERROR,
+        createdAt: checkpoint.lastUpdated,
+        completedAt: new Date().toISOString(),
+        error: `Cannot resume: ${report.counts.conflicting} conflicting record(s) detected.`,
+      };
+      const artifactPath = writeRunArtifact(artifactsDir, artifact, "resume");
+      return { artifact, artifactPath, exitCode: BACKFILL_EXIT_CODES.EXECUTION_ERROR };
+    }
 
     const missingTxs = report.missingTransactions;
     const batchSize = 100;
@@ -561,6 +625,7 @@ export async function resumeBackfill(
       sampleMissingIds: report.sampleMissingIds,
       sampleAlreadyPresentIds: report.sampleAlreadyPresentIds,
       sampleExtraIds: report.sampleExtraIds,
+      categoryBreakdown: report.categoryBreakdown,
       conflicts: [],
       verification: {
         preCount,

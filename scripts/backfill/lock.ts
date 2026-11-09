@@ -47,12 +47,9 @@ export function acquireBackfillLock(
       if (err instanceof Error && err.message.includes("Concurrent backfill in progress")) {
         throw err;
       }
-      // If reading/parsing failed, attempt removal
-      try {
-        unlinkSync(lockFilePath);
-      } catch {
-        // Ignored
-      }
+      throw new Error(
+        `Failed to acquire backfill lock: existing lock file at ${lockFilePath} is unreadable or currently being acquired.`,
+      );
     }
   }
 
@@ -80,7 +77,11 @@ export function acquireBackfillLock(
     released = true;
     try {
       if (existsSync(lockFilePath)) {
-        unlinkSync(lockFilePath);
+        const content = readFileSync(lockFilePath, "utf-8");
+        const existing = JSON.parse(content) as LockMetadata;
+        if (existing.pid === process.pid) {
+          unlinkSync(lockFilePath);
+        }
       }
     } catch {
       // Ignored

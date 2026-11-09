@@ -472,7 +472,7 @@ SnapTally implements a deterministic, resumable, and audited backfill lifecycle:
    - `extra`: Database record exists for the tenant and card but is absent in source sheets (such as reconciliation items added in previous backfills). Reported for audit awareness.
    Generates a sanitized JSON plan artifact in `.backfill-runs/plan-<timestamp>-<runId>.json` without modifying database state.
 3. **Operator Review & Approval Gate**:
-   The operator inspects the plan summary. No database writes occur without explicit confirmation (`--yes` or `--confirm`). If `--yes` is omitted when invoking `apply`, the runner logs the plan summary, writes the artifact, and exits with code 2 (Approval Required).
+   The operator inspects the plan summary. No database writes occur without explicit confirmation (`--yes` or `--confirm`). If neither flag is supplied to `apply`, the runner exits with code 2 (Approval Required). Run `plan` with the same target and scope to generate the summary and artifact.
 4. **Resumable Apply with Concurrency Protection**:
    Acquires an exclusive lock file (`.backfill-runs/.backfill.lock`). If another process holds the lock, execution aborts. Stale locks from dead PIDs are automatically detected and pruned.
    Inserts missing transactions in chunks of 100 using `INSERT INTO transactions ... ON CONFLICT(id) DO NOTHING`. After each batch, progress is committed to `.backfill-runs/checkpoint-<runId>.json`. If interrupted, rerun with `resume --run-id <runId>` to continue from the last completed batch without duplicate writes.
@@ -532,7 +532,7 @@ node scripts/backfill.ts resume --remote --run-id <RUN_ID> --dir data/sheets/202
 Confirm that all source transactions are present in production D1:
 
 ```bash
-just backfill-verify-remote
+node scripts/backfill.ts verify --remote --dir data/sheets/2026-11-09/01_CURRENT_BUDGETS
 ```
 
 ### 8.3 CLI Commands and Flags
