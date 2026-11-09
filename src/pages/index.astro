@@ -249,35 +249,8 @@ import Layout from "../layouts/Layout.astro";
 
       <!-- Card Selection Chips -->
       <div class="space-y-1" role="group" aria-label="Payment card selection">
-        <div class="flex items-center justify-between px-1 text-[11px] text-neu-text-muted select-none">
-          <span class="font-medium">Card</span>
-          <div class="flex items-center gap-1" role="group" aria-label="Card sort order">
-            <span class="text-[10px] uppercase tracking-wider">Sort:</span>
-            <button
-              type="button"
-              class="neu-pressed rounded px-2.5 py-1 min-h-[44px] inline-flex items-center justify-center text-xs transition-all"
-              :class="cardSortMode === 'default' ? 'neu-inset-sm font-bold text-primary bg-primary/10' : 'neu-raised-sm text-neu-text'"
-              :aria-pressed="cardSortMode === 'default'"
-              @click="setCardSortMode('default')"
-            >Default</button>
-            <button
-              type="button"
-              class="neu-pressed rounded px-2.5 py-1 min-h-[44px] inline-flex items-center justify-center text-xs transition-all"
-              :class="cardSortMode === 'frequency' ? 'neu-inset-sm font-bold text-primary bg-primary/10' : 'neu-raised-sm text-neu-text'"
-              :aria-pressed="cardSortMode === 'frequency'"
-              @click="setCardSortMode('frequency')"
-            >Frequent</button>
-            <button
-              type="button"
-              class="neu-pressed rounded px-2.5 py-1 min-h-[44px] inline-flex items-center justify-center text-xs transition-all"
-              :class="cardSortMode === 'recency' ? 'neu-inset-sm font-bold text-primary bg-primary/10' : 'neu-raised-sm text-neu-text'"
-              :aria-pressed="cardSortMode === 'recency'"
-              @click="setCardSortMode('recency')"
-            >Recent</button>
-          </div>
-        </div>
-        <div x-ref="cardsContainer" class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right py-1 px-1">
-          <template x-for="c in sortedCards" :key="c">
+        <div class="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-mask-right py-1 px-1">
+          <template x-for="c in cards" :key="c">
             <button
               type="button"
               class="neu-pressed rounded-full px-3 py-1.5 whitespace-nowrap min-h-[44px] text-xs sm:text-sm transition-all"

@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import {
-  CARD_SORT_STORAGE_KEY,
-  CARD_USAGE_STORAGE_KEY,
   CARDS_STORAGE_KEY,
-  type CardSortMode,
   COLOR_SCHEME_STORAGE_KEY,
   compareAlphabetical,
   computeCardUsage,
@@ -1287,7 +1284,7 @@ describe("intakeForm Recent Transactions Feed (Scenario 4)", () => {
     try {
       await form.loadRecentTransactions();
       assert.strictEqual(form.isCustomCard, true);
-      assert.deepStrictEqual(form.cards, ["Chase Sapphire", "Amex Gold"]);
+      assert.deepStrictEqual(form.cards, ["Amex Gold", "Chase Sapphire"]);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -1853,18 +1850,11 @@ describe("intakeForm Card Lifecycle and Storage", () => {
 
 describe("Credit Card Sorting by Frequency and Recency (Issue #164)", () => {
   let mockStorage: MockLocalStorage;
-  let mockSessionStorage: MockLocalStorage;
 
   beforeEach(() => {
     mockStorage = new MockLocalStorage();
-    mockSessionStorage = new MockLocalStorage();
     Object.defineProperty(globalThis, "localStorage", {
       value: mockStorage,
-      writable: true,
-      configurable: true,
-    });
-    Object.defineProperty(globalThis, "sessionStorage", {
-      value: mockSessionStorage,
       writable: true,
       configurable: true,
     });
@@ -1879,93 +1869,57 @@ describe("Credit Card Sorting by Frequency and Recency (Issue #164)", () => {
     merchant: "MBTA",
     gross_amount: 2.4,
     reimbursement: 0,
-    created_at,
-  });
-
-  it("sortCards returns cards unchanged under default mode", () => {
-    const cards = ["Historical", "RBC Visa", "Amex Gold", "Chase"];
-    const transactions = [
-      createTx("RBC Visa", "2026-11-01"),
-      createTx("RBC Visa", "2026-11-02"),
-      createTx("Amex Gold", "2026-11-03"),
-    ];
-
-    const sorted = sortCards(cards, transactions, "default");
-    assert.deepStrictEqual(sorted, ["Historical", "RBC Visa", "Amex Gold", "Chase"]);
+    net_spend: 2.4,
+    created_at: created_at ?? `${date}T00:00:00Z`,
   });
 
   it("sortCards sorts primarily by frequency descending", () => {
-    const cards = ["Amex Gold", "Chase", "RBC Visa"];
+    const cards = ["Historical", "Amex Gold", "Chase", "RBC Visa"];
     const transactions = [
       createTx("Chase", "2026-11-01"),
       createTx("RBC Visa", "2026-11-01"),
       createTx("RBC Visa", "2026-11-02"),
       createTx("RBC Visa", "2026-11-03"),
       createTx("Chase", "2026-11-02"),
+      createTx("Amex Gold", "2026-11-05"),
     ];
-    // RBC Visa: 3, Chase: 2, Amex Gold: 0
-    const sorted = sortCards(cards, transactions, "frequency");
-    assert.deepStrictEqual(sorted, ["RBC Visa", "Chase", "Amex Gold"]);
+    // RBC Visa: 3, Chase: 2, Amex Gold: 1, Historical: 0
+    const sorted = sortCards(cards, transactions);
+    assert.deepStrictEqual(sorted, ["RBC Visa", "Chase", "Amex Gold", "Historical"]);
   });
 
   it("sortCards breaks frequency ties using recency (most recent first)", () => {
     const cards = ["Amex Gold", "Chase"];
     const transactions = [
-      createTx("Amex Gold", "2026-11-01T10:00:00Z", "2026-11-01T10:00:00Z"),
-      createTx("Chase", "2026-11-05T10:00:00Z", "2026-11-05T10:00:00Z"),
+      createTx("Amex Gold", "2026-11-01", "2026-11-01T10:00:00Z"),
+      createTx("Chase", "2026-11-05", "2026-11-05T10:00:00Z"),
     ];
     // Both have frequency 1; Chase is newer
-    const sorted = sortCards(cards, transactions, "frequency");
+    const sorted = sortCards(cards, transactions);
     assert.deepStrictEqual(sorted, ["Chase", "Amex Gold"]);
   });
 
   it("sortCards breaks equal frequency and recency ties using stable alphabetical sort", () => {
     const cards = ["Visa Platinum", "Apple Card", "Discover"];
     const transactions = [
-      createTx("Visa Platinum", "2026-11-01T10:00:00Z", "2026-11-01T10:00:00Z"),
-      createTx("Apple Card", "2026-11-01T10:00:00Z", "2026-11-01T10:00:00Z"),
-      createTx("Discover", "2026-11-01T10:00:00Z", "2026-11-01T10:00:00Z"),
+      createTx("Visa Platinum", "2026-11-01", "2026-11-01T10:00:00Z"),
+      createTx("Apple Card", "2026-11-01", "2026-11-01T10:00:00Z"),
+      createTx("Discover", "2026-11-01", "2026-11-01T10:00:00Z"),
     ];
     // All 3 have frequency 1 and exact same timestamp; alphabetical tie-breaker
-    const sorted = sortCards(cards, transactions, "frequency");
+    const sorted = sortCards(cards, transactions);
     assert.deepStrictEqual(sorted, ["Apple Card", "Discover", "Visa Platinum"]);
   });
 
-  it("sortCards sorts primarily by recency descending", () => {
-    const cards = ["Historical", "RBC Visa", "Amex Gold"];
-    const transactions = [
-      createTx("Historical", "2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z"),
-      createTx("Historical", "2026-10-02T00:00:00Z", "2026-10-02T00:00:00Z"),
-      createTx("RBC Visa", "2026-11-05T00:00:00Z", "2026-11-05T00:00:00Z"),
-      createTx("Amex Gold", "2026-11-08T00:00:00Z", "2026-11-08T00:00:00Z"),
-    ];
-    // Amex: Nov 8, RBC: Nov 5, Historical: Oct 2
-    const sorted = sortCards(cards, transactions, "recency");
-    assert.deepStrictEqual(sorted, ["Amex Gold", "RBC Visa", "Historical"]);
-  });
-
-  it("sortCards breaks recency ties using frequency (highest count first)", () => {
-    const cards = ["Amex Gold", "RBC Visa"];
-    const transactions = [
-      createTx("Amex Gold", "2026-11-05T00:00:00Z", "2026-11-05T00:00:00Z"),
-      createTx("RBC Visa", "2026-11-01T00:00:00Z", "2026-11-01T00:00:00Z"),
-      createTx("RBC Visa", "2026-11-05T00:00:00Z", "2026-11-05T00:00:00Z"),
-    ];
-    // Both latest at Nov 5; RBC Visa count 2 > Amex Gold count 1
-    const sorted = sortCards(cards, transactions, "recency");
-    assert.deepStrictEqual(sorted, ["RBC Visa", "Amex Gold"]);
-  });
-
-  it("sortCards breaks equal recency and frequency ties using stable alphabetical sort", () => {
+  it("sortCards breaks zero-count ties using stable alphabetical sort", () => {
     const cards = ["Zenith Card", "Apex Card"];
-    // 0 transactions for both
-    const sorted = sortCards(cards, [], "recency");
+    const sorted = sortCards(cards, []);
     assert.deepStrictEqual(sorted, ["Apex Card", "Zenith Card"]);
   });
 
   it("sortCards handles empty or single card input cleanly", () => {
-    assert.deepStrictEqual(sortCards([], [], "frequency"), []);
-    assert.deepStrictEqual(sortCards(["Only Card"], [], "recency"), ["Only Card"]);
+    assert.deepStrictEqual(sortCards([], []), []);
+    assert.deepStrictEqual(sortCards(["Only Card"], []), ["Only Card"]);
   });
 
   it("computeCardUsage aggregates frequency counts and extracts latest timestamps", () => {
@@ -1983,78 +1937,6 @@ describe("Credit Card Sorting by Frequency and Recency (Issue #164)", () => {
     assert.equal(amex?.latestTimestamp, Date.parse("2026-11-05T12:00:00Z"));
     assert.equal(chase?.count, 1);
     assert.equal(chase?.latestTimestamp, Date.parse("2026-11-03T08:00:00Z"));
-  });
-
-  it("sortCards supports frecency sort mode", () => {
-    const mode: CardSortMode = "frecency";
-    const cards = ["Historical", "RBC Visa"];
-    const transactions = [createTx("RBC Visa", "2026-11-05T00:00:00Z", "2026-11-05T00:00:00Z")];
-    const sorted = sortCards(cards, transactions, mode);
-    assert.deepStrictEqual(sorted, ["RBC Visa", "Historical"]);
-  });
-
-  it("intakeForm initializes cardSortMode to default and sortedCards matches cards", () => {
-    const form = intakeForm();
-    form.cards = ["Card B", "Card A"];
-    assert.strictEqual(form.cardSortMode, "default");
-    assert.deepStrictEqual(form.sortedCards, ["Card B", "Card A"]);
-  });
-
-  it("intakeForm setCardSortMode updates sort mode and sortedCards", () => {
-    const form = intakeForm();
-    form.cards = ["Card B", "Card A"];
-    form.recentTransactions = [
-      createTx("Card A", "2026-11-05"),
-      createTx("Card A", "2026-11-06"),
-      createTx("Card B", "2026-11-01"),
-    ];
-
-    form.setCardSortMode("frequency");
-    assert.strictEqual(form.cardSortMode, "frequency");
-    assert.deepStrictEqual(form.sortedCards, ["Card A", "Card B"]);
-
-    form.setCardSortMode("default");
-    assert.strictEqual(form.cardSortMode, "default");
-    assert.deepStrictEqual(form.sortedCards, ["Card B", "Card A"]);
-  });
-
-  it("intakeForm cycleCardSort cycles between default, frequency, and recency", () => {
-    const form = intakeForm();
-    assert.strictEqual(form.cardSortMode, "default");
-
-    form.cycleCardSort();
-    assert.strictEqual(form.cardSortMode, "frequency");
-
-    form.cycleCardSort();
-    assert.strictEqual(form.cardSortMode, "recency");
-
-    form.cycleCardSort();
-    assert.strictEqual(form.cardSortMode, "default");
-  });
-
-  it("intakeForm loads cardSortMode from sessionStorage on init", () => {
-    mockSessionStorage.setItem(CARD_SORT_STORAGE_KEY, "frequency");
-    const form = intakeForm();
-    form.init();
-    assert.strictEqual(form.cardSortMode, "frequency");
-  });
-
-  it("intakeForm setCardSortMode persists selection to sessionStorage", () => {
-    const form = intakeForm();
-    form.setCardSortMode("recency");
-    assert.strictEqual(mockSessionStorage.getItem(CARD_SORT_STORAGE_KEY), "recency");
-  });
-
-  it("intakeForm selectCard selects correct card from sortedCards", () => {
-    const form = intakeForm();
-    form.cards = ["Card B", "Card A"];
-    form.recentTransactions = [createTx("Card A", "2026-11-05")];
-    form.setCardSortMode("frequency");
-
-    assert.deepStrictEqual(form.sortedCards, ["Card A", "Card B"]);
-    form.selectCard(form.sortedCards[0]);
-    assert.strictEqual(form.card, "Card A");
-    assert.strictEqual(form.isCustomCard, false);
   });
 
   it("parseTimestamp ranks transaction date before entry creation time for backdated expenses", () => {
@@ -2082,78 +1964,68 @@ describe("Credit Card Sorting by Frequency and Recency (Issue #164)", () => {
     assert.deepStrictEqual(sorted, ["visa", "Visa"]);
   });
 
-  it("intakeForm restores sort mode independently if cards storage contains invalid JSON", () => {
-    mockStorage.setItem(CARDS_STORAGE_KEY, "invalid-json{{");
-    mockSessionStorage.setItem(CARD_SORT_STORAGE_KEY, "frequency");
+  it("intakeForm loadRecentTransactions automatically sorts cards by frequency and recency across the 50-item history", async () => {
+    mockStorage.setItem(TOKEN_STORAGE_KEY, "valid-token");
+    mockStorage.setItem(CARDS_STORAGE_KEY, JSON.stringify(["Historical"]));
     const form = intakeForm();
     form.init();
+    assert.deepStrictEqual(form.cards, ["Historical"]);
+    assert.strictEqual(form.card, "Historical");
 
-    assert.strictEqual(form.cardSortMode, "frequency");
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      const transactions = [
+        createTx("Amex Gold", "2026-11-09", "2026-11-09 10:00:00"),
+        createTx("Amex Gold", "2026-11-08", "2026-11-08 10:00:00"),
+        ...Array.from({ length: 10 }, (_, i) =>
+          createTx(
+            "RBC Visa",
+            `2026-10-${String(i + 1).padStart(2, "0")}`,
+            `2026-10-${String(i + 1).padStart(2, "0")} 12:00:00`,
+          ),
+        ),
+      ];
+      return new Response(JSON.stringify({ transactions }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      await form.loadRecentTransactions();
+      assert.deepStrictEqual(form.cards, ["RBC Visa", "Amex Gold", "Historical"]);
+      assert.strictEqual(form.card, "RBC Visa");
+      assert.deepStrictEqual(JSON.parse(mockStorage.getItem(CARDS_STORAGE_KEY) ?? "[]"), [
+        "RBC Visa",
+        "Amex Gold",
+        "Historical",
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
-  it("intakeForm loads cardUsage from localStorage on init", () => {
-    mockStorage.setItem(
-      CARD_USAGE_STORAGE_KEY,
-      JSON.stringify({ "Amex Gold": { count: 8, latestTimestamp: 1000 } }),
-    );
-    const form = intakeForm();
-    form.init();
-
-    assert.deepStrictEqual(form.cardUsage["Amex Gold"], { count: 8, latestTimestamp: 1000 });
-  });
-
-  it("intakeForm setCardSortMode resets horizontal scroll on cards container", () => {
-    const form = intakeForm();
-    let scrollArgs: unknown = null;
-    form.$refs = {
-      cardsContainer: {
-        scrollTo: (args: unknown) => {
-          scrollArgs = args;
-        },
-      } as unknown as HTMLElement,
-    };
-
-    form.setCardSortMode("recency");
-    assert.deepStrictEqual(scrollArgs, { left: 0, behavior: "smooth" });
-  });
-
-  it("intakeForm sortedCards immediately reflects offline pending transactions", () => {
-    const form = intakeForm();
-    form.cards = ["Chase", "Amex Gold"];
-    form.setCardSortMode("frequency");
-
-    assert.deepStrictEqual(form.sortedCards, ["Amex Gold", "Chase"]); // alphabetical default tie
-
-    // Add pending offline transaction
-    form.pendingTransactions = [
-      {
-        id: "offline-1",
-        card: "Chase",
-        date: "2026-11-09",
-        created_at: "2026-11-09T12:00:00Z",
-      },
-    ];
-
-    assert.deepStrictEqual(form.sortedCards, ["Chase", "Amex Gold"]);
-  });
-
-  it("intakeForm sortedCards utilizes broader transaction history beyond the 5-item feed", () => {
+  it("intakeForm submitTransaction immediately re-sorts cards when pending transaction changes frequency or recency", async () => {
     const form = intakeForm();
     form.cards = ["Amex Gold", "Chase"];
-    form.setCardSortMode("frequency");
+    form.cardHistoryTransactions = [createTx("Amex Gold", "2026-11-01", "2026-11-01 10:00:00")];
+    form.selectCard("Chase");
+    form.merchant = "Coffee";
+    form.amountCents = 500;
+    form.date = "2026-11-09";
 
-    // Feed has 5 transactions using Amex Gold
-    form.recentTransactions = [
-      createTx("Amex Gold", "2026-11-09"),
-      createTx("Amex Gold", "2026-11-08"),
-    ];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new Error("Offline");
+    }) as unknown as typeof fetch;
 
-    // Broader history has 10 transactions using Chase
-    form.cardHistoryTransactions = Array.from({ length: 10 }, (_, i) =>
-      createTx("Chase", `2026-10-${String(i + 1).padStart(2, "0")}`),
-    );
-
-    assert.deepStrictEqual(form.sortedCards, ["Chase", "Amex Gold"]);
+    try {
+      await form.submitTransaction();
+      // Both Chase and Amex Gold now have 1 transaction, but Chase is newer (2026-11-09 vs 2026-11-01)
+      assert.deepStrictEqual(form.cards, ["Chase", "Amex Gold"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 

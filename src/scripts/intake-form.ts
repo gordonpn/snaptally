@@ -39,13 +39,10 @@ export { BUCKET_SUBCATEGORIES, DEFAULT_FREQUENT_MERCHANTS };
 export const CATEGORIES_BY_BUCKET = BUCKET_SUBCATEGORIES;
 export const TOKEN_STORAGE_KEY = "snaptally_api_token";
 export const CARDS_STORAGE_KEY = "snaptally_cards";
-export const CARD_SORT_STORAGE_KEY = "snaptally_cards_sort";
-export const CARD_USAGE_STORAGE_KEY = "snaptally_card_usage";
 export const MERCHANTS_STORAGE_KEY = "snaptally_merchants";
 export const THEME_STYLE_STORAGE_KEY = "snaptally_theme_style";
 export const COLOR_SCHEME_STORAGE_KEY = "snaptally_color_scheme";
 
-export type CardSortMode = "default" | "frequency" | "recency" | "frecency";
 export type ThemeStyle = "neumorphic" | "flat";
 export type ColorScheme = "system" | "light" | "dark";
 
@@ -152,22 +149,8 @@ export function compareAlphabetical(a: string, b: string): number {
 
 export function computeCardUsage(
   transactions: Array<{ card?: string; date?: string; created_at?: string }>,
-  initialUsage?: Map<string, CardUsageStats> | Record<string, CardUsageStats>,
 ): Map<string, CardUsageStats> {
   const stats = new Map<string, CardUsageStats>();
-
-  if (initialUsage) {
-    const entries =
-      initialUsage instanceof Map ? initialUsage.entries() : Object.entries(initialUsage);
-    for (const [cardName, currentStats] of entries) {
-      if (cardName && currentStats) {
-        stats.set(cardName.trim(), {
-          count: currentStats.count || 0,
-          latestTimestamp: currentStats.latestTimestamp || 0,
-        });
-      }
-    }
-  }
 
   for (const tx of transactions) {
     if (!tx || typeof tx.card !== "string") continue;
@@ -189,51 +172,43 @@ export function computeCardUsage(
 export function sortCards(
   cards: string[],
   transactions: Array<{ card?: string; date?: string; created_at?: string }>,
-  mode: CardSortMode = "default",
-  initialUsage?: Map<string, CardUsageStats> | Record<string, CardUsageStats>,
 ): string[] {
-  if (mode === "default" || cards.length <= 1) {
+  if (cards.length <= 1) {
     return [...cards];
   }
 
-  const usage = computeCardUsage(transactions, initialUsage);
+  const usage = computeCardUsage(transactions);
 
   return [...cards].sort((a, b) => {
     const aStats = usage.get(a.trim()) ?? { count: 0, latestTimestamp: 0 };
     const bStats = usage.get(b.trim()) ?? { count: 0, latestTimestamp: 0 };
 
-    if (mode === "frequency") {
-      if (bStats.count !== aStats.count) {
-        return bStats.count - aStats.count;
-      }
-      if (bStats.latestTimestamp !== aStats.latestTimestamp) {
-        return bStats.latestTimestamp - aStats.latestTimestamp;
-      }
-      return compareAlphabetical(a, b);
+    if (bStats.count !== aStats.count) {
+      return bStats.count - aStats.count;
     }
-
-    if (mode === "recency") {
-      if (bStats.latestTimestamp !== aStats.latestTimestamp) {
-        return bStats.latestTimestamp - aStats.latestTimestamp;
-      }
-      if (bStats.count !== aStats.count) {
-        return bStats.count - aStats.count;
-      }
-      return compareAlphabetical(a, b);
+    if (bStats.latestTimestamp !== aStats.latestTimestamp) {
+      return bStats.latestTimestamp - aStats.latestTimestamp;
     }
-
-    if (mode === "frecency") {
-      if (bStats.count !== aStats.count) {
-        return bStats.count - aStats.count;
-      }
-      if (bStats.latestTimestamp !== aStats.latestTimestamp) {
-        return bStats.latestTimestamp - aStats.latestTimestamp;
-      }
-      return compareAlphabetical(a, b);
-    }
-
-    return 0;
+    return compareAlphabetical(a, b);
   });
+}
+
+function getUsageTransactions(
+  pending: Array<{ id: string; card: string; date: string; created_at: string }>,
+  recent: RecentTransaction[],
+  history: RecentTransaction[],
+): Array<{ id: string; card: string; date: string; created_at: string }> {
+  const map = new Map<string, { id: string; card: string; date: string; created_at: string }>();
+  for (const tx of history) {
+    if (tx?.id) map.set(tx.id, tx);
+  }
+  for (const tx of recent) {
+    if (tx?.id) map.set(tx.id, tx);
+  }
+  for (const tx of pending) {
+    if (tx?.id) map.set(tx.id, tx);
+  }
+  return Array.from(map.values());
 }
 
 /** Creates state and actions for local transaction entry and queue recovery. */
@@ -250,8 +225,6 @@ export function intakeForm() {
     // Card selection (dynamically populated from recent transactions with Other... fallback)
     cards: [] as string[],
     card: "",
-    cardSortMode: "default" as CardSortMode,
-    cardUsage: {} as Record<string, CardUsageStats>,
     pendingTransactions: [] as Array<{
       id: string;
       card: string;
@@ -263,15 +236,6 @@ export function intakeForm() {
     isCustomCard: false,
     customCardInput: "",
     autoCustomCard: false,
-
-    get sortedCards(): string[] {
-      const allTx = [
-        ...this.pendingTransactions,
-        ...this.recentTransactions,
-        ...this.cardHistoryTransactions,
-      ];
-      return sortCards(this.cards, allTx, this.cardSortMode, this.cardUsage);
-    },
 
     // Bucket and subcategory selection
     buckets: Object.keys(BUCKET_SUBCATEGORIES),
@@ -566,57 +530,6 @@ export function intakeForm() {
       } catch {
         // Storage restricted or unavailable
       }
-    },
-
-    persistCardUsage(): void {
-      try {
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem(CARD_USAGE_STORAGE_KEY, JSON.stringify(this.cardUsage));
-        }
-      } catch {
-        // Storage restricted or unavailable
-      }
-    },
-
-    recordCardUsage(cardName: string, date: string, createdAt: string): void {
-      const trimmed = cardName.trim();
-      if (!trimmed) return;
-      const ts = parseTimestamp(date, createdAt);
-      const current = this.cardUsage[trimmed] ?? { count: 0, latestTimestamp: 0 };
-      this.cardUsage[trimmed] = {
-        count: current.count + 1,
-        latestTimestamp: Math.max(current.latestTimestamp, ts),
-      };
-      this.persistCardUsage();
-    },
-
-    setCardSortMode(mode: CardSortMode): void {
-      this.cardSortMode = mode;
-      try {
-        if (typeof sessionStorage !== "undefined") {
-          sessionStorage.setItem(CARD_SORT_STORAGE_KEY, mode);
-        }
-      } catch {
-        // Storage restricted or unavailable
-      }
-      if (
-        this.$refs &&
-        typeof (this.$refs as Record<string, unknown>).cardsContainer === "object" &&
-        (this.$refs as Record<string, HTMLElement>).cardsContainer !== null &&
-        typeof (this.$refs as Record<string, HTMLElement>).cardsContainer.scrollTo === "function"
-      ) {
-        (this.$refs as Record<string, HTMLElement>).cardsContainer.scrollTo({
-          left: 0,
-          behavior: "smooth",
-        });
-      }
-    },
-
-    cycleCardSort(): void {
-      const modes: CardSortMode[] = ["default", "frequency", "recency"];
-      const currentIndex = modes.indexOf(this.cardSortMode);
-      const nextIndex = (currentIndex + 1) % modes.length;
-      this.setCardSortMode(modes[nextIndex]);
     },
 
     selectBucket(bucket: string): void {
@@ -1087,22 +1000,6 @@ export function intakeForm() {
           this.recentTransactions = allMerged.slice(0, 5);
           this.cardHistoryTransactions = allMerged;
 
-          // Update cardUsage with fetched transactions
-          for (const tx of allMerged) {
-            if (tx.card) {
-              const cardName = tx.card.trim();
-              if (cardName) {
-                const ts = parseTimestamp(tx.date, tx.created_at);
-                const current = this.cardUsage[cardName] ?? { count: 0, latestTimestamp: 0 };
-                this.cardUsage[cardName] = {
-                  count: Math.max(current.count, 1),
-                  latestTimestamp: Math.max(current.latestTimestamp, ts),
-                };
-              }
-            }
-          }
-          this.persistCardUsage();
-
           // Dynamically extract distinct merchants from recent transactions
           const extractedMerchants: string[] = [];
           for (const tx of allMerged) {
@@ -1122,7 +1019,7 @@ export function intakeForm() {
             this.persistMerchants();
           }
 
-          // Dynamically extract distinct cards from recent transactions
+          // Dynamically extract distinct cards from recent transactions and sort by frequency + recency
           const extractedCards: string[] = [];
           for (const tx of allMerged) {
             const cardName = tx.card?.trim();
@@ -1131,13 +1028,21 @@ export function intakeForm() {
             }
           }
           if (extractedCards.length > 0) {
+            const previousDefaultCard = this.cards[0];
             const merged = [...this.cards];
             for (const c of extractedCards) {
               if (!merged.includes(c)) {
                 merged.push(c);
               }
             }
-            this.cards = merged;
+            this.cards = sortCards(
+              merged,
+              getUsageTransactions(
+                this.pendingTransactions,
+                this.recentTransactions,
+                this.cardHistoryTransactions,
+              ),
+            );
             if (this.autoCustomCard && !this.cardManuallySelected) {
               this.isCustomCard = false;
               this.autoCustomCard = false;
@@ -1145,7 +1050,7 @@ export function intakeForm() {
             if (
               !this.cardManuallySelected &&
               !this.isCustomCard &&
-              (!this.card || !this.cards.includes(this.card))
+              (!this.card || this.card === previousDefaultCard || !this.cards.includes(this.card))
             ) {
               this.card = this.cards[0];
             }
@@ -1266,7 +1171,21 @@ export function intakeForm() {
               newTx,
               ...this.cardHistoryTransactions.filter((t) => t.id !== item.id),
             ];
-            this.recordCardUsage(item.card, item.date, item.created_at);
+            const syncedCard = item.card?.trim();
+            if (syncedCard) {
+              const nextCards = this.cards.includes(syncedCard)
+                ? [...this.cards]
+                : [syncedCard, ...this.cards];
+              this.cards = sortCards(
+                nextCards,
+                getUsageTransactions(
+                  this.pendingTransactions,
+                  this.recentTransactions,
+                  this.cardHistoryTransactions,
+                ),
+              );
+              this.persistCards();
+            }
           },
           onStatusChange: (_syncing, count) => {
             this.outboxCount = count;
@@ -1340,18 +1259,6 @@ export function intakeForm() {
         }
 
         try {
-          const storedUsage = localStorage.getItem(CARD_USAGE_STORAGE_KEY);
-          if (storedUsage) {
-            const parsed = JSON.parse(storedUsage) as unknown;
-            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-              this.cardUsage = parsed as Record<string, CardUsageStats>;
-            }
-          }
-        } catch {
-          // Storage restricted or unavailable
-        }
-
-        try {
           const storedMerchants = localStorage.getItem(MERCHANTS_STORAGE_KEY);
           if (storedMerchants) {
             const parsed = JSON.parse(storedMerchants) as unknown;
@@ -1367,22 +1274,6 @@ export function intakeForm() {
               }
               this.allMerchants = merged;
             }
-          }
-        } catch {
-          // Storage restricted or unavailable
-        }
-      }
-
-      if (typeof sessionStorage !== "undefined") {
-        try {
-          const storedSort = sessionStorage.getItem(CARD_SORT_STORAGE_KEY);
-          if (
-            storedSort === "default" ||
-            storedSort === "frequency" ||
-            storedSort === "recency" ||
-            storedSort === "frecency"
-          ) {
-            this.cardSortMode = storedSort;
           }
         } catch {
           // Storage restricted or unavailable
@@ -1485,7 +1376,6 @@ export function intakeForm() {
           },
           ...this.pendingTransactions.filter((t) => t.id !== outboxItem.id),
         ];
-        this.recordCardUsage(trimmedCard, outboxItem.date, outboxItem.created_at);
 
         // 2. 0ms UI reset
         if (isCredit) {
@@ -1516,11 +1406,20 @@ export function intakeForm() {
           this.customMerchantInput = "";
         }
 
+        const nextCards = this.cards.includes(trimmedCard)
+          ? [...this.cards]
+          : [trimmedCard, ...this.cards];
+        this.cards = sortCards(
+          nextCards,
+          getUsageTransactions(
+            this.pendingTransactions,
+            this.recentTransactions,
+            this.cardHistoryTransactions,
+          ),
+        );
+        this.persistCards();
+
         if (this.isCustomCard) {
-          if (!this.cards.includes(trimmedCard)) {
-            this.cards.unshift(trimmedCard);
-            this.persistCards();
-          }
           this.isCustomCard = false;
           this.autoCustomCard = false;
           this.customCardInput = "";

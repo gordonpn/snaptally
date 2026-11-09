@@ -411,7 +411,11 @@ describe("Intake text input assistance", () => {
       /placeholder="Merchant name\.\.\."/,
       "merchant input must specify placeholder 'Merchant name...'",
     );
-    assert.match(merchantInput, /role="combobox"/, "merchant input must declare combobox role");
+    assert.match(
+      merchantInput,
+      /role="combobox"/,
+      "merchant input must declare combobox role",
+    );
     assert.match(
       merchantInput,
       /x-model="merchant"/,
@@ -470,47 +474,6 @@ describe("Intake text input assistance", () => {
       indexContent,
       /toggleCustomMerchant\(\)/,
       "merchant section must not contain an Other... toggle button",
-    );
-  });
-
-  it("declares card sort controls and renders sorted cards list in index.astro", () => {
-    const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
-    const indexContent = fs.readFileSync(indexPath, "utf-8");
-
-    assert.match(
-      indexContent,
-      /aria-label="Card sort order"/,
-      "index.astro must declare card sort order group",
-    );
-    assert.match(
-      indexContent,
-      /@click="setCardSortMode\('default'\)"/,
-      "index.astro must declare default sort button",
-    );
-    assert.match(
-      indexContent,
-      /@click="setCardSortMode\('frequency'\)"/,
-      "index.astro must declare frequency sort button",
-    );
-    assert.match(
-      indexContent,
-      /@click="setCardSortMode\('recency'\)"/,
-      "index.astro must declare recency sort button",
-    );
-    assert.match(
-      indexContent,
-      /<template x-for="c in sortedCards" :key="c">/,
-      "index.astro must iterate over sortedCards template",
-    );
-    assert.match(
-      indexContent,
-      /x-ref="cardsContainer"/,
-      "index.astro must assign cardsContainer ref for scroll reset",
-    );
-    assert.match(
-      indexContent,
-      /min-h-\[44px\] inline-flex items-center justify-center text-xs transition-all/,
-      "sort buttons must meet minimum 44px touch target height",
     );
   });
 });
