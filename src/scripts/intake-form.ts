@@ -95,11 +95,13 @@ function isExactIntakeRule(normalized: NormalizedTransaction): boolean {
 
 export { getTodayDate };
 
+/** Usage frequency and latest activity timestamp for a credit card. */
 export interface CardUsageStats {
   count: number;
   latestTimestamp: number;
 }
 
+/** Parses transaction date and creation timestamp into a UTC millisecond value, ranking transaction date first. */
 export function parseTimestamp(dateStr?: string, createdAtStr?: string): number {
   let baseDateMs = 0;
   if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr.trim())) {
@@ -139,6 +141,7 @@ export function parseTimestamp(dateStr?: string, createdAtStr?: string): number 
   return createdMs;
 }
 
+/** Compares two strings alphabetically using case-insensitive base comparison with a deterministic fallback. */
 export function compareAlphabetical(a: string, b: string): number {
   const baseDiff = a.localeCompare(b, undefined, { sensitivity: "base" });
   if (baseDiff !== 0) {
@@ -147,6 +150,7 @@ export function compareAlphabetical(a: string, b: string): number {
   return a.localeCompare(b);
 }
 
+/** Aggregates per-card usage counts and latest transaction timestamps. */
 export function computeCardUsage(
   transactions: Array<{ card?: string; date?: string; created_at?: string }>,
 ): Map<string, CardUsageStats> {
@@ -169,6 +173,7 @@ export function computeCardUsage(
   return stats;
 }
 
+/** Sorts card names by usage frequency descending, then latest timestamp descending, then alphabetically. */
 export function sortCards(
   cards: string[],
   transactions: Array<{ card?: string; date?: string; created_at?: string }>,
@@ -193,6 +198,7 @@ export function sortCards(
   });
 }
 
+/** Deduplicates pending, recent, and historical transactions by ID for card usage calculation. */
 function getUsageTransactions(
   pending: Array<{ id: string; card: string; date: string; created_at: string }>,
   recent: RecentTransaction[],

@@ -1951,10 +1951,18 @@ describe("Credit Card Sorting by Frequency and Recency (Issue #164)", () => {
     );
   });
 
-  it("parseTimestamp normalizes timezone-naive SQLite timestamp strings to UTC", () => {
+  it("parseTimestamp normalizes timezone-naive SQLite timestamp strings to UTC and falls back to date or created_at when one is missing", () => {
     const sqliteTs = parseTimestamp("2026-11-05", "2026-11-05 12:00:00");
     const expectedUtc = Date.parse("2026-11-05T12:00:00Z");
     assert.strictEqual(sqliteTs, expectedUtc);
+
+    // Date only (no created_at)
+    assert.strictEqual(parseTimestamp("2026-11-05", undefined), Date.parse("2026-11-05T00:00:00Z"));
+    // Created_at only (no date)
+    assert.strictEqual(
+      parseTimestamp(undefined, "2026-11-05T12:00:00Z"),
+      Date.parse("2026-11-05T12:00:00Z"),
+    );
   });
 
   it("compareAlphabetical provides deterministic tie-break for case or accent differences", () => {
@@ -2023,6 +2031,38 @@ describe("Credit Card Sorting by Frequency and Recency (Issue #164)", () => {
       await form.submitTransaction();
       // Both Chase and Amex Gold now have 1 transaction, but Chase is newer (2026-11-09 vs 2026-11-01)
       assert.deepStrictEqual(form.cards, ["Chase", "Amex Gold"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+  it("intakeForm loadRecentTransactions preserves newly synced transactions when a concurrent older response arrives", async () => {
+    mockStorage.setItem(TOKEN_STORAGE_KEY, "valid-token");
+    const form = intakeForm();
+    form.init();
+    form.cards = ["Amex Gold", "RBC Visa"];
+
+    // Simulate a newly synced transaction not yet included in the in-flight GET response
+    const syncedTx = createTx("RBC Visa", "2026-11-09", "2026-11-09 15:00:00");
+    form.recentlySyncedTransactions = [syncedTx];
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({
+          transactions: [createTx("Amex Gold", "2026-11-01", "2026-11-01 10:00:00")],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      await form.loadRecentTransactions();
+      assert.strictEqual(form.recentTransactions.length, 2);
+      // Both have 1 tx, RBC Visa is newer (Nov 9 vs Nov 1)
+      assert.deepStrictEqual(form.cards, ["RBC Visa", "Amex Gold"]);
     } finally {
       globalThis.fetch = originalFetch;
     }
