@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -464,5 +465,19 @@ describe("Backfill Pipeline Plan, Apply, and Resume", () => {
     const afterVerify = await verifyBackfill(options, client);
     assert.equal(afterVerify.passed, true);
     assert.equal(afterVerify.exitCode, BACKFILL_EXIT_CODES.SUCCESS);
+  });
+
+  it("cli exits with code 2 (APPROVAL_REQUIRED) when apply is invoked without --yes", (t) => {
+    const dir = createTempDir(t);
+    const filename = "Budgeting - Bikeshare.csv";
+    copyFileSync(join(FIXTURES_DIR, filename), join(dir, filename));
+
+    const cliPath = resolve(import.meta.dirname, "../scripts/backfill.ts");
+    const result = spawnSync(process.execPath, [cliPath, "apply", "--local", "--dir", dir], {
+      encoding: "utf-8",
+    });
+
+    assert.equal(result.status, BACKFILL_EXIT_CODES.APPROVAL_REQUIRED);
+    assert.match(result.stderr, /Apply requires explicit confirmation/);
   });
 });

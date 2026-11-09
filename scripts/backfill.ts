@@ -190,6 +190,13 @@ async function main(): Promise<void> {
   }
 
   if (command === "apply") {
+    if (!options.yes) {
+      console.error(
+        "Apply requires explicit confirmation. Supply --yes to approve database writes.",
+      );
+      process.exit(BACKFILL_EXIT_CODES.APPROVAL_REQUIRED);
+    }
+
     console.log(
       `Executing historical Google Sheets backfill [Mode: APPLY] [Target: ${targetLabel}]...\n`,
     );
