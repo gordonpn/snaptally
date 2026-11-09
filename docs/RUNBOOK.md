@@ -455,47 +455,130 @@ When adding new migrations in `migrations/`:
 
 ## 8. Historical Google Sheets Backfill
 
-`scripts/backfill.ts` ingests the exported `Budgeting - *.csv` sheets into D1. The CSV exports contain personal financial data and are never committed; place them in `data/sheets/` (gitignored). `Budgeting - General.csv` is an overview page and is skipped.
+`scripts/backfill.ts` ingests exported `Budgeting - *.csv` sheets into Cloudflare D1. The CSV exports contain personal financial data and are never committed; place them in `data/sheets/` (gitignored). `Budgeting - General.csv` is an overview page and is skipped.
 `just test` uses synthetic fixtures and requires no personal exports. `just typecheck` validates the API and backfill scripts and tests separately for their Cloudflare and Node.js environments.
 
-### 8.1 Procedure
+### 8.1 Repeatable Five-Step Operational Workflow
 
-Always validate locally before touching production:
+SnapTally implements a deterministic, resumable, and audited backfill lifecycle:
+
+1. **Manifest Generation & Verification**:
+   Indexes all source files, computing SHA-256 hashes, valid transaction counts, and a canonical manifest hash. Any modification to source sheets between planning and execution is detected and rejected.
+2. **Read-Only Plan & Row Classification**:
+   Queries existing records in the target D1 database (scoped to `--user-id` and `--default-card`) and classifies source transactions into four disjoint sets:
+   - `already_present`: Source transaction ID and content exactly match an existing database row. Skipped.
+   - `missing`: Source transaction does not exist in target database. Candidate for insertion.
+   - `conflicting`: Source transaction ID matches a database record, but field values differ (or a content match exists under a shifted row index). Reported with field diffs; execution halts.
+   - `extra`: Database record exists for the tenant and card but is absent in source sheets (such as reconciliation items added in previous backfills). Reported for audit awareness.
+   Generates a sanitized JSON plan artifact in `.backfill-runs/plan-<timestamp>-<runId>.json` without modifying database state.
+3. **Operator Review & Approval Gate**:
+   The operator inspects the plan summary. No database writes occur without explicit confirmation (`--yes` or `--confirm`). If `--yes` is omitted when invoking `apply`, the runner logs the plan summary, writes the artifact, and exits with code 2 (Approval Required).
+4. **Resumable Apply with Concurrency Protection**:
+   Acquires an exclusive lock file (`.backfill-runs/.backfill.lock`). If another process holds the lock, execution aborts. Stale locks from dead PIDs are automatically detected and pruned.
+   Inserts missing transactions in chunks of 100 using `INSERT INTO transactions ... ON CONFLICT(id) DO NOTHING`. After each batch, progress is committed to `.backfill-runs/checkpoint-<runId>.json`. If interrupted, rerun with `resume --run-id <runId>` to continue from the last completed batch without duplicate writes.
+5. **Post-Apply Verification**:
+   Immediately following execution (or independently via `verify`), queries the target database to confirm that the row count matches expected totals (`preCount + missingCount`) and that all source transactions are present.
+
+### 8.2 Operational Procedures
+
+#### Step 1: Validate Locally
+Always validate in a local environment first:
 
 ```bash
-# 1. Parse and categorize every sheet without writing to D1
-just backfill-dry-run
+# 1. Preview row classification against local D1 simulation (read-only)
+just backfill-plan-local
 
-# 2. Ingest into the local D1 simulation
-just db-migrate-local
-just backfill-local
+# 2. Ingest missing rows into local D1 with confirmation
+node scripts/backfill.ts apply --local --yes
+
+# 3. Verify local consistency
+just backfill-verify-local
 ```
 
-Only after the local results are reviewed and the source sheets are final, ingest into production:
+#### Step 2: Plan and Verify Against Production (Read-Only)
+Run a read-only plan against production Cloudflare D1:
 
 ```bash
-# 3. Take pre-flight snapshot backup of production D1
+# 1. Take a pre-flight remote backup snapshot
 just db-backup-remote
 
-# 4. Ingest into production
-node scripts/backfill.ts --remote
+# 2. Plan backfill against production D1 (read-only, writes plan artifact)
+just backfill-plan-remote
+
+# 3. Optional: specify archive directory
+node scripts/backfill.ts plan --remote --dir data/sheets/2026-11-09/01_CURRENT_BUDGETS
 ```
 
-Additional flags: `--file <path>` ingests a single sheet, `--dir <path>` overrides the sheet directory, and `--user-id <id>` scopes rows to a tenant (defaults to `usr_default`).
-Unknown flags, missing option values, and simultaneous `--local` and `--remote` targets are rejected. Explicit `--dry-run` prevents writes even when one target flag is present.
-Missing input files or directories fail with a nonzero exit status. An existing empty directory reports zero transactions; unmatched files and the overview sheet are ignored during directory imports.
+Review the printed summary:
+- Verify that `conflicting` is 0.
+- Verify that `missing` matches expected additions.
+- Note any `extra` rows (such as historical statement reconciliation records).
 
-### 8.2 Ingestion Rules
+#### Step 3: Apply to Production
+Execute batch insertion only after approving the plan:
 
-- Amounts are stored in the currency recorded in the sheet (`USD` or `CAD`) without conversion.
+```bash
+# Apply missing records to production D1 (requires --yes)
+node scripts/backfill.ts apply --remote --yes --dir data/sheets/2026-11-09/01_CURRENT_BUDGETS
+```
+
+If an apply run is interrupted midway, inspect the run ID in `.backfill-runs/` and resume:
+
+```bash
+node scripts/backfill.ts resume --remote --run-id <RUN_ID> --dir data/sheets/2026-11-09/01_CURRENT_BUDGETS
+```
+
+#### Step 4: Verify Production Integrity
+Confirm that all source transactions are present in production D1:
+
+```bash
+just backfill-verify-remote
+```
+
+### 8.3 CLI Commands and Flags
+
+```bash
+node scripts/backfill.ts [command] [options]
+```
+
+**Commands**:
+- `plan`: (Default) Read-only simulation. Classifies transactions against D1 and writes a plan artifact.
+- `apply`: Writes missing transactions to D1 in batches. Requires `--yes` or exits with code 2.
+- `resume`: Continues an interrupted apply run from a saved checkpoint using `--run-id`.
+- `verify`: Compares target D1 against source sheets, exiting with code 0 on consistency or 3 on drift.
+
+**Options**:
+- `--dir <path>`: Source directory containing CSV sheets (default: `data/sheets`).
+- `--file <path>`: Single CSV file to ingest.
+- `--local`: Target local D1 SQLite database.
+- `--remote`: Target production Cloudflare D1 database.
+- `--plan-file <path>`: Specific plan artifact JSON to execute.
+- `--run-id <id>`: Execution ID for resumption.
+- `--artifacts-dir <path>`: Storage directory for run records (default: `.backfill-runs`).
+- `--user-id <id>`: Tenant user identifier (default: `usr_default`).
+- `--default-card <card>`: Card identifier for imported records (default: `Historical`).
+- `--yes`, `--confirm`: Explicit confirmation to perform database mutations.
+- `--dry-run`: Enforces read-only operation even with `apply`.
+
+**Exit Codes**:
+- `0` (Success): Operation completed with verified consistency.
+- `1` (Execution Error): Runtime failure, unhandled exception, or input validation error.
+- `2` (Approval Required): Apply attempted without explicit `--yes` confirmation.
+- `3` (Verification Failure): Row count mismatch or consistency drift detected during verify.
+
+### 8.4 Ingestion and Classification Invariants
+
+- Amounts are stored in the original currency recorded in the sheet (`USD` or `CAD`) without conversion.
 - Zero-amount rows are spreadsheet formula anchors and are skipped.
 - Invalid calendar dates, malformed decimal amounts, and amounts that round to zero are skipped.
 - Unterminated CSV quotes stop the import before any database writes.
 - Temporary SQL files are readable only by the current user and are removed after Wrangler succeeds or fails.
-- Row IDs are deterministic hashes of the source file, row position, date, gross amount, and currency, so re-running an unchanged export inserts nothing new (`ON CONFLICT(id) DO NOTHING`). Editing a row's amount or date changes its ID. Inserting or deleting a nonempty row shifts the row positions of subsequent entries, producing new IDs on re-run. Before re-ingesting a modified sheet, roll back the backfilled entries for that tenant using section 8.4.
+- Row IDs are deterministic hashes of the source file, row position, date, gross amount, and currency, so re-running an unchanged export inserts nothing new (`ON CONFLICT(id) DO NOTHING`).
 - All valid `Salary.csv` payroll rows map to `Income -> Salary`, regardless of amount. Repayments are not inferred from row amounts.
+- Potential content duplicates with altered row indices are flagged as `row_shift_duplicate` conflicts.
+- Audit artifacts in `.backfill-runs/` contain file hashes, counts, sample IDs, and category distributions, but redact individual merchant and dollar amounts to protect privacy.
 
-### 8.3 Verification Queries
+### 8.5 Verification Queries
 
 Scope verification queries to the tenant (`user_id`) and card (`card`) specified during the import (defaulting to `usr_default` and `Historical`). Replace `--local` with `--remote` when verifying production:
 
@@ -509,7 +592,7 @@ pnpm wrangler d1 execute budget-db --local \
   --command "SELECT currency, parent_bucket, subcategory, count(*) FROM transactions WHERE user_id = 'usr_default' AND card = 'Historical' GROUP BY 1, 2, 3 ORDER BY 1, 2, 4 DESC;"
 ```
 
-### 8.4 Rollback
+### 8.6 Rollback
 
 Backfilled rows are scoped to the imported tenant (`user_id`) and default card `Historical` (unless `--default-card` was overridden). Always include both `user_id` and `card` in the deletion predicate to avoid deleting other tenants' data or live intake transactions:
 
