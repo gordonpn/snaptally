@@ -133,6 +133,13 @@ async function main(): Promise<void> {
     process.exit(BACKFILL_EXIT_CODES.SUCCESS);
   }
 
+  if (isExplicitDryRun && command === "apply") {
+    console.log(
+      "Notice: --dry-run specified with apply. Rerouting to plan mode (zero database writes).\n",
+    );
+    command = "plan";
+  }
+
   if (command === "plan") {
     console.log(
       `Starting historical Google Sheets backfill [Mode: DRY RUN (no DB writes)] [Target: ${targetLabel}]...\n`,
@@ -223,6 +230,10 @@ async function main(): Promise<void> {
   }
 
   if (command === "resume") {
+    if (isExplicitDryRun) {
+      throw new Error("Resume cannot be performed with --dry-run. Use plan to preview instead.");
+    }
+
     console.log(
       `Resuming historical Google Sheets backfill [Mode: RESUME] [Target: ${targetLabel}]...\n`,
     );

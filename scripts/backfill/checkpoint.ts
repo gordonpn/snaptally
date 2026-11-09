@@ -1,4 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import type { CheckpointState } from "./types.ts";
 
@@ -9,7 +16,9 @@ export function resolveCheckpointPath(artifactsDir: string, runId: string): stri
 export function saveCheckpoint(checkpointPath: string, state: CheckpointState): void {
   mkdirSync(dirname(checkpointPath), { recursive: true });
   const content = JSON.stringify(state, null, 2);
-  writeFileSync(checkpointPath, content, { encoding: "utf-8", mode: 0o600 });
+  const tempPath = `${checkpointPath}.tmp.${process.pid}.${Date.now()}`;
+  writeFileSync(tempPath, content, { encoding: "utf-8", mode: 0o600 });
+  renameSync(tempPath, checkpointPath);
 }
 
 export function loadCheckpoint(checkpointPath: string): CheckpointState | null {

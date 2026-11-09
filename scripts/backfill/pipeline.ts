@@ -12,7 +12,7 @@ import {
 } from "./checkpoint.ts";
 import { classifyTransactions } from "./classifier.ts";
 import { parseCsv } from "./csv.ts";
-import { type BackfillDatabaseClient, WranglerD1Client } from "./db.ts";
+import { type BackfillDatabaseClient, OfflineDatabaseClient, WranglerD1Client } from "./db.ts";
 import { acquireBackfillLock } from "./lock.ts";
 import { BACKFILL_PARSER_VERSION, buildManifest, validateManifestMatch } from "./manifest.ts";
 import {
@@ -196,6 +196,9 @@ function resolveDbClient(
   if (injectedClient) {
     return injectedClient;
   }
+  if (!options.local && !options.remote) {
+    return new OfflineDatabaseClient();
+  }
   const target = options.remote ? "remote" : "local";
   return new WranglerD1Client(target);
 }
@@ -306,6 +309,10 @@ export async function applyBackfill(
   artifactPath: string;
   exitCode: BackfillExitCode;
 }> {
+  if (options.dryRun) {
+    return planBackfill(options, dbClient);
+  }
+
   if (!options.yes) {
     throw new Error(
       "Apply requires explicit confirmation. Supply --yes to approve database writes.",
@@ -453,6 +460,10 @@ export async function resumeBackfill(
   artifactPath: string;
   exitCode: BackfillExitCode;
 }> {
+  if (options.dryRun) {
+    throw new Error("Resume cannot be performed with --dry-run. Use plan to preview instead.");
+  }
+
   const artifactsDir = getArtifactsDirectory(options);
   if (!options.runId) {
     throw new Error("Resume requires specifying a --run-id.");

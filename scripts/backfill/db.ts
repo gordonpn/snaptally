@@ -13,11 +13,11 @@ export interface BackfillDatabaseClient {
   executeBatch(statements: string[]): Promise<{ success: boolean; stdout: string }>;
 }
 
-function escapeSqlLiteral(val: string): string {
+export function escapeSqlLiteral(val: string): string {
   return `'${val.replace(/'/g, "''")}'`;
 }
 
-function parseJsonOutput<T>(stdout: string): T {
+export function parseJsonOutput<T>(stdout: string): T {
   const start = stdout.indexOf("[");
   const end = stdout.lastIndexOf("]");
   if (start === -1 || end === -1 || end < start) {
@@ -27,14 +27,25 @@ function parseJsonOutput<T>(stdout: string): T {
   return JSON.parse(jsonStr) as T;
 }
 
+export type CommandRunner = (command: string, args: string[]) => string;
+
 /**
  * Wrangler D1 client executing queries and batches against local or remote Cloudflare D1.
  */
 export class WranglerD1Client implements BackfillDatabaseClient {
   readonly target: "local" | "remote";
+  private readonly runner: CommandRunner;
 
-  constructor(target: "local" | "remote") {
+  constructor(target: "local" | "remote", runner?: CommandRunner) {
     this.target = target;
+    this.runner =
+      runner ??
+      ((cmd, args) =>
+        execFileSync(cmd, args, {
+          encoding: "utf-8",
+          stdio: ["pipe", "pipe", "pipe"],
+          maxBuffer: 50 * 1024 * 1024,
+        }));
   }
 
   private executeCommand(sql: string): string {
@@ -48,20 +59,12 @@ export class WranglerD1Client implements BackfillDatabaseClient {
       "--command",
       sql,
     ];
-    return execFileSync("pnpm", args, {
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-      maxBuffer: 50 * 1024 * 1024,
-    });
+    return this.runner("pnpm", args);
   }
 
   private executeFile(tempFile: string): string {
     const args = ["wrangler", "d1", "execute", "budget-db", `--${this.target}`, "--file", tempFile];
-    return execFileSync("pnpm", args, {
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-      maxBuffer: 50 * 1024 * 1024,
-    });
+    return this.runner("pnpm", args);
   }
 
   async queryMigrations(): Promise<string[]> {
@@ -180,5 +183,28 @@ export class MemoryDatabaseClient implements BackfillDatabaseClient {
       this.db.exec(sql);
     }
     return { success: true, stdout: "batch executed" };
+  }
+}
+
+/**
+ * Offline client for offline dry-run parse and planning without a database connection.
+ */
+export class OfflineDatabaseClient implements BackfillDatabaseClient {
+  readonly target: BackfillTarget = "memory";
+
+  async queryMigrations(): Promise<string[]> {
+    return ["0000_offline.sql"];
+  }
+
+  async queryExistingTransactions(): Promise<ExistingDbTransaction[]> {
+    return [];
+  }
+
+  async queryTransactionCount(): Promise<number> {
+    return 0;
+  }
+
+  async executeBatch(): Promise<{ success: boolean; stdout: string }> {
+    return { success: true, stdout: "Offline: zero database writes executed." };
   }
 }

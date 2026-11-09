@@ -4,9 +4,18 @@ import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it, type TestContext } from "node:test";
-import { resolveCheckpointPath, saveCheckpoint } from "../scripts/backfill/checkpoint.ts";
+import {
+  loadCheckpoint,
+  resolveCheckpointPath,
+  saveCheckpoint,
+} from "../scripts/backfill/checkpoint.ts";
 import { classifyTransactions } from "../scripts/backfill/classifier.ts";
-import { MemoryDatabaseClient } from "../scripts/backfill/db.ts";
+import {
+  escapeSqlLiteral,
+  MemoryDatabaseClient,
+  parseJsonOutput,
+  WranglerD1Client,
+} from "../scripts/backfill/db.ts";
 import { acquireBackfillLock } from "../scripts/backfill/lock.ts";
 import { buildManifest, validateManifestMatch } from "../scripts/backfill/manifest.ts";
 import {
@@ -473,11 +482,167 @@ describe("Backfill Pipeline Plan, Apply, and Resume", () => {
     copyFileSync(join(FIXTURES_DIR, filename), join(dir, filename));
 
     const cliPath = resolve(import.meta.dirname, "../scripts/backfill.ts");
-    const result = spawnSync(process.execPath, [cliPath, "apply", "--local", "--dir", dir], {
+    const result = spawnSync(
+      process.execPath,
+      [cliPath, "apply", "--dir", dir, "--artifacts-dir", dir],
+      {
+        encoding: "utf-8",
+      },
+    );
+
+    assert.equal(result.status, BACKFILL_EXIT_CODES.APPROVAL_REQUIRED, result.stderr);
+    assert.match(result.stderr, /Apply requires explicit confirmation/);
+  });
+
+  it("saveCheckpoint writes checkpoint atomically and loadCheckpoint reads it back", (t) => {
+    const dir = createTempDir(t);
+    const checkpointPath = resolveCheckpointPath(dir, "run-test-atomic");
+
+    const state = {
+      runId: "run-test-atomic",
+      manifestHash: "abcd",
+      target: "local" as const,
+      userId: "usr_default",
+      defaultCard: "Historical",
+      totalBatches: 2,
+      completedBatches: [0],
+      writtenCount: 100,
+      lastUpdated: new Date().toISOString(),
+    };
+
+    saveCheckpoint(checkpointPath, state);
+    const loaded = loadCheckpoint(checkpointPath);
+    assert.deepEqual(loaded, state);
+  });
+
+  it("apply with dryRun: true executes plan without database writes", async (t) => {
+    const { options, client } = setupTestEnv(t);
+
+    const result = await applyBackfill({ ...options, yes: true, dryRun: true }, client);
+    assert.equal(result.exitCode, BACKFILL_EXIT_CODES.SUCCESS);
+    assert.equal(await client.queryTransactionCount("usr_default", "Historical"), 0);
+  });
+
+  it("resume with dryRun: true throws an error", async (t) => {
+    const { options, client } = setupTestEnv(t);
+
+    await assert.rejects(
+      resumeBackfill({ ...options, runId: "test-run", yes: true, dryRun: true }, client),
+      /Resume cannot be performed with --dry-run/,
+    );
+  });
+
+  it("cli honors --dry-run with apply and executes zero database writes", (t) => {
+    const dir = createTempDir(t);
+    const filename = "Budgeting - Bikeshare.csv";
+    copyFileSync(join(FIXTURES_DIR, filename), join(dir, filename));
+
+    const cliPath = resolve(import.meta.dirname, "../scripts/backfill.ts");
+    const result = spawnSync(
+      process.execPath,
+      [cliPath, "apply", "--dry-run", "--yes", "--dir", dir, "--artifacts-dir", dir],
+      { encoding: "utf-8" },
+    );
+
+    assert.equal(result.status, BACKFILL_EXIT_CODES.SUCCESS, result.stderr);
+    assert.match(result.stdout, /Notice: --dry-run specified with apply/);
+    assert.match(result.stdout, /Zero database writes executed/);
+  });
+
+  it("cli supports plan subcommand", (t) => {
+    const dir = createTempDir(t);
+    const filename = "Budgeting - Bikeshare.csv";
+    copyFileSync(join(FIXTURES_DIR, filename), join(dir, filename));
+
+    const cliPath = resolve(import.meta.dirname, "../scripts/backfill.ts");
+    const result = spawnSync(
+      process.execPath,
+      [cliPath, "plan", "--dir", dir, "--artifacts-dir", dir],
+      {
+        encoding: "utf-8",
+      },
+    );
+
+    assert.equal(result.status, BACKFILL_EXIT_CODES.SUCCESS, result.stderr);
+    assert.match(result.stdout, /Zero database writes executed/);
+  });
+
+  it("cli rejects unknown subcommand", () => {
+    const cliPath = resolve(import.meta.dirname, "../scripts/backfill.ts");
+    const result = spawnSync(process.execPath, [cliPath, "invalid-cmd"], {
       encoding: "utf-8",
     });
 
-    assert.equal(result.status, BACKFILL_EXIT_CODES.APPROVAL_REQUIRED);
-    assert.match(result.stderr, /Apply requires explicit confirmation/);
+    assert.equal(result.status, BACKFILL_EXIT_CODES.EXECUTION_ERROR);
+    assert.match(result.stderr, /Unknown command: invalid-cmd/);
+  });
+});
+
+describe("Database Client and Utilities", () => {
+  it("escapes SQL string literals with single quotes", () => {
+    assert.equal(escapeSqlLiteral("normal"), "'normal'");
+    assert.equal(escapeSqlLiteral("O'Connor"), "'O''Connor'");
+  });
+
+  it("parses JSON array from wrangler output with banner text", () => {
+    const raw = '├ Checking files...\n[{"results": [{"name": "0000_init.sql"}]}]';
+    const parsed = parseJsonOutput<Array<{ results: Array<{ name: string }> }>>(raw);
+    assert.equal(parsed[0].results[0].name, "0000_init.sql");
+  });
+
+  it("throws error when wrangler output contains no JSON array", () => {
+    assert.throws(() => parseJsonOutput("no json here"), /Failed to find JSON array/);
+  });
+
+  it("WranglerD1Client queries migrations, existing transactions, counts, and executes batches", async () => {
+    const mockRunner = (_cmd: string, args: string[]): string => {
+      const sql = args[args.indexOf("--command") + 1] ?? "";
+      if (sql.includes("d1_migrations")) {
+        return JSON.stringify([{ results: [{ name: "0000_init.sql" }] }]);
+      }
+      if (sql.includes("count(*)")) {
+        return JSON.stringify([{ results: [{ count: 42 }] }]);
+      }
+      if (sql.includes("SELECT id")) {
+        return JSON.stringify([
+          {
+            results: [
+              {
+                id: "tx-1",
+                user_id: "usr_default",
+                date: "2024-01-01",
+                card: "Historical",
+                parent_bucket: "Fixed Costs",
+                subcategory: "Transit",
+                merchant: "MBTA",
+                gross_amount: 2.4,
+                reimbursement: 0,
+                currency: "USD",
+              },
+            ],
+          },
+        ]);
+      }
+      return "Executed SQL file successfully";
+    };
+
+    const client = new WranglerD1Client("local", mockRunner);
+    const migrations = await client.queryMigrations();
+    assert.deepEqual(migrations, ["0000_init.sql"]);
+
+    const count = await client.queryTransactionCount("usr_default", "Historical");
+    assert.equal(count, 42);
+
+    const txs = await client.queryExistingTransactions("usr_default", "Historical");
+    assert.equal(txs.length, 1);
+    assert.equal(txs[0].merchant, "MBTA");
+
+    const batchEmpty = await client.executeBatch([]);
+    assert.equal(batchEmpty.success, true);
+
+    const batchExecuted = await client.executeBatch([
+      "INSERT INTO transactions (id) VALUES ('1');",
+    ]);
+    assert.equal(batchExecuted.success, true);
   });
 });
