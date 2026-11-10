@@ -631,3 +631,8 @@ releases the shared sync lock and retains the transaction for retry unless an HT
 For an authentication warning, open **Settings**, correct the bearer token, and
 save it. The warning clears after a successful authenticated request. The warning
 and failed-item count are independent of transient amount or save messages.
+
+## API input limits and throttling
+
+See [API security](API-SECURITY.md) for validation bounds, per-client rate limits,
+preview migration requirements, and fail-closed recovery.

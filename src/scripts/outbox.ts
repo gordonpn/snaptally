@@ -667,6 +667,27 @@ async function flushOutbox(options: SyncOptions): Promise<SyncResult> {
           break;
         }
 
+        if (
+          response.status === 429 ||
+          (response.status === 503 && response.headers.has("Retry-After"))
+        ) {
+          // Throttling and temporary guard outages do not exhaust the server retry budget.
+          const header = response.headers.get("Retry-After");
+          const seconds = header && /^\d+$/.test(header) ? Number(header) : Number.NaN;
+          const deadline = header && !Number.isFinite(seconds) ? Date.parse(header) : Number.NaN;
+          const requestedDelay = Number.isFinite(seconds) ? seconds * 1000 : deadline - Date.now();
+          const delayMs = Number.isFinite(requestedDelay)
+            ? Math.max(1000, Math.min(86_400_000, requestedDelay))
+            : 60_000;
+          item.next_retry_at = Date.now() + delayMs;
+          await saveOutboxItem(item);
+          retryError = "Sync paused by server. Saved transactions will retry.";
+          failedCount++;
+          scheduleDueRetry(delayMs, options, item.next_retry_at);
+          transportHalted = true;
+          break;
+        }
+
         // Server error or unexpected status: apply exponential backoff (1s, 2s, 4s, capped at 60s)
         const serverRetryCount = (item.server_retry_count ?? 0) + 1;
         item.server_retry_count = serverRetryCount;

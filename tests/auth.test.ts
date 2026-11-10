@@ -84,10 +84,10 @@ describe("validateBearerToken", () => {
     });
 
     const responseUndefined = await validateBearerToken(request, undefined);
-    assert.strictEqual(responseUndefined?.status, 401);
+    assert.strictEqual(responseUndefined?.status, 500);
 
     const responseEmpty = await validateBearerToken(request, "   ");
-    assert.strictEqual(responseEmpty?.status, 401);
+    assert.strictEqual(responseEmpty?.status, 500);
   });
 
   it("rejects request with invalid Bearer token", async () => {

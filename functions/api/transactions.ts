@@ -3,12 +3,73 @@ import insertTransactionQuery from "../../queries/insert_transaction.sql";
 import selectDistinctMerchantsQuery from "../../queries/select_distinct_merchants.sql";
 import selectMonthSummaryQuery from "../../queries/select_month_summary.sql";
 import selectPaginatedTransactionsQuery from "../../queries/select_paginated_transactions.sql";
+import { BUCKET_SUBCATEGORIES } from "../../src/config/intake.ts";
 import { isValidDate } from "../../src/utils/date.ts";
 import { validateBearerToken } from "./auth.ts";
 import { logger } from "./logger.ts";
 import { parseLimit, parseOffset } from "./query.ts";
 
 export { isValidDate };
+
+export const MAX_BODY_BYTES = 16_384;
+export const MAX_AMOUNT = 1_000_000;
+const MAX_SEARCH_LENGTH = 100;
+
+const LEGACY_CATEGORIES: Record<string, readonly string[]> = {
+  Income: ["Reimbursement"],
+  "Guilt-Free": ["Coffee"],
+};
+
+function boundedText(value: unknown, max: number): value is string {
+  return typeof value === "string" && value.length <= max && value.trim().length > 0;
+}
+
+function validCategory(bucket: string, subcategory: string): boolean {
+  const canonical = (
+    Object.hasOwn(BUCKET_SUBCATEGORIES, bucket)
+      ? BUCKET_SUBCATEGORIES[bucket as keyof typeof BUCKET_SUBCATEGORIES]
+      : undefined
+  ) as readonly string[] | undefined;
+  return (
+    (canonical?.includes(subcategory) ?? false) ||
+    (Object.hasOwn(LEGACY_CATEGORIES, bucket) && LEGACY_CATEGORIES[bucket].includes(subcategory))
+  );
+}
+
+class PayloadTooLarge extends Error {}
+
+async function readBoundedJson(request: Request): Promise<unknown> {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && /^\d+$/.test(contentLength) && Number(contentLength) > MAX_BODY_BYTES) {
+    await request.body?.cancel();
+    throw new PayloadTooLarge();
+  }
+  const reader = request.body?.getReader();
+  if (!reader) throw new SyntaxError("Missing JSON body");
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_BODY_BYTES) {
+        await reader.cancel();
+        throw new PayloadTooLarge();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes));
+}
 
 interface Env {
   DB: D1Database;
@@ -113,7 +174,7 @@ export async function resolveMerchant(
  * Validates that an incoming payload conforms to the TransactionPayload interface.
  */
 export function isValidPayload(body: unknown): body is TransactionPayload {
-  if (typeof body !== "object" || body === null) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
     logger.warn("Validation failed: body must be a non-null object");
     return false;
   }
@@ -130,7 +191,7 @@ export function isValidPayload(body: unknown): body is TransactionPayload {
     currency,
   } = body as Record<string, unknown>;
 
-  if (id !== undefined && (typeof id !== "string" || id.trim().length === 0)) {
+  if (id !== undefined && !boundedText(id, 128)) {
     logger.warn("Validation failed: id must be a non-empty string if provided");
     return false;
   }
@@ -140,7 +201,12 @@ export function isValidPayload(body: unknown): body is TransactionPayload {
     return false;
   }
 
-  if (typeof gross_amount !== "number" || !Number.isFinite(gross_amount) || gross_amount === 0) {
+  if (
+    typeof gross_amount !== "number" ||
+    !Number.isFinite(gross_amount) ||
+    gross_amount === 0 ||
+    Math.abs(gross_amount) > MAX_AMOUNT
+  ) {
     logger.warn("Validation failed: gross_amount must be a non-zero finite number");
     return false;
   }
@@ -148,7 +214,10 @@ export function isValidPayload(body: unknown): body is TransactionPayload {
   if (
     reimbursement !== undefined &&
     reimbursement !== null &&
-    (typeof reimbursement !== "number" || !Number.isFinite(reimbursement) || reimbursement < 0)
+    (typeof reimbursement !== "number" ||
+      !Number.isFinite(reimbursement) ||
+      reimbursement < 0 ||
+      reimbursement > MAX_AMOUNT)
   ) {
     logger.warn(
       "Validation failed: reimbursement must be a non-negative finite number if provided",
@@ -166,12 +235,12 @@ export function isValidPayload(body: unknown): body is TransactionPayload {
     return false;
   }
 
-  if (typeof card !== "string" || card.trim().length === 0) {
+  if (!boundedText(card, 100)) {
     logger.warn("Validation failed: card must be a non-empty string");
     return false;
   }
 
-  if (typeof parent_bucket !== "string" || parent_bucket.trim().length === 0) {
+  if (!boundedText(parent_bucket, 64)) {
     logger.warn("Validation failed: parent_bucket must be a non-empty string");
     return false;
   }
@@ -181,17 +250,25 @@ export function isValidPayload(body: unknown): body is TransactionPayload {
     return false;
   }
 
-  if (typeof subcategory !== "string" || subcategory.trim().length === 0) {
+  if (!boundedText(subcategory, 64)) {
     logger.warn("Validation failed: subcategory must be a non-empty string");
     return false;
   }
 
-  if (typeof merchant !== "string" || merchant.trim().length === 0) {
+  if (!boundedText(merchant, 200)) {
     logger.warn("Validation failed: merchant must be a non-empty string");
     return false;
   }
 
-  if (currency !== undefined && (typeof currency !== "string" || currency.trim().length === 0)) {
+  if (!validCategory(normalizeText(parent_bucket), normalizeText(subcategory))) {
+    logger.warn("Validation failed: unsupported category pair");
+    return false;
+  }
+
+  if (
+    currency !== undefined &&
+    (!boundedText(currency, 3) || !["USD", "CAD"].includes(currency.toUpperCase()))
+  ) {
     logger.warn("Validation failed: currency must be a non-empty string if provided");
     return false;
   }
@@ -217,8 +294,11 @@ export async function handlePost(
   let body: unknown;
 
   try {
-    body = await request.json();
-  } catch {
+    body = await readBoundedJson(request);
+  } catch (error) {
+    if (error instanceof PayloadTooLarge) {
+      return Response.json({ error: "Payload exceeds 16384 bytes" }, { status: 413 });
+    }
     return Response.json({ error: "Malformed JSON payload" }, { status: 400 });
   }
 
@@ -329,8 +409,14 @@ export async function handleGet(
   const limit = parseLimit(url.searchParams.get("limit"), DEFAULT_LIMIT, MAX_LIMIT);
   const offset = parseOffset(url.searchParams.get("offset"));
   const rawSearch = url.searchParams.get("search");
-  const search = rawSearch && rawSearch.trim().length > 0 ? rawSearch.trim() : null;
+  if (rawSearch && rawSearch.length > MAX_SEARCH_LENGTH) {
+    return Response.json({ error: "Search exceeds 100 characters" }, { status: 400 });
+  }
+  const search = rawSearch?.trim() ? rawSearch.trim().replace(/[\\%_]/g, "\\$&") : null;
   const rawBucket = url.searchParams.get("bucket");
+  if (rawBucket && rawBucket.length > 64) {
+    return Response.json({ error: "Bucket exceeds 64 characters" }, { status: 400 });
+  }
   const bucket = rawBucket && rawBucket.trim().length > 0 ? rawBucket.trim() : null;
 
   const rawMonth = url.searchParams.get("month");
