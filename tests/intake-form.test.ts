@@ -3165,4 +3165,12 @@ describe("Merchant autocomplete coverage and matching gaps (Issue #162)", () => 
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("does not inject canonical merchant from embedded token in unrelated input", () => {
+    const form = intakeForm();
+    form.allMerchants = ["Medium Rare Restaurant"];
+
+    form.updateMerchant("Medium Rare");
+    assert.deepStrictEqual(form.merchantSuggestions, ["Medium Rare Restaurant"]);
+  });
 });

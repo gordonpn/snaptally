@@ -411,7 +411,7 @@ export function intakeForm() {
       const normQuery = normalizeSearchText(query);
       const normalizedQuery = normalizeIntakeMerchant(rawInput);
       const exactCanonical =
-        normalizedQuery.matchStrategy === "exact_rule" && normalizedQuery.canonicalMerchant
+        isExactIntakeRule(normalizedQuery) && normalizedQuery.canonicalMerchant
           ? normalizedQuery.canonicalMerchant
           : null;
       const exactCanonicalNorm = exactCanonical ? normalizeSearchText(exactCanonical) : null;
