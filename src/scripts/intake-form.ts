@@ -1549,13 +1549,14 @@ export function intakeForm() {
           this.persistMerchants();
         }
 
-        if (this.isCustomMerchant) {
-          this.clearInferredDefaults();
-          this.isCustomMerchant = false;
-          this.merchantUserSelected = false;
-          this.merchant = "";
-          this.customMerchantInput = "";
-        }
+        this.inferredCategoryBaseline = undefined;
+        this.inferredCardBaseline = undefined;
+        this.parentBucket = "Guilt-Free";
+        this.subcategory = BUCKET_SUBCATEGORIES["Guilt-Free"][0];
+        this.isCustomMerchant = false;
+        this.merchantUserSelected = false;
+        this.merchant = "";
+        this.customMerchantInput = "";
 
         const nextCards = this.cards.includes(trimmedCard)
           ? [...this.cards]
@@ -1570,19 +1571,16 @@ export function intakeForm() {
         );
         this.persistCards();
 
-        if (this.isCustomCard) {
-          this.isCustomCard = false;
-          this.autoCustomCard = false;
-          this.customCardInput = "";
-          this.card = trimmedCard;
-        }
+        this.isCustomCard = false;
+        this.autoCustomCard = false;
+        this.customCardInput = "";
+        this.card = this.cards[0] || "";
 
-        // 3. Trigger background sync
-        const syncResult = await this.syncPendingOutbox();
-        if (syncResult.lastError) {
-          return false;
-        }
-
+        // Local acceptance is complete; network work must not lock the next entry.
+        this.loading = false;
+        void this.syncPendingOutbox().catch((error: unknown) => {
+          this.syncError = error instanceof Error ? error.message : "Unable to sync transactions.";
+        });
         return true;
       } finally {
         this.loading = false;

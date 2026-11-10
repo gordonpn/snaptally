@@ -387,3 +387,10 @@ input[type="search"] {
     }
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .submission-feedback {
+    transition-duration: 0s !important;
+    animation: none !important;
+  }
+}
