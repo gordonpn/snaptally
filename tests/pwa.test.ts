@@ -373,28 +373,43 @@ describe("Currency selection and display", () => {
 });
 
 describe("Intake text input assistance", () => {
-  it("disables native text assistance on merchant, card, and token inputs", () => {
+  it("configures native text assistance attributes on merchant, card, and token inputs", () => {
     const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
     const indexContent = fs.readFileSync(indexPath, "utf-8");
     const inputTags = [...indexContent.matchAll(/<input\b[^>]*>/g)].map(([input]) => input);
-    const fields = [
-      ["merchant", 'id="merchant-input"'],
-      ["custom card", 'x-model="customCardInput"'],
-      ["API token", 'id="api-token-input"'],
-    ] as const;
-    const attributes = [
+    const commonAttributes = [
       'autocomplete="off"',
       'autocorrect="off"',
-      'autocapitalize="off"',
       'spellcheck="false"',
     ] as const;
+    const fields = [
+      {
+        name: "merchant",
+        selector: 'id="merchant-input"',
+        autocapitalize: 'autocapitalize="words"',
+      },
+      {
+        name: "custom card",
+        selector: 'x-model="customCardInput"',
+        autocapitalize: 'autocapitalize="off"',
+      },
+      {
+        name: "API token",
+        selector: 'id="api-token-input"',
+        autocapitalize: 'autocapitalize="off"',
+      },
+    ] as const;
 
-    for (const [fieldName, selector] of fields) {
-      const input = inputTags.find((tag) => tag.includes(selector));
-      assert.ok(input, `index.astro must declare the ${fieldName} input`);
-      for (const attribute of attributes) {
-        assert.ok(input.includes(attribute), `${fieldName} input must include ${attribute}`);
+    for (const field of fields) {
+      const input = inputTags.find((tag) => tag.includes(field.selector));
+      assert.ok(input, `index.astro must declare the ${field.name} input`);
+      for (const attribute of commonAttributes) {
+        assert.ok(input.includes(attribute), `${field.name} input must include ${attribute}`);
       }
+      assert.ok(
+        input.includes(field.autocapitalize),
+        `${field.name} input must include ${field.autocapitalize}`,
+      );
     }
   });
 
@@ -411,11 +426,7 @@ describe("Intake text input assistance", () => {
       /placeholder="Merchant name\.\.\."/,
       "merchant input must specify placeholder 'Merchant name...'",
     );
-    assert.match(
-      merchantInput,
-      /role="combobox"/,
-      "merchant input must declare combobox role",
-    );
+    assert.match(merchantInput, /role="combobox"/, "merchant input must declare combobox role");
     assert.match(
       merchantInput,
       /x-model="merchant"/,
