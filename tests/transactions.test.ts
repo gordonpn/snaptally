@@ -1727,6 +1727,65 @@ describe("Recent Transactions SQLite Query Integration", () => {
 });
 
 describe("Paginated Transactions SQLite Query Integration", () => {
+  it("excludes income and CAD from monthly expenses while retaining credits and month boundaries", () => {
+    const db = createTestDatabase();
+    try {
+      const insert = db.prepare(insertTransactionQuery);
+      const rows = [
+        ["expense-start", "2026-12-01", "Guilt-Free", 100, 20, "USD"],
+        ["expense-end", "2026-12-31", "Fixed Costs", 50, 0, "USD"],
+        ["credit", "2026-12-15", "Guilt-Free", -10, 0, "USD"],
+        ["salary", "2026-12-15", "Income", 5000, 0, "USD"],
+        ["other-income", "2026-12-20", "Income", 100, 0, "USD"],
+        ["cad", "2026-12-15", "Fixed Costs", 200, 0, "CAD"],
+        ["previous-month", "2026-11-30", "Fixed Costs", 300, 0, "USD"],
+        ["next-year", "2027-01-01", "Fixed Costs", 400, 0, "USD"],
+        ["income-only", "2026-02-28", "Income", 5000, 0, "USD"],
+      ] as const;
+      for (const [id, date, bucket, gross, reimbursement, currency] of rows) {
+        insert.run(
+          id,
+          date,
+          "Checking",
+          bucket,
+          "Other",
+          "Test merchant",
+          gross,
+          reimbursement,
+          currency,
+        );
+      }
+
+      const summary = db.prepare(selectMonthSummaryQuery);
+      assert.deepStrictEqual(
+        { ...summary.get("2026-12") },
+        { month_net_spend: 120, month_count: 3 },
+      );
+      for (const month of ["2026-02", "2026-03"]) {
+        assert.deepStrictEqual(
+          { ...summary.get(month) },
+          { month_net_spend: 0, month_count: 0 },
+        );
+      }
+
+      // Income remains available in the transaction feed and its pagination count.
+      const incomeCount = db.prepare(countTransactionsQuery).get(null, "Income") as {
+        total: number;
+      };
+      assert.strictEqual(incomeCount.total, 3);
+      const plan = db.prepare(`EXPLAIN QUERY PLAN ${selectMonthSummaryQuery}`).all("2026-12") as Array<{
+        detail: string;
+      }>;
+      assert.ok(
+        plan.some(({ detail }) =>
+          /SEARCH transactions USING INDEX idx_transactions_date_created_at/.test(detail),
+        ),
+      );
+    } finally {
+      db.close();
+    }
+  });
+
   it("supports limit, offset, search, bucket filtering, and month summary", () => {
     const db = createTestDatabase();
     const insertStmt = db.prepare(insertTransactionQuery);
