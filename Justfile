@@ -23,6 +23,10 @@ typecheck:
 test:
     pnpm test
 
+# Run mobile browser journeys against disposable local Pages and D1
+test-e2e:
+    pnpm run test:e2e
+
 # Run unit tests with coverage reporting
 test-coverage:
     pnpm run test:coverage
