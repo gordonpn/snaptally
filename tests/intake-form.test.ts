@@ -1353,7 +1353,7 @@ describe("intakeForm Frequent Merchants Loading", () => {
 
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (url: unknown) => {
-      assert.strictEqual(String(url), "/api/merchants?limit=8");
+      assert.strictEqual(String(url), "/api/merchants?limit=100");
       return new Response(JSON.stringify({ merchants: ["Market Basket", "Star Market"] }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -3080,5 +3080,97 @@ describe("Direct merchant autocomplete input (Issue #144)", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+});
+
+describe("Merchant autocomplete coverage and matching gaps (Issue #162)", () => {
+  it("suggests merchants with apostrophes when typed without apostrophes", () => {
+    const form = intakeForm();
+    form.allMerchants = ["Trader Joe's", "McDonald's", "Shaw's", "Marshall's"];
+
+    form.updateMerchant("trader joes");
+    assert.deepStrictEqual(form.merchantSuggestions, ["Trader Joe's"]);
+
+    form.updateMerchant("mcdonalds");
+    assert.deepStrictEqual(form.merchantSuggestions, ["McDonald's"]);
+
+    form.updateMerchant("shaws");
+    assert.deepStrictEqual(form.merchantSuggestions, ["Shaw's"]);
+
+    form.updateMerchant("marshalls");
+    assert.deepStrictEqual(form.merchantSuggestions, ["Marshall's"]);
+  });
+
+  it("suggests accented merchants when queried with unaccented ASCII characters", () => {
+    const form = intakeForm();
+    form.allMerchants = ["Supermarché PA", "Marché Trottier"];
+
+    form.updateMerchant("supermarche");
+    assert.deepStrictEqual(form.merchantSuggestions, ["Supermarché PA"]);
+
+    form.updateMerchant("marche");
+    assert.deepStrictEqual(form.merchantSuggestions, ["Marché Trottier", "Supermarché PA"]);
+  });
+
+  it("suggests canonical merchants for recognized descriptor alias tokens", () => {
+    const form = intakeForm();
+    form.allMerchants = ["Whole Foods Market", "Trader Joe's"];
+
+    form.updateMerchant("WHOLEFDS");
+    assert.deepStrictEqual(form.merchantSuggestions, ["Whole Foods Market"]);
+
+    form.updateMerchant("TRDR JOE");
+    assert.deepStrictEqual(form.merchantSuggestions, ["Trader Joe's"]);
+  });
+
+  it("loads and suggests historical merchants beyond the top 8 frequent merchants", async () => {
+    const form = intakeForm();
+    form.token = "valid-token";
+
+    // Simulate 12 frequent merchants returned from API
+    const apiMerchants = [
+      "M1",
+      "M2",
+      "M3",
+      "M4",
+      "M5",
+      "M6",
+      "M7",
+      "M8",
+      "Costco Wholesale",
+      "Target",
+      "Walgreens",
+      "Best Buy",
+    ];
+
+    const originalFetch = globalThis.fetch;
+    let requestedUrl = "";
+    globalThis.fetch = (async (url: unknown) => {
+      requestedUrl = String(url);
+      return new Response(JSON.stringify({ merchants: apiMerchants }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    try {
+      await form.loadFrequentMerchants();
+      assert.strictEqual(requestedUrl, "/api/merchants?limit=100");
+      assert.strictEqual(form.frequentMerchants.length, 8);
+      assert.ok(form.allMerchants.includes("Costco Wholesale"));
+
+      form.updateMerchant("costco");
+      assert.deepStrictEqual(form.merchantSuggestions, ["Costco Wholesale"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("does not inject canonical merchant from embedded token in unrelated input", () => {
+    const form = intakeForm();
+    form.allMerchants = ["Medium Rare Restaurant"];
+
+    form.updateMerchant("Medium Rare");
+    assert.deepStrictEqual(form.merchantSuggestions, ["Medium Rare Restaurant"]);
   });
 });

@@ -93,6 +93,19 @@ function isExactIntakeRule(normalized: NormalizedTransaction): boolean {
   );
 }
 
+/**
+ * Normalizes text for tolerant substring and prefix matching:
+ * lowercases, decomposes diacritics/accents, and removes punctuation (apostrophes, periods, backticks).
+ */
+export function normalizeSearchText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/['’`.]/g, "")
+    .trim();
+}
+
 export { getTodayDate };
 
 /** Usage frequency and latest activity timestamps for a credit card. */
@@ -376,7 +389,8 @@ export function intakeForm() {
     },
 
     get merchantSuggestions(): string[] {
-      const query = (this.customMerchantInput.trim() || this.merchant.trim()).toLowerCase();
+      const rawInput = this.merchant.trim() || this.customMerchantInput.trim();
+      const query = rawInput.toLowerCase();
       if (!query) {
         const seen = new Set<string>();
         const list: string[] = [];
@@ -393,6 +407,15 @@ export function intakeForm() {
         }
         return list;
       }
+
+      const normQuery = normalizeSearchText(query);
+      const normalizedQuery = normalizeIntakeMerchant(rawInput);
+      const exactCanonical =
+        isExactIntakeRule(normalizedQuery) && normalizedQuery.canonicalMerchant
+          ? normalizedQuery.canonicalMerchant
+          : null;
+      const exactCanonicalNorm = exactCanonical ? normalizeSearchText(exactCanonical) : null;
+
       const seen = new Set<string>();
       const distinct: string[] = [];
 
@@ -400,10 +423,23 @@ export function intakeForm() {
       for (const tx of this.recentTransactions) {
         if (tx && typeof tx.merchant === "string") {
           const tm = tx.merchant.trim();
-          if (tm && !candidatePool.includes(tm)) {
+          if (
+            tm &&
+            !candidatePool.some(
+              (c) => typeof c === "string" && c.trim().toLowerCase() === tm.toLowerCase(),
+            )
+          ) {
             candidatePool.push(tm);
           }
         }
+      }
+      if (
+        exactCanonical &&
+        !candidatePool.some(
+          (c) => typeof c === "string" && c.trim().toLowerCase() === exactCanonical.toLowerCase(),
+        )
+      ) {
+        candidatePool.push(exactCanonical);
       }
 
       for (const m of candidatePool) {
@@ -411,21 +447,29 @@ export function intakeForm() {
         const trimmed = m.trim();
         if (!trimmed) continue;
         const lower = trimmed.toLowerCase();
-        if (!seen.has(lower) && lower.includes(query)) {
+        const normCandidate = normalizeSearchText(trimmed);
+        const matchesQuery =
+          lower.includes(query) ||
+          (normQuery.length > 0 && normCandidate.includes(normQuery)) ||
+          (exactCanonicalNorm !== null && normCandidate === exactCanonicalNorm);
+
+        if (!seen.has(lower) && matchesQuery) {
           seen.add(lower);
           distinct.push(trimmed);
         }
       }
 
       distinct.sort((a, b) => {
-        const aLower = a.toLowerCase();
-        const bLower = b.toLowerCase();
-        const aPrefix = aLower.startsWith(query);
-        const bPrefix = bLower.startsWith(query);
+        const aNorm = normalizeSearchText(a);
+        const bNorm = normalizeSearchText(b);
+        const aPrefix = normQuery.length > 0 && aNorm.startsWith(normQuery);
+        const bPrefix = normQuery.length > 0 && bNorm.startsWith(normQuery);
         if (aPrefix !== bPrefix) {
           return aPrefix ? -1 : 1;
         }
 
+        const aLower = a.toLowerCase();
+        const bLower = b.toLowerCase();
         const aRecentIdx = this.recentTransactions.findIndex(
           (tx) =>
             tx && typeof tx.merchant === "string" && tx.merchant.trim().toLowerCase() === aLower,
@@ -945,7 +989,7 @@ export function intakeForm() {
       }
       const requestToken = this.token;
       try {
-        const response = await fetch("/api/merchants?limit=8", {
+        const response = await fetch("/api/merchants?limit=100", {
           headers: { Authorization: `Bearer ${requestToken}` },
         });
         if (this.token === requestToken && response.status === 401)
