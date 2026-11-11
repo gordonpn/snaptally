@@ -137,10 +137,13 @@ import Layout from "../layouts/Layout.astro";
               isNegative ? 'text-secondary' : 'text-neu-text',
               amountFontSizeClass
             ]"
-            x-text="(isNegative ? '-' : '') + currency + ' ' + formattedAmount"
-            aria-live="off"
+            role="status"
+            aria-label="Transaction amount"
+            aria-live="polite"
+            aria-atomic="true"
           >
-            $0.00
+            <span class="sr-only" x-text="isNegative ? 'Credit of ' : ''"></span>
+            <span x-text="(isNegative ? '-' : '') + currency + ' ' + formattedAmount">USD 0.00</span>
           </div>
           <template x-if="isNegative">
             <span class="text-[10px] font-bold uppercase tracking-wider text-secondary mt-0.5 whitespace-nowrap">Refund / Credit</span>
@@ -205,7 +208,7 @@ import Layout from "../layouts/Layout.astro";
                 :id="`merchant-opt-${index}`"
                 role="option"
                 :aria-selected="highlightedMerchantIndex === index"
-                class="w-full text-left px-3 py-2 text-sm text-neu-text transition-colors flex items-center justify-between cursor-pointer select-none"
+                class="w-full min-h-[44px] text-left px-3 py-2 text-sm text-neu-text transition-colors flex items-center justify-between cursor-pointer select-none"
                 :class="highlightedMerchantIndex === index ? 'neu-inset-sm font-semibold text-primary bg-primary/10' : 'hover:bg-base-content/5'"
                 @mouseenter="highlightedMerchantIndex = index; highlightedMerchant = s"
                 @mousedown.prevent
@@ -278,6 +281,7 @@ import Layout from "../layouts/Layout.astro";
             autocapitalize="off"
             spellcheck="false"
             placeholder="Type card name..."
+            aria-label="Custom card name"
             class="neu-inset w-full rounded-xl px-3 py-2 text-base text-neu-text focus:outline-none focus:ring-2 focus:ring-primary/40 mt-1"
             x-model="customCardInput"
             @input="updateCustomCard($event.target.value)"
