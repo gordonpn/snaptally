@@ -78,6 +78,7 @@ import Layout from "../layouts/Layout.astro";
         <button
           type="button"
           class="w-11 h-11 rounded-full neu-raised-sm neu-pressed flex items-center justify-center text-neu-text transition-all min-h-[44px] min-w-[44px] relative"
+          x-ref="settingsTrigger"
           @click="openSettings()"
           aria-label="Settings"
         >
@@ -482,7 +483,10 @@ import Layout from "../layouts/Layout.astro";
     </dialog>
 
     <!-- Settings Modal -->
-    <dialog class="modal" :class="{ 'modal-open': isSettingsOpen }" aria-labelledby="settings-dialog-title">
+    <dialog class="modal" aria-labelledby="settings-dialog-title"
+      x-effect="isSettingsOpen ? $el.showModal() : $el.close()"
+      @cancel.prevent="closeSettings()"
+      @close="closeSettings(); $refs.settingsTrigger.focus()">
       <div class="modal-box p-5 max-w-sm rounded-2xl max-h-[85vh] overflow-y-auto neu-raised">
         <div class="flex items-center justify-between pb-2 border-b border-base-content/10">
           <h3 id="settings-dialog-title" class="font-bold text-lg text-neu-text">Settings</h3>
@@ -491,6 +495,7 @@ import Layout from "../layouts/Layout.astro";
             class="neu-raised-sm rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center text-neu-text"
             @click="closeSettings()"
             aria-label="Close Settings"
+            autofocus
           >
             <IconX class="w-5 h-5" />
           </button>
