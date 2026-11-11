@@ -81,7 +81,8 @@ export function toAlphanumericKey(value: string): string {
 }
 
 /**
- * Resolves merchant name against existing records in D1.
+ * Resolves merchant name against a bounded window of recent records in D1.
+ * Merchants outside that window fall back to Title Case without scanning history.
  * If an existing merchant matches the alphanumeric key (for example "trader joes" matches "Trader Joe's"),
  * returns the existing canonical string with standardized whitespace and apostrophes.
  * Otherwise, returns the Title Case normalized string.
