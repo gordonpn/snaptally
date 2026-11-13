@@ -13,12 +13,14 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "node --experimental-test-coverage --test-coverage-lines=80 --test-coverage-functions=80 --test-coverage-branches=80 --test-coverage-exclude=\"tests/**\" --import ./tests/register-loader.js --test tests/*.test.ts",
+    "test:e2e": "playwright test",
     "test:coverage": "node --input-type=module --eval \"import { mkdirSync } from 'node:fs'; mkdirSync('coverage', { recursive: true })\" && node --experimental-test-coverage --test-coverage-lines=80 --test-coverage-functions=80 --test-coverage-branches=80 --test-coverage-exclude=\"tests/**\" --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info --import ./tests/register-loader.js --test tests/*.test.ts",
     "typecheck": "tsc --noEmit && tsc --project tsconfig.backfill.json",
     "db:migrate:local": "wrangler d1 migrations apply budget-db --local"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260923.1",
+    "@playwright/test": "^1.65.0",
     "@tabler/icons-astro": "^3.48.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/alpinejs": "^3.13.11",
