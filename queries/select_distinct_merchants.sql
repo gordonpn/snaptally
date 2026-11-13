@@ -1,3 +1,4 @@
+-- POST canonicalization only; autocomplete uses select_frequent_merchants.sql.
 -- Bound ingestion canonicalization to the 200 most recently inserted transactions.
 -- Limit before grouping so repeated merchants cannot expand historical reads.
 SELECT merchant
