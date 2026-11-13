@@ -20,7 +20,7 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
     steps:
       - name: DeepSeek Code Review
-        uses: hustcer/deepseek-review@v1
+        uses: hustcer/deepseek-review@15a228bf15e01ef1f4d195eab4febbd7809dd2ed # v1
         with:
           chat-token: ${{ secrets.DEEPSEEK_API_KEY }}
           sys-prompt: |
