@@ -1,19 +1,6 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import { describe, it } from "node:test";
-
-const root = path.resolve(import.meta.dirname, "..");
-const workflow = fs.readFileSync(path.join(root, ".github/workflows/pr-agent.yml"), "utf8");
-const authorizationScript = workflow.match(/ {10}script: \|\n([\s\S]*?)\n {2}pr_agent:/)?.[1];
-assert.ok(authorizationScript);
-const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
-const authorize = new AsyncFunction(
-  "core",
-  "context",
-  "github",
-  authorizationScript.replace(/^ {12}/gm, ""),
-);
+import authorize from "../.github/scripts/authorize-pr-agent.js";
 
 async function checkAuthorization({
   eventName = "issue_comment",
@@ -25,9 +12,9 @@ async function checkAuthorization({
 } = {}): Promise<{ allowed: string; lookups: number }> {
   let allowed = "";
   let lookups = 0;
-  await authorize(
-    { setOutput: (_name: string, value: string) => (allowed = value) },
-    {
+  await authorize({
+    core: { setOutput: (_name: string, value: string) => (allowed = value) },
+    context: {
       eventName,
       repo: { owner: "gordonpn", repo: "snaptally" },
       payload: {
@@ -36,7 +23,7 @@ async function checkAuthorization({
         pull_request: eventName === "pull_request" ? { number: 12 } : undefined,
       },
     },
-    {
+    github: {
       rest: {
         pulls: {
           get: async (args: { pull_number: number }) => {
@@ -47,7 +34,7 @@ async function checkAuthorization({
         },
       },
     },
-  );
+  });
   return { allowed, lookups };
 }
 
