@@ -13,7 +13,7 @@ SELECT
     currency,
     created_at
 FROM transactions
-WHERE (?1 IS NULL OR merchant LIKE '%' || ?1 || '%' OR card LIKE '%' || ?1 || '%')
+WHERE (?1 IS NULL OR merchant LIKE '%' || ?1 || '%' ESCAPE '\' OR card LIKE '%' || ?1 || '%' ESCAPE '\')
   AND (?2 IS NULL OR parent_bucket = ?2)
 ORDER BY date DESC, created_at DESC, rowid DESC
 LIMIT ?3 OFFSET ?4;

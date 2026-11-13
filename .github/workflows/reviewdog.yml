@@ -23,6 +23,10 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-pr-review
           fail_level: error
+          # GitHub supports queue: max; actionlint has not added this field yet.
+          # https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency
+          actionlint_flags: >-
+            -ignore '^unexpected key "queue" for "concurrency" section\.'
 
   biome:
     name: runner / biome
