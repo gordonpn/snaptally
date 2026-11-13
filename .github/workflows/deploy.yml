@@ -18,6 +18,7 @@ jobs:
     timeout-minutes: 10
     concurrency:
       group: ${{ github.event_name == 'pull_request' && 'pages-preview-database' || 'pages-production' }}
+      queue: max
       cancel-in-progress: false
     permissions:
       contents: read
@@ -112,6 +113,7 @@ jobs:
       contents: read
     concurrency:
       group: pages-preview-database
+      queue: max
       cancel-in-progress: false
     steps:
       - name: Checkout merged migrations

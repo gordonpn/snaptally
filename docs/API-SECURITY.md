@@ -55,7 +55,8 @@ local database on every run, so edits to an existing filename are reapplied. PRs
 that add, change, or remove migrations skip shared-database preview deployment
 until merge. Abandoned PR migrations never reach the shared preview database.
 PR schema checks/deployments and main-push preview migrations share the
-`pages-preview-database` concurrency group. Production migration/deployment runs
+`pages-preview-database` concurrency group with `queue: max` to preserve pending
+migration jobs (up to GitHub’s 100-job queue limit). Production migration/deployment runs
 use a separate group, so preview serialization does not share the production lock. The migration
 is additive and does not depend on the monthly budget schema migration.
 
@@ -76,3 +77,8 @@ References:
 - https://developers.cloudflare.com/pages/functions/bindings/
 - https://developers.cloudflare.com/d1/sql-api/sql-statements/
 - https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/
+
+The reviewdog actionlint invocation temporarily ignores only the diagnostic for
+the documented `concurrency.queue` key; actionlint 1.7.12 still lacks that field.
+Other workflow syntax checks remain enabled. Remove the compatibility exception
+when actionlint adds support.
