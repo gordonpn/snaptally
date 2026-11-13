@@ -31,9 +31,6 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Setup LCOV
-        uses: hrishikesh-kadam/setup-lcov@v1
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
