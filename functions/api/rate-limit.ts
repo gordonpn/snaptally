@@ -6,6 +6,7 @@ import { logger } from "./logger.ts";
 export const REQUESTS_PER_MINUTE = 120;
 export const AUTH_FAILURES_PER_MINUTE = 20;
 
+/** Atomically increments the client counter and checks its fixed-window quota. */
 async function consume(
   db: D1Database,
   key: string,
@@ -18,11 +19,33 @@ async function consume(
   return result !== null && result.request_count <= limit;
 }
 
+/** Returns a non-cacheable throttle response with the next retry interval. */
 function throttled(retryAfter: number): Response {
   return Response.json(
     { error: "Too many requests" },
     { status: 429, headers: { "Retry-After": String(retryAfter), "Cache-Control": "no-store" } },
   );
+}
+
+/** Normalizes IPv6 clients to a /64 using the runtime URL parser; IPv4 stays intact. */
+function clientNetwork(ip: string): string {
+  if (!ip.includes(":")) return ip;
+  try {
+    const canonical = new URL(`http://[${ip}]/`).hostname.slice(1, -1);
+    const [left, right] = canonical.split("::");
+    const leading = left ? left.split(":") : [];
+    const trailing = right ? right.split(":") : [];
+    const groups =
+      right === undefined
+        ? leading
+        : [...leading, ...Array(8 - leading.length - trailing.length).fill("0"), ...trailing];
+    return `${groups
+      .slice(0, 4)
+      .map((part) => part.padStart(4, "0"))
+      .join(":")}::/64`;
+  } catch {
+    return "invalid-ipv6";
+  }
 }
 
 /**
@@ -47,7 +70,7 @@ export async function guardApiRequest(
     const ip = request.headers.get("CF-Connecting-IP") ?? "local";
     const digest = await crypto.subtle.digest(
       "SHA-256",
-      new TextEncoder().encode(`${minute}:${ip}`),
+      new TextEncoder().encode(`${minute}:${clientNetwork(ip)}`),
     );
     const client = Array.from(new Uint8Array(digest), (byte) =>
       byte.toString(16).padStart(2, "0"),
@@ -69,8 +92,11 @@ export async function guardApiRequest(
       return throttled(retryAfter);
     }
     return authResponse;
-  } catch {
-    logger.error("API rate limiting unavailable", metadata);
+  } catch (error) {
+    logger.error("API rate limiting unavailable", {
+      ...metadata,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return Response.json(
       { error: "API temporarily unavailable" },
       { status: 503, headers: { "Retry-After": "60", "Cache-Control": "no-store" } },

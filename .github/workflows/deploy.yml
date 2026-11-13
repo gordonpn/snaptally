@@ -32,6 +32,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Check Cloudflare credentials
         id: check-credentials
@@ -69,8 +70,26 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: d1 migrations apply budget-db --remote
 
-      - name: Apply preview D1 database migrations
+      - name: Validate migrations in a fresh local database
         if: steps.check-credentials.outputs.configured == 'true' && github.event_name == 'pull_request'
+        run: |
+          migration_state=$(mktemp -d)
+          trap 'rm -rf "$migration_state"' EXIT
+          pnpm exec wrangler d1 migrations apply budget-db --local --persist-to "$migration_state"
+
+      - name: Check shared preview schema compatibility
+        id: preview-schema
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash .github/scripts/check-preview-schema.sh "$BASE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Explain schema preview restriction
+        if: github.event_name == 'pull_request' && steps.preview-schema.outputs.safe != 'true'
+        run: echo 'Schema-changing PR validated locally; shared database preview skipped until merge.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply merged preview D1 database migrations
+        if: steps.check-credentials.outputs.configured == 'true' && github.event_name == 'push'
         uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -79,7 +98,7 @@ jobs:
 
       - name: Deploy to Cloudflare Pages
         id: wrangler
-        if: steps.check-credentials.outputs.configured == 'true'
+        if: steps.check-credentials.outputs.configured == 'true' && (github.event_name == 'push' || steps.preview-schema.outputs.safe == 'true')
         uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}

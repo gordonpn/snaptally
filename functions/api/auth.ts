@@ -28,6 +28,7 @@ export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   return mismatch === 0;
 }
 
+/** Validates the bearer credential and logs safe request context on rejection. */
 export async function validateBearerToken(
   request: Request,
   expectedToken?: string,

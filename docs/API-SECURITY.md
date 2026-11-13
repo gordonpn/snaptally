@@ -11,14 +11,15 @@ Reimbursement is bounded by gross amount for expenses and must be zero for credi
 
 Explicit legacy queued categories remain accepted: `Income / Reimbursement` and
 `Guilt-Free / Coffee`. No broad unknown-category allowance is added. Existing
-historical database rows are not rewritten. GET searches accept at most 100
-characters and treat percent, underscore, and backslash literally. Bucket filters
+historical database rows are not rewritten. GET searches cap raw input at 100 characters and the trimmed, escaped pattern at
+48 UTF-8 bytes, reserving two bytes for SQL wildcards. Percent, underscore, and
+backslash are treated literally. Bucket filters
 are bounded to 64 characters without hiding historical categories from reads.
 
 ## Rate limits
 
 Pages middleware protects transactions and merchants on every hostname, including
-preview `pages.dev` URLs. All requests from one Cloudflare-provided client IP share
+preview `pages.dev` URLs. All requests from one Cloudflare-provided IPv4 address or IPv6 /64 share
 a 120-request fixed minute window; failed authentication has a stricter 20-request
 window. The 21st failed authentication attempt and 121st overall request return
 429 with `Retry-After`. A valid token can still be used after failed-auth throttling
@@ -38,13 +39,19 @@ D1 failures or missing migrations fail closed with 503 and `Retry-After: 60`.
 Missing bearer-token configuration returns 500. Authentication logs include method,
 pathname, and Cloudflare ray ID, excluding the query string and credentials.
 The outbox honors server backoff for 429 and 503 with `Retry-After`, preserving the
-server retry budget and queued records during throttling or guard outages.
+server retry budget and queued records during throttling or guard outages. The
+queue-wide deadline is persisted in localStorage (with an in-memory fallback) and
+blocks automatic syncs and new entries until expiry. Explicit forced manual retries
+can override it. Invalid or past HTTP dates fall back to 60 seconds.
 
 ## Deployment and recovery
 
 Migration `0007_api_rate_limits.sql` must be applied before serving the new code.
-The deploy workflow applies migrations to production on main pushes and to the
-preview database before PR previews. These are separate databases. The migration
+The deploy workflow applies merged migrations to production and the separate
+preview database only on main pushes. PR migrations are tested against a fresh
+local database on every run, so edits to an existing filename are reapplied. PRs
+that add, change, or remove migrations skip shared-database preview deployment
+until merge. Abandoned PR migrations never reach the shared preview database. The migration
 is additive and does not depend on the monthly budget schema migration.
 
 For local development, apply migrations with `pnpm db:migrate:local` before

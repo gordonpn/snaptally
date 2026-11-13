@@ -241,7 +241,109 @@ describe("transaction input security", () => {
   });
 });
 
+describe("D1 search pattern bounds", () => {
+  it("rejects escaped UTF-8 patterns over 48 bytes before database access", async () => {
+    const { db, sqlite } = database();
+    try {
+      for (const [search, expected] of [
+        ["x".repeat(48), 200],
+        ["x".repeat(49), 400],
+        ["é".repeat(24), 200],
+        ["é".repeat(25), 400],
+        ["%".repeat(24), 200],
+        ["%".repeat(25), 400],
+        ["_".repeat(25), 400],
+        ["\\".repeat(25), 400],
+      ] as const) {
+        const response = await handleGet(
+          new Request(`https://example.com/api/transactions?search=${encodeURIComponent(search)}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          db,
+          token,
+        );
+        assert.equal(response.status, expected, search);
+      }
+    } finally {
+      sqlite.close();
+    }
+  });
+});
+
 describe("API rate limiting and audit context", () => {
+  it("shares quotas for equivalent and rotating IPv6 addresses within a /64", async () => {
+    const { db, sqlite } = database();
+    try {
+      for (let i = 0; i < REQUESTS_PER_MINUTE; i++) {
+        assert.equal(
+          await guardApiRequest(
+            request(`Bearer ${token}`, `2001:db8:1234:5678::${i.toString(16)}`),
+            db,
+            token,
+            1_800_000,
+          ),
+          null,
+        );
+      }
+      assert.equal(
+        (
+          await guardApiRequest(
+            request(`Bearer ${token}`, "2001:0db8:1234:5678:ffff:0:0:1"),
+            db,
+            token,
+            1_800_000,
+          )
+        )?.status,
+        429,
+      );
+      assert.equal(
+        await guardApiRequest(
+          request(`Bearer ${token}`, "2001:db8:1234:5679::1"),
+          db,
+          token,
+          1_800_000,
+        ),
+        null,
+      );
+      assert.equal(
+        await guardApiRequest(
+          request(`Bearer ${token}`, "2001:db8:1234:5678::1"),
+          db,
+          token,
+          1_860_000,
+        ),
+        null,
+      );
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("logs underlying rate-limit database errors with request context", async () => {
+    const records: unknown[] = [];
+    const error = mock.method(logger, "error", (_message: string, metadata: unknown) =>
+      records.push(metadata),
+    );
+    try {
+      for (const problem of [new Error("no such table: api_rate_limits"), "database offline"]) {
+        const db = {
+          prepare() {
+            throw problem;
+          },
+        } as unknown as D1Database;
+        assert.equal((await guardApiRequest(request(), db, token, 1_800_000))?.status, 503);
+        assert.deepEqual(records.at(-1), {
+          method: "GET",
+          pathname: "/api/transactions",
+          cfRay: "ray-123",
+          error: problem instanceof Error ? problem.message : problem,
+        });
+      }
+    } finally {
+      error.mock.restore();
+    }
+  });
+
   it("enforces atomic shared-IP limits across routes and resets at minute boundaries", async () => {
     const { db, sqlite } = database();
     const now = 1_800_000;

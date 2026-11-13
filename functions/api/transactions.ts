@@ -20,10 +20,12 @@ const LEGACY_CATEGORIES: Record<string, readonly string[]> = {
   "Guilt-Free": ["Coffee"],
 };
 
+/** Requires a nonempty string while bounding work on its untrimmed input. */
 function boundedText(value: unknown, max: number): value is string {
   return typeof value === "string" && value.length <= max && value.trim().length > 0;
 }
 
+/** Accepts canonical category pairs and the explicitly supported queued legacy pairs. */
 function validCategory(bucket: string, subcategory: string): boolean {
   const canonical = (
     Object.hasOwn(BUCKET_SUBCATEGORIES, bucket)
@@ -38,6 +40,7 @@ function validCategory(bucket: string, subcategory: string): boolean {
 
 class PayloadTooLarge extends Error {}
 
+/** Reads at most MAX_BODY_BYTES from the stream before decoding and parsing JSON. */
 async function readBoundedJson(request: Request): Promise<unknown> {
   const contentLength = request.headers.get("content-length");
   if (contentLength && /^\d+$/.test(contentLength) && Number(contentLength) > MAX_BODY_BYTES) {
@@ -413,6 +416,9 @@ export async function handleGet(
     return Response.json({ error: "Search exceeds 100 characters" }, { status: 400 });
   }
   const search = rawSearch?.trim() ? rawSearch.trim().replace(/[\\%_]/g, "\\$&") : null;
+  if (search && new TextEncoder().encode(search).byteLength > 48) {
+    return Response.json({ error: "Escaped search exceeds 48 UTF-8 bytes" }, { status: 400 });
+  }
   const rawBucket = url.searchParams.get("bucket");
   if (rawBucket && rawBucket.length > 64) {
     return Response.json({ error: "Bucket exceeds 64 characters" }, { status: 400 });
