@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
@@ -535,5 +535,153 @@ describe("Currency Column Migration (0005_add_currency_to_transactions.sql)", ()
     assert.strictEqual(cadRow.currency, "CAD");
 
     db.close();
+  });
+});
+
+describe("Monthly budget targets migration (0006)", () => {
+  const migrationName = "0006_monthly_budgets_schema.sql";
+  const monthlyBudgetsSql = readFileSync(resolve("migrations", migrationName), "utf-8");
+  const insertSql = `
+    INSERT INTO monthly_budgets (id, year_month, parent_bucket, subcategory, target_amount)
+    VALUES (?, ?, ?, ?, ?)
+  `;
+
+  it("creates an empty target table independently on a fresh database", (t) => {
+    const db = new DatabaseSync(":memory:");
+    t.after(() => db.close());
+    db.exec(monthlyBudgetsSql);
+
+    db.prepare(insertSql).run("budget-rent", "2026-11", "Fixed Costs", "Rent", 0);
+    const row = db.prepare("SELECT * FROM monthly_budgets").get();
+    assert.ok(row);
+    assert.equal(row.id, "budget-rent");
+    assert.equal(row.target_amount, 0);
+    assert.match(String(row.created_at), /^\d{4}-\d{2}-\d{2} /);
+  });
+
+  it("rejects explicit null creation timestamps on insert and update", (t) => {
+    const db = createTestDatabase();
+    t.after(() => db.close());
+    assert.throws(
+      () =>
+        db
+          .prepare(`INSERT INTO monthly_budgets
+        (id, year_month, parent_bucket, subcategory, target_amount, created_at)
+        VALUES ('missing-time', '2026-11', 'Fixed Costs', 'Rent', 100, NULL)`)
+          .run(),
+      /NOT NULL constraint failed/,
+    );
+    db.prepare(insertSql).run("valid-time", "2026-11", "Fixed Costs", "Rent", 100);
+    assert.throws(
+      () => db.prepare("UPDATE monthly_budgets SET created_at = NULL").run(),
+      /NOT NULL constraint failed/,
+    );
+    assert.match(
+      String(db.prepare("SELECT created_at FROM monthly_budgets").get()?.created_at),
+      /^\d{4}-\d{2}-\d{2} /,
+    );
+  });
+
+  it("preserves existing transaction rows and does not seed production targets", (t) => {
+    const db = new DatabaseSync(":memory:");
+    t.after(() => db.close());
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const file of readdirSync(resolve("migrations")).sort()) {
+      if (file.endsWith(".sql") && file < migrationName) {
+        db.exec(readFileSync(resolve("migrations", file), "utf-8"));
+      }
+    }
+    db.prepare(`
+      INSERT INTO transactions (
+        id, date, card, parent_bucket, subcategory, merchant, gross_amount, reimbursement, currency
+      ) VALUES ('tx-before-budgets', '2026-11-01', 'Visa', 'Fixed Costs', 'Groceries', 'Market', 12.5, 0, 'CAD')
+    `).run();
+    const before = db.prepare("SELECT * FROM transactions").all();
+
+    db.exec(monthlyBudgetsSql);
+
+    assert.deepEqual(db.prepare("SELECT * FROM transactions").all(), before);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM monthly_budgets").get()?.count, 0);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  });
+
+  it("enforces unique category targets per month without conflating buckets or months", (t) => {
+    const db = createTestDatabase();
+    t.after(() => db.close());
+    const insert = db.prepare(insertSql);
+    insert.run("b1", "2026-11", "Savings", "Investments", 100);
+    assert.throws(
+      () => insert.run("b2", "2026-11", "Savings", "Investments", 200),
+      /UNIQUE constraint failed/,
+    );
+    assert.doesNotThrow(() => insert.run("b3", "2026-12", "Savings", "Investments", 200));
+    assert.doesNotThrow(() => insert.run("b4", "2026-11", "Investments", "Investments", 300));
+    assert.throws(
+      () => insert.run("b1", "2027-01", "Fixed Costs", "Rent", 400),
+      /UNIQUE constraint failed/,
+    );
+  });
+
+  it("rejects negative, nonnumeric, infinite, or missing targets on insert and update", (t) => {
+    const db = createTestDatabase();
+    t.after(() => db.close());
+    const insert = db.prepare(insertSql);
+    for (const amount of [-0.01, "not-a-number", Number.POSITIVE_INFINITY, null]) {
+      assert.throws(
+        () => insert.run("invalid", "2026-11", "Guilt-Free", "Dining", amount),
+        /(?:CHECK|NOT NULL) constraint failed/,
+      );
+    }
+    insert.run("valid", "2026-11", "Guilt-Free", "Dining", 123.45);
+    assert.throws(
+      () => db.prepare("UPDATE monthly_budgets SET target_amount = -1 WHERE id = 'valid'").run(),
+      /CHECK constraint failed/,
+    );
+    assert.equal(
+      db.prepare("SELECT target_amount FROM monthly_budgets").get()?.target_amount,
+      123.45,
+    );
+  });
+
+  it("requires complete keys and valid calendar month strings", (t) => {
+    const db = createTestDatabase();
+    t.after(() => db.close());
+    const insert = db.prepare(insertSql);
+    for (const month of ["2026-00", "2026-13", "2026-1", "26-01", "2026-01-01", "abcd-01", null]) {
+      assert.throws(
+        () => insert.run("invalid", month, "Fixed Costs", "Rent", 1),
+        /(?:CHECK|NOT NULL) constraint failed/,
+      );
+    }
+    assert.throws(() => insert.run(null, "2026-01", "Fixed Costs", "Rent", 1), /NOT NULL/);
+    assert.throws(() => insert.run("missing", "2026-01", null, "Rent", 1), /NOT NULL/);
+    assert.throws(() => insert.run("missing", "2026-01", "Fixed Costs", null, 1), /NOT NULL/);
+    assert.doesNotThrow(() => insert.run("january", "2026-01", "Fixed Costs", "Rent", 1));
+    assert.doesNotThrow(() => insert.run("december", "2026-12", "Fixed Costs", "Rent", 1));
+  });
+
+  it("loads four deterministic local demo buckets without overwriting edited targets", (t) => {
+    const db = createTestDatabase();
+    t.after(() => db.close());
+    const seedSql = readFileSync(resolve("seeds/monthly_budgets_demo.sql"), "utf-8");
+    db.exec(seedSql);
+    const rows = db.prepare("SELECT * FROM monthly_budgets ORDER BY parent_bucket").all();
+    assert.deepEqual(
+      rows.map((row) => row.parent_bucket),
+      ["Fixed Costs", "Guilt-Free", "Investments", "Savings"],
+    );
+    assert.ok(rows.every((row) => row.year_month === "2000-01" && row.target_amount === 0));
+
+    db.prepare(
+      "UPDATE monthly_budgets SET target_amount = 25 WHERE parent_bucket = 'Guilt-Free'",
+    ).run();
+    db.exec(seedSql);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM monthly_budgets").get()?.count, 4);
+    assert.equal(
+      db
+        .prepare("SELECT target_amount FROM monthly_budgets WHERE parent_bucket = 'Guilt-Free'")
+        .get()?.target_amount,
+      25,
+    );
   });
 });
