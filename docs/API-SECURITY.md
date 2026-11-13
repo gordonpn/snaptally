@@ -37,7 +37,9 @@ Forwarded-for headers do not select a bucket.
 
 D1 failures or missing migrations fail closed with 503 and `Retry-After: 60`.
 Missing bearer-token configuration returns 500. Authentication logs include method,
-pathname, and Cloudflare ray ID, excluding the query string and credentials.
+pathname, Cloudflare ray ID, and the minute-scoped client-network hash, excluding
+raw IP addresses, query strings and credentials. The guard passes its counter hash
+to authentication so audit records and throttle counters correlate.
 The outbox honors server backoff for 429 and 503 with `Retry-After`, preserving the
 server retry budget and queued records during throttling or guard outages. The
 queue-wide deadline is persisted in localStorage (with an in-memory fallback) and
@@ -51,7 +53,10 @@ The deploy workflow applies merged migrations to production and the separate
 preview database only on main pushes. PR migrations are tested against a fresh
 local database on every run, so edits to an existing filename are reapplied. PRs
 that add, change, or remove migrations skip shared-database preview deployment
-until merge. Abandoned PR migrations never reach the shared preview database. The migration
+until merge. Abandoned PR migrations never reach the shared preview database.
+PR schema checks/deployments and main-push preview migrations share the
+`pages-preview-database` concurrency group. Production migration/deployment runs
+use a separate group, so preview serialization does not share the production lock. The migration
 is additive and does not depend on the monthly budget schema migration.
 
 For local development, apply migrations with `pnpm db:migrate:local` before

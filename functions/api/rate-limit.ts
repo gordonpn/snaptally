@@ -1,6 +1,7 @@
 import cleanupQuery from "../../queries/cleanup_api_rate_limits.sql";
 import consumeQuery from "../../queries/consume_api_rate_limit.sql";
 import { validateBearerToken } from "./auth.ts";
+import { hashClientIp } from "./client-ip.ts";
 import { logger } from "./logger.ts";
 
 export const REQUESTS_PER_MINUTE = 120;
@@ -27,27 +28,6 @@ function throttled(retryAfter: number): Response {
   );
 }
 
-/** Normalizes IPv6 clients to a /64 using the runtime URL parser; IPv4 stays intact. */
-function clientNetwork(ip: string): string {
-  if (!ip.includes(":")) return ip;
-  try {
-    const canonical = new URL(`http://[${ip}]/`).hostname.slice(1, -1);
-    const [left, right] = canonical.split("::");
-    const leading = left ? left.split(":") : [];
-    const trailing = right ? right.split(":") : [];
-    const groups =
-      right === undefined
-        ? leading
-        : [...leading, ...Array(8 - leading.length - trailing.length).fill("0"), ...trailing];
-    return `${groups
-      .slice(0, 4)
-      .map((part) => part.padStart(4, "0"))
-      .join(":")}::/64`;
-  } catch {
-    return "invalid-ipv6";
-  }
-}
-
 /**
  * Runs before route handlers on all Pages hosts, including pages.dev previews.
  * CF-Connecting-IP is set by Cloudflare; forwarded client headers are not trusted.
@@ -66,15 +46,7 @@ export async function guardApiRequest(
   const minute = Math.floor(now / 60_000);
   const retryAfter = 60 - Math.floor((now % 60_000) / 1000);
   try {
-    // All local requests share a bucket when Cloudflare's trusted IP is absent.
-    const ip = request.headers.get("CF-Connecting-IP") ?? "local";
-    const digest = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(`${minute}:${clientNetwork(ip)}`),
-    );
-    const client = Array.from(new Uint8Array(digest), (byte) =>
-      byte.toString(16).padStart(2, "0"),
-    ).join("");
+    const client = await hashClientIp(request, minute);
     await db
       .prepare(cleanupQuery)
       .bind(minute - 1)
@@ -83,7 +55,7 @@ export async function guardApiRequest(
       logger.warn("API request rate exceeded", { ...metadata, clientIpHash: client });
       return throttled(retryAfter);
     }
-    const authResponse = await validateBearerToken(request, expectedToken);
+    const authResponse = await validateBearerToken(request, expectedToken, client);
     if (
       authResponse?.status === 401 &&
       !(await consume(db, `${minute}:auth:${client}`, minute, AUTH_FAILURES_PER_MINUTE))

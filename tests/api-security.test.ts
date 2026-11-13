@@ -412,7 +412,7 @@ describe("API rate limiting and audit context", () => {
     }
   });
 
-  it("logs only method, pathname and ray metadata on 401 and configuration failures", async () => {
+  it("logs method, pathname, ray and a client hash without raw IPs or credentials", async () => {
     const records: unknown[] = [];
     const warn = mock.method(logger, "warn", (_message: string, metadata: unknown) =>
       records.push(metadata),
@@ -429,12 +429,16 @@ describe("API rate limiting and audit context", () => {
       }
       assert.equal((await validateBearerToken(request(), undefined))?.status, 500);
       assert.ok(records.length >= 5);
-      for (const metadata of records)
-        assert.deepEqual(metadata, {
+      for (const metadata of records) {
+        const { clientIpHash, ...context } = metadata as Record<string, unknown>;
+        assert.match(String(clientIpHash), /^[a-f0-9]{64}$/);
+        assert.deepEqual(context, {
           method: "GET",
           pathname: "/api/transactions",
           cfRay: "ray-123",
         });
+      }
+      assert.ok(!JSON.stringify(records).includes("192.0.2.1"));
       assert.ok(!JSON.stringify(records).includes(token));
       assert.ok(!JSON.stringify(records).includes("not-logged"));
     } finally {

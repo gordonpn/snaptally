@@ -16,6 +16,9 @@ jobs:
     name: runner / deploy
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    concurrency:
+      group: ${{ github.event_name == 'pull_request' && 'pages-preview-database' || 'pages-production' }}
+      cancel-in-progress: false
     permissions:
       contents: read
       deployments: write
@@ -25,6 +28,7 @@ jobs:
        github.event.pull_request.head.repo.full_name == github.repository &&
        github.actor != 'dependabot[bot]')
     outputs:
+      cloudflare-configured: ${{ steps.check-credentials.outputs.configured }}
       alias-url: ${{ steps.wrangler.outputs.pages-deployment-alias-url }}
       deployment-url: ${{ steps.wrangler.outputs.deployment-url }}
     steps:
@@ -88,14 +92,6 @@ jobs:
         if: github.event_name == 'pull_request' && steps.preview-schema.outputs.safe != 'true'
         run: echo 'Schema-changing PR validated locally; shared database preview skipped until merge.' >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Apply merged preview D1 database migrations
-        if: steps.check-credentials.outputs.configured == 'true' && github.event_name == 'push'
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 migrations apply budget-db-preview --remote --env preview
-
       - name: Deploy to Cloudflare Pages
         id: wrangler
         if: steps.check-credentials.outputs.configured == 'true' && (github.event_name == 'push' || steps.preview-schema.outputs.safe == 'true')
@@ -105,6 +101,37 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy ./dist --project-name=snaptally --branch=${{ github.head_ref || github.ref_name }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+  preview-migrations:
+    name: runner / preview-migrations
+    needs: deploy
+    if: github.event_name == 'push' && needs.deploy.outputs.cloudflare-configured == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    concurrency:
+      group: pages-preview-database
+      cancel-in-progress: false
+    steps:
+      - name: Checkout merged migrations
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply merged preview D1 database migrations
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 migrations apply budget-db-preview --remote --env preview
 
   preview-comment:
     name: runner / preview-comment

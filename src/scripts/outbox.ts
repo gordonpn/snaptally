@@ -575,6 +575,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
   }
 }
 
+/** Flushes due items while preserving queue-wide server backoff and per-item retry limits. */
 async function flushOutbox(options: SyncOptions): Promise<SyncResult> {
   let syncedCount = 0;
   let failedCount = 0;

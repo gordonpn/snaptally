@@ -1,3 +1,4 @@
+import { hashClientIp } from "./client-ip.ts";
 import { logger } from "./logger.ts";
 
 export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
@@ -32,11 +33,14 @@ export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
 export async function validateBearerToken(
   request: Request,
   expectedToken?: string,
+  auditClientIpHash?: string,
 ): Promise<Response | null> {
   const metadata = {
     method: request.method,
     pathname: new URL(request.url).pathname,
     cfRay: request.headers.get("cf-ray")?.slice(0, 100) ?? null,
+    clientIpHash:
+      auditClientIpHash ?? (await hashClientIp(request, Math.floor(Date.now() / 60_000))),
   };
   const authHeader = request.headers.get("Authorization");
   if (!authHeader) {
