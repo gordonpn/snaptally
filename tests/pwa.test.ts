@@ -286,6 +286,11 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
       /<header[^>]+flex-none/,
       "header must be flex-none to avoid offscreen scroll",
     );
+    assert.doesNotMatch(
+      indexContent.match(/<header\b[^>]*>/)?.[0] ?? "",
+      /\bflex-wrap\b/,
+      "header must not use flex-wrap to avoid multi-line shift on narrow viewports",
+    );
     assert.match(
       indexContent,
       /<footer[^>]+flex-none/,
@@ -543,6 +548,61 @@ describe("Standalone iOS PWA Viewport and Touch Handling (Issue #105)", () => {
       submitBtnMatch[0],
       /min-h-\[44px\]/,
       "submit button must satisfy minimum 44px touch target requirement",
+    );
+  });
+
+  it("prevents intake header wrapping on narrow viewports while preserving touch targets across themes (Issue #157)", () => {
+    const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
+    const indexContent = fs.readFileSync(indexPath, "utf-8");
+
+    const headerMatch = indexContent.match(/<header\b[^>]*>/);
+    assert.ok(headerMatch, "index.astro must contain a <header> element");
+    const headerTag = headerMatch[0];
+
+    assert.doesNotMatch(
+      headerTag,
+      /\bflex-wrap\b/,
+      "header must not use flex-wrap to avoid multi-line shift on narrow viewports",
+    );
+    assert.match(headerTag, /\bflex-none\b/, "header must maintain flex-none docking");
+    assert.match(
+      headerTag,
+      /\bjustify-between\b/,
+      "header must distribute logo, date chip, and actions across a single row",
+    );
+
+    assert.match(
+      indexContent,
+      /<div[^>]*aria-label="SnapTally"/,
+      "logo container must provide accessible aria-label",
+    );
+    assert.match(
+      indexContent,
+      /<span[^>]*class="[^"]*hidden\s+sm:inline[^"]*"[^>]*>SnapTally<\/span>/,
+      "logo text must hide on compact viewports and display on sm screens",
+    );
+
+    assert.match(
+      indexContent,
+      /<button[^>]*class="[^"]*min-h-\[44px\][^"]*"[^>]*>\s*<IconCalendar/s,
+      "date chip button must satisfy min-h-[44px] touch target requirement",
+    );
+    assert.match(
+      indexContent,
+      /<a[^>]*href="\/activity"[^>]*min-h-\[44px\]\s+min-w-\[44px\]/,
+      "activity link must satisfy 44x44px touch target requirement",
+    );
+    const settingsBtnMatch = indexContent.match(/<button[^>]*@click="openSettings\(\)"[^>]*>/);
+    assert.ok(settingsBtnMatch, "settings button must exist");
+    assert.match(
+      settingsBtnMatch[0],
+      /min-h-\[44px\]/,
+      "settings button must satisfy 44px min height",
+    );
+    assert.match(
+      settingsBtnMatch[0],
+      /min-w-\[44px\]/,
+      "settings button must satisfy 44px min width",
     );
   });
 });
