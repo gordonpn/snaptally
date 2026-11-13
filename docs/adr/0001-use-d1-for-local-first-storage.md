@@ -18,14 +18,14 @@ Traditional external relational databases (e.g., hosted PostgreSQL or MySQL) int
 
 - Use Cloudflare D1 (serverless SQLite at the edge) as the primary relational system of record.
 - Bind the database directly to Pages Functions execution context (`c.env.DB`), avoiding external network drivers and connection pooling overhead.
-- Couple edge D1 storage with a client-side local outbox in IndexedDB (`idb-keyval`) to guarantee immediate perceived save (0ms) and resilient background sync during intermittent connectivity.
+- Couple edge D1 storage with a client-side local outbox in native IndexedDB for optimistic local saves and resilient background sync during intermittent connectivity.
 - Execute aggregation queries and monthly budget rollups directly in D1 SQL rather than transferring raw transaction logs to client browsers.
 
 ## Consequences
 
 - Direct binding to Pages Functions eliminates external database connection latency and external credential management.
 - Parameterized SQL execution runs directly within the Cloudflare edge network with high read throughput.
-- D1 imposes single-database size boundaries (500 MB) and daily write caps (100,000 writes/day on free tier), which comfortably support single-user personal finance intake for years.
+- D1’s free plan limits each database to 500 MB and allows 100,000 rows written per day; index updates can contribute additional rows written. Paid plans have higher database size limits. Monitor actual storage and row usage against the selected plan’s limits. See [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/) and [D1 limits](https://developers.cloudflare.com/d1/platform/limits/).
 - Schema migrations must be managed through Wrangler migration files (`wrangler d1 migrations apply`).
 
 ## Reconsideration Triggers
