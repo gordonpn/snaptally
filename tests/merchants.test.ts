@@ -228,6 +228,62 @@ describe("GET /api/merchants onRequestGet", () => {
 });
 
 describe("Merchants SQLite Query Integration", () => {
+  it("keeps older autocomplete merchants when the latest 200 transactions repeat one name", async () => {
+    const db = createTestDatabase();
+    try {
+      const insert = db.prepare(insertTransactionQuery);
+      insert.run(
+        "older",
+        "2026-09-01",
+        "Visa",
+        "Guilt-Free",
+        "Dining",
+        "Historical Cafe",
+        5,
+        0,
+        "USD",
+      );
+      for (let index = 0; index < 200; index++) {
+        insert.run(
+          `recent-${index}`,
+          "2026-09-20",
+          "Visa",
+          "Guilt-Free",
+          "Dining",
+          "MerchantA",
+          5,
+          0,
+          "USD",
+        );
+      }
+      const adapter = {
+        prepare(query: string) {
+          return {
+            bind(limit: number) {
+              return {
+                async all() {
+                  return { results: db.prepare(query).all(limit) };
+                },
+              };
+            },
+          };
+        },
+      } as unknown as D1Database;
+      const response = await handleGet(
+        new Request("https://example.com/api/merchants?limit=100", {
+          headers: { Authorization: "Bearer test-token" },
+        }),
+        adapter,
+        "test-token",
+      );
+      assert.equal(response.status, 200);
+      const result = (await response.json()) as { merchants: string[] };
+      assert.deepEqual(result.merchants, ["MerchantA", "Historical Cafe"]);
+    } finally {
+      db.close();
+    }
+  });
+
   it("orders merchants by occurrence count descending and breaks ties by recency", () => {
     const db = createTestDatabase();
 
