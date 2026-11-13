@@ -453,6 +453,34 @@ describe("Currency selection and display", () => {
 });
 
 describe("Intake text input assistance", () => {
+  it("gives the custom card input a persistent accessible name", () => {
+    const markup = fs.readFileSync(path.join(ROOT_DIR, "src/pages/index.astro"), "utf-8");
+    const input = [...markup.matchAll(/<input\b[^>]*>/g)]
+      .map(([tag]) => tag)
+      .find((tag) => tag.includes('x-model="customCardInput"'));
+    assert.ok(input);
+    assert.match(input, /aria-label="Custom card name"/);
+  });
+
+  it("keeps merchant options at least 44px high within the scrollable list", () => {
+    const markup = fs.readFileSync(path.join(ROOT_DIR, "src/pages/index.astro"), "utf-8");
+    const option = markup.match(/<li\b[\s\S]*?role="option"[\s\S]*?<\/li>/)?.[0];
+    assert.ok(option);
+    assert.match(option, /min-h-\[44px\]/);
+    assert.match(option, /@click="chooseMerchantSuggestion\(s\)"/);
+    assert.match(markup, /max-h-48 overflow-y-auto/);
+  });
+
+  it("announces the full amount and credit mode in a named polite status region", () => {
+    const markup = fs.readFileSync(path.join(ROOT_DIR, "src/pages/index.astro"), "utf-8");
+    const region = markup.match(/<div\b[^>]*role="status"[^>]*aria-label="Transaction amount"[\s\S]*?<\/div>/)?.[0];
+    assert.ok(region);
+    assert.match(region, /aria-live="polite"/);
+    assert.match(region, /aria-atomic="true"/);
+    assert.match(region, /class="sr-only" x-text="isNegative \? 'Credit of ' : ''"/);
+    assert.match(region, /currency \+ ' ' \+ formattedAmount/);
+  });
+
   it("configures native text assistance attributes on merchant, card, and token inputs", () => {
     const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
     const indexContent = fs.readFileSync(indexPath, "utf-8");
