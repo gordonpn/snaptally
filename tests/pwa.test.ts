@@ -858,3 +858,20 @@ describe("Configurable UI Themes and Appearance", () => {
     }
   });
 });
+
+describe("Settings native modal lifecycle", () => {
+  it("uses a native modal with cancellation, initial focus and trigger restoration", () => {
+    const indexContent = fs.readFileSync(path.join(ROOT_DIR, "src/pages/index.astro"), "utf-8");
+    const dialog = indexContent.match(
+      /<dialog[^>]*aria-labelledby="settings-dialog-title"[^>]*>/,
+    )?.[0];
+    assert.ok(dialog);
+    assert.match(dialog, /\$el\.showModal\(\)/);
+    assert.match(dialog, /\$el\.close\(\)/);
+    assert.match(dialog, /@cancel\.prevent="closeSettings\(\)"/);
+    assert.match(dialog, /@close="closeSettings\(\); \$refs\.settingsTrigger\.focus\(\)"/);
+    assert.doesNotMatch(dialog, /modal-open/);
+    assert.match(indexContent, /x-ref="settingsTrigger"/);
+    assert.match(indexContent, /aria-label="Close Settings"\s+autofocus/);
+  });
+});

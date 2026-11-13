@@ -954,6 +954,7 @@ export function intakeForm() {
     },
 
     closeSettings(): void {
+      this.settingsTokenInput = this.token;
       this.isSettingsOpen = false;
     },
 
@@ -971,7 +972,7 @@ export function intakeForm() {
       } catch {
         // Storage restricted or unavailable
       }
-      this.isSettingsOpen = false;
+      this.closeSettings();
       if (this.hasToken) {
         this.loadFrequentMerchants();
         this.loadRecentTransactions();
