@@ -568,9 +568,12 @@ describe("Optimistic Intake Form & Merchant Autocomplete (Scenario 1 & 2)", () =
       assert.strictEqual(form.isToday, true);
       assert.match(form.statusMessage, /Saved \$12\.50 at Chipotle/);
 
-      // Verify outbox was populated and background sync was invoked
+      // Network completion is independent of local acceptance and form reset.
+      assert.strictEqual(form.loading, false);
+      await form.syncTask;
       assert.strictEqual(fetchCalled, true);
     } finally {
+      await form.syncTask;
       globalThis.fetch = originalFetch;
     }
   });
@@ -607,6 +610,8 @@ describe("Optimistic Intake Form & Merchant Autocomplete (Scenario 1 & 2)", () =
       assert.strictEqual(outbox[0].merchant, "Target");
       assert.strictEqual(outbox[0].gross_amount, 20);
 
+      await form.syncTask;
+
       // Now restore network connection and trigger sync
       globalThis.fetch = (async () => {
         return new Response(JSON.stringify({ ok: true, id: "srv-target" }), {
@@ -626,6 +631,7 @@ describe("Optimistic Intake Form & Merchant Autocomplete (Scenario 1 & 2)", () =
       assert.strictEqual(form.recentTransactions.length, 1);
       assert.strictEqual(form.recentTransactions[0].merchant, "Target");
     } finally {
+      await form.syncTask;
       globalThis.fetch = originalFetch;
     }
   });
@@ -665,6 +671,7 @@ describe("Optimistic Intake Form & Merchant Autocomplete (Scenario 1 & 2)", () =
       const parsed = JSON.parse(stored as string) as string[];
       assert.ok(parsed.includes("Local Bakery"));
     } finally {
+      await form.syncTask;
       globalThis.fetch = originalFetch;
     }
   });

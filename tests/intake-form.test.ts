@@ -58,6 +58,13 @@ afterEach(async () => {
   await clearOutbox();
 });
 
+// Tests inspecting network results must wait for the separately tracked sync task.
+async function submitAndSync(form: ReturnType<typeof intakeForm>): Promise<boolean> {
+  const accepted = await form.submitTransaction();
+  await form.syncTask;
+  return accepted;
+}
+
 function recentMerchant(overrides: Partial<RecentTransaction> = {}): RecentTransaction {
   return {
     id: "1",
@@ -257,7 +264,7 @@ describe("merchant defaults", () => {
     assert.equal(form.subcategory, "Dining");
   });
 
-  it("retains inferred values for a second transaction at the same merchant", async () => {
+  it("clears the merchant and inferred category after a locally accepted transaction", async () => {
     const form = intakeForm();
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async () => {
@@ -268,17 +275,17 @@ describe("merchant defaults", () => {
     form.pressDigit(1);
 
     try {
-      await form.submitTransaction();
+      await submitAndSync(form);
 
-      assert.equal(form.merchant, "Starbucks");
-      assert.equal(form.subcategory, "Coffee & Snacks");
+      assert.equal(form.merchant, "");
+      assert.equal(form.subcategory, "Dining");
       assert.equal(form.card, "Amex Gold");
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it("restores the baseline when switching merchants after an inferred transaction", async () => {
+  it("uses the default category when switching merchants after an inferred transaction", async () => {
     const form = intakeForm();
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async () => {
@@ -290,11 +297,11 @@ describe("merchant defaults", () => {
     form.pressDigit(1);
 
     try {
-      await form.submitTransaction();
+      await submitAndSync(form);
       form.selectMerchant("Unknown vendor");
 
       assert.equal(form.subcategory, "Dining");
-      assert.equal(form.card, "Visa");
+      assert.equal(form.card, form.cards[0]);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -383,7 +390,7 @@ describe("merchant defaults", () => {
     }
   });
 
-  it("preserves a selected merchant when its list response arrives after save", async () => {
+  it("keeps the merchant input cleared when its list response arrives after save", async () => {
     const form = intakeForm();
     const originalFetch = globalThis.fetch;
     const response = Promise.withResolvers<Response>();
@@ -398,12 +405,12 @@ describe("merchant defaults", () => {
       const loading = form.loadFrequentMerchants();
       form.selectMerchant("Trader Joe's");
       form.pressDigit(1);
-      await form.submitTransaction();
+      await submitAndSync(form);
       response.resolve(Response.json({ merchants: ["Starbucks"] }));
       await loading;
 
-      assert.equal(form.merchant, "Trader Joe's");
-      assert.deepEqual(form.frequentMerchants, ["Trader Joe's", "Starbucks"]);
+      assert.equal(form.merchant, "");
+      assert.deepEqual(form.frequentMerchants, ["Starbucks"]);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -507,7 +514,7 @@ describe("merchant defaults", () => {
     form.pressDigit(1);
 
     try {
-      await form.submitTransaction();
+      await submitAndSync(form);
       form.selectMerchant("Starbucks");
 
       assert.equal(form.parentBucket, "Guilt-Free");
@@ -530,7 +537,7 @@ describe("merchant defaults", () => {
     form.pressDigit(1);
 
     try {
-      await form.submitTransaction();
+      await submitAndSync(form);
       form.selectMerchant("Starbucks");
       form.selectMerchant("Unknown vendor");
 
@@ -1122,7 +1129,7 @@ describe("intakeForm Token Persistence (Scenario 3)", () => {
       form.card = "Amex Gold";
       form.merchant = "Trader Joe's";
 
-      const success = await form.submitTransaction();
+      const success = await submitAndSync(form);
       assert.strictEqual(success, true);
       assert.strictEqual(capturedHeaders.Authorization, "Bearer auth-token-456");
     } finally {
@@ -1465,7 +1472,7 @@ describe("intakeForm Primary Intake Date Handling (Scenario 5)", () => {
       form.card = "Chase Sapphire";
       form.merchant = "Blue Bottle";
 
-      const success = await form.submitTransaction();
+      const success = await submitAndSync(form);
       assert.strictEqual(success, true);
       assert.strictEqual(postedPayload.date, today);
     } finally {
@@ -1491,7 +1498,7 @@ describe("intakeForm Primary Intake Date Handling (Scenario 5)", () => {
       form.merchant = "IGA";
       form.setCurrency("CAD");
 
-      assert.strictEqual(await form.submitTransaction(), true);
+      assert.strictEqual(await submitAndSync(form), true);
       assert.strictEqual(postedPayload.currency, "CAD");
       assert.strictEqual(form.statusMessage, "Saved CAD $45.00 at IGA");
     } finally {
@@ -1532,7 +1539,7 @@ describe("intakeForm Secondary Date Selection & Reset (Scenario 6)", () => {
       form.card = "Amex Gold";
       form.merchant = "Trader Joe's";
 
-      const success = await form.submitTransaction();
+      const success = await submitAndSync(form);
       assert.strictEqual(success, true);
       assert.strictEqual(postedPayload.date, pastDate);
       assert.strictEqual(form.date, today);
@@ -1551,7 +1558,7 @@ describe("intakeForm Submission Validation and Error Handling", () => {
     form.card = "Amex Gold";
     form.merchant = "Trader Joe's";
 
-    const result = await form.submitTransaction();
+    const result = await submitAndSync(form);
     assert.strictEqual(result, false);
     assert.strictEqual(form.isError, true);
     assert.strictEqual(form.statusMessage, "Please enter an amount");
@@ -1564,7 +1571,7 @@ describe("intakeForm Submission Validation and Error Handling", () => {
     form.card = "   ";
     form.merchant = "Trader Joe's";
 
-    const result = await form.submitTransaction();
+    const result = await submitAndSync(form);
     assert.strictEqual(result, false);
     assert.strictEqual(form.isError, true);
     assert.strictEqual(form.statusMessage, "Please select or enter a card");
@@ -1577,7 +1584,7 @@ describe("intakeForm Submission Validation and Error Handling", () => {
     form.card = "Amex Gold";
     form.merchant = "   ";
 
-    const result = await form.submitTransaction();
+    const result = await submitAndSync(form);
     assert.strictEqual(result, false);
     assert.strictEqual(form.isError, true);
     assert.strictEqual(form.statusMessage, "Please select or enter a merchant");
@@ -1600,8 +1607,8 @@ describe("intakeForm Submission Validation and Error Handling", () => {
     }) as unknown as typeof fetch;
 
     try {
-      const result = await form.submitTransaction();
-      assert.strictEqual(result, false);
+      const result = await submitAndSync(form);
+      assert.strictEqual(result, true);
       assert.strictEqual(form.syncError, "Validation failed");
       assert.strictEqual(form.deadLetterCount, 1);
       assert.match(form.persistentSyncMessage, /failed transaction/);
@@ -1626,7 +1633,7 @@ describe("intakeForm Submission Validation and Error Handling", () => {
     }) as unknown as typeof fetch;
 
     try {
-      const result = await form.submitTransaction();
+      const result = await submitAndSync(form);
       assert.strictEqual(result, true);
       assert.strictEqual(form.isError, false);
       assert.strictEqual(form.statusMessage, "Saved $1.50 at Trader Joe's");
@@ -1659,7 +1666,7 @@ describe("intakeForm Submission Validation and Error Handling", () => {
     }) as unknown as typeof fetch;
 
     try {
-      const result = await form.submitTransaction();
+      const result = await submitAndSync(form);
       assert.strictEqual(result, true);
       assert.strictEqual(form.isError, false);
       assert.strictEqual(form.statusMessage, "Saved credit of $25.00 at Uniqlo");
@@ -1671,7 +1678,7 @@ describe("intakeForm Submission Validation and Error Handling", () => {
     }
   });
 
-  it("resets custom merchant state and selects first frequent merchant on successful submit", async () => {
+  it("clears custom merchant state on successful local submit", async () => {
     const form = intakeForm();
     form.pressDigit(2);
     form.pressDigit(5);
@@ -1689,7 +1696,7 @@ describe("intakeForm Submission Validation and Error Handling", () => {
     }) as unknown as typeof fetch;
 
     try {
-      const success = await form.submitTransaction();
+      const success = await submitAndSync(form);
       assert.strictEqual(success, true);
       assert.strictEqual(form.isCustomMerchant, false);
       assert.strictEqual(form.customMerchantInput, "");
@@ -1700,6 +1707,121 @@ describe("intakeForm Submission Validation and Error Handling", () => {
     }
   });
 
+  it("accepts consecutive entries while the first network request is pending", {
+    timeout: 2000,
+  }, async () => {
+    const form = intakeForm();
+    const originalFetch = globalThis.fetch;
+    const firstResponse = Promise.withResolvers<Response>();
+    const payloads: Array<Record<string, unknown>> = [];
+    globalThis.fetch = async (_input, options) => {
+      payloads.push(JSON.parse(String(options?.body)));
+      return payloads.length === 1
+        ? firstResponse.promise
+        : Response.json({ ok: true }, { status: 201 });
+    };
+    form.token = "token";
+    form.cards = ["Visa"];
+    form.card = "Visa";
+    form.updateMerchant("First shop");
+    form.amountCents = 1250;
+
+    try {
+      assert.equal(await form.submitTransaction(), true);
+      assert.equal(form.loading, false);
+      assert.equal(form.isSyncing, true);
+      assert.equal(form.merchant, "");
+      form.pressDigit(5);
+      form.updateMerchant("Second shop");
+      assert.equal(form.amountCents, 5);
+      assert.equal(await form.submitTransaction(), true);
+      assert.equal(form.loading, false);
+      assert.equal(form.outboxCount, 2);
+      assert.equal(payloads.length, 1);
+      form.pressDigit(9);
+      form.updateMerchant("Third shop");
+      firstResponse.resolve(Response.json({ ok: true }, { status: 201 }));
+      await form.syncTask;
+      assert.equal(payloads.length, 2);
+      assert.equal(payloads[0].merchant, "First shop");
+      assert.equal(payloads[1].merchant, "Second shop");
+      assert.equal(payloads[1].gross_amount, 0.05);
+      assert.notEqual(payloads[0].id, payloads[1].id);
+      assert.equal(form.outboxCount, 0);
+      assert.equal(form.isSyncing, false);
+      assert.equal(form.amountCents, 9);
+      assert.equal(form.merchant, "Third shop");
+    } finally {
+      firstResponse.resolve(Response.json({ ok: true }, { status: 201 }));
+      await form.syncTask;
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("resets direct entry fields and inference while preserving saved configuration", async () => {
+    const form = intakeForm();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      throw new Error("Offline");
+    };
+    form.token = "saved-token";
+    form.themeStyle = "flat";
+    form.colorScheme = "dark";
+    form.cards = ["Visa"];
+    form.card = "Visa";
+    form.setCurrency("CAD");
+    form.updateMerchant("Starbucks");
+    form.setDate("2026-01-01");
+    form.toggleNegative();
+    form.amountCents = 1234;
+    form.merchantSuggestionsOpen = true;
+
+    try {
+      assert.equal(await submitAndSync(form), true);
+      assert.equal(form.amountCents, 0);
+      assert.equal(form.merchant, "");
+      assert.equal(form.customMerchantInput, "");
+      assert.equal(form.merchantSuggestionsOpen, false);
+      assert.equal(form.highlightedMerchant, null);
+      assert.equal(form.isNegative, false);
+      assert.equal(form.date, getTodayDate());
+      assert.equal(form.parentBucket, "Guilt-Free");
+      assert.equal(form.subcategory, "Dining");
+      assert.equal(form.card, form.cards[0]);
+      assert.equal(form.categoryManuallySelected, false);
+      assert.equal(form.cardManuallySelected, false);
+      assert.equal(form.merchantInferenceRequested, false);
+      assert.equal(form.merchantUserSelected, false);
+      assert.equal(form.inferredCategoryBaseline, undefined);
+      assert.equal(form.inferredCardBaseline, undefined);
+      assert.equal(form.token, "saved-token");
+      assert.equal(form.themeStyle, "flat");
+      assert.equal(form.colorScheme, "dark");
+      assert.equal(form.currency, "CAD");
+      assert.ok(form.cards.includes("Visa"));
+      assert.ok(form.allMerchants.includes("Starbucks"));
+      assert.equal(form.outboxCount, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("reports unexpected background failures without rejecting a saved entry", async () => {
+    const form = intakeForm();
+    form.card = "Visa";
+    form.merchant = "Local shop";
+    form.amountCents = 100;
+    form.syncPendingOutbox = async () => {
+      throw new Error("Storage temporarily unavailable");
+    };
+
+    assert.equal(await form.submitTransaction(), true);
+    await Promise.resolve();
+    assert.equal(form.loading, false);
+    assert.equal(form.syncError, "Storage temporarily unavailable");
+    assert.equal(form.statusMessage, "Saved $1.00 at Local shop");
+  });
+
   it("blocks submission when loading is already in progress", async () => {
     const form = intakeForm();
     form.amountCents = 1500;
@@ -1707,7 +1829,7 @@ describe("intakeForm Submission Validation and Error Handling", () => {
     form.merchant = "Trader Joe's";
     form.loading = true;
 
-    const result = await form.submitTransaction();
+    const result = await submitAndSync(form);
     assert.strictEqual(result, false);
     assert.strictEqual(form.outboxCount, 0);
   });
@@ -1805,7 +1927,7 @@ describe("intakeForm Card Lifecycle and Storage", () => {
     }) as unknown as typeof fetch;
 
     try {
-      const success = await form.submitTransaction();
+      const success = await submitAndSync(form);
       assert.strictEqual(success, true);
       assert.strictEqual(postedPayload.card, "Bilt Mastercard");
       assert.deepStrictEqual(form.cards, ["Bilt Mastercard"]);
@@ -1842,7 +1964,7 @@ describe("intakeForm Card Lifecycle and Storage", () => {
     }) as unknown as typeof fetch;
 
     try {
-      const success = await form.submitTransaction();
+      const success = await submitAndSync(form);
       assert.strictEqual(success, true);
       assert.deepStrictEqual(form.cards, ["Bilt Mastercard"]);
     } finally {
@@ -2031,7 +2153,7 @@ describe("Credit Card Sorting by Frequency and Recency (Issue #164)", () => {
     }) as unknown as typeof fetch;
 
     try {
-      await form.submitTransaction();
+      await submitAndSync(form);
       // Both Chase and Amex Gold now have 1 transaction, but Chase is newer (2026-11-09 vs 2026-11-01)
       assert.deepStrictEqual(form.cards, ["Chase", "Amex Gold"]);
     } finally {
@@ -2067,7 +2189,7 @@ describe("Credit Card Sorting by Frequency and Recency (Issue #164)", () => {
       form.merchant = "Coffee";
       form.amountCents = 450;
       form.date = "2026-11-09";
-      const submitted = await form.submitTransaction();
+      const submitted = await submitAndSync(form);
       assert.strictEqual(submitted, true);
 
       // 3. Resolve the older GET response without the newly synced transaction
@@ -2238,7 +2360,7 @@ describe("intakeForm Credit and Reimbursement Workflows (Issue #89)", () => {
     }) as unknown as typeof fetch;
 
     try {
-      const result = await form.submitTransaction();
+      const result = await submitAndSync(form);
       assert.strictEqual(result, true);
       assert.strictEqual(form.statusMessage, "Saved credit of $25.00 at Uniqlo");
       assert.strictEqual(form.isNegative, false);
@@ -2276,7 +2398,7 @@ describe("intakeForm Credit and Reimbursement Workflows (Issue #89)", () => {
     }) as unknown as typeof fetch;
 
     try {
-      const result = await form.submitTransaction();
+      const result = await submitAndSync(form);
 
       assert.strictEqual(result, true);
       assert.strictEqual(form.isNegative, false);
@@ -2317,7 +2439,7 @@ describe("intakeForm Credit and Reimbursement Workflows (Issue #89)", () => {
       form.subcategory = "Dining";
       form.merchant = "Osteria Posto";
 
-      const step1Result = await form.submitTransaction();
+      const step1Result = await submitAndSync(form);
       assert.strictEqual(step1Result, true);
       assert.strictEqual(form.isNegative, false);
 
@@ -2332,7 +2454,7 @@ describe("intakeForm Credit and Reimbursement Workflows (Issue #89)", () => {
       form.subcategory = "Dining";
       form.merchant = "Venmo Reimbursement";
 
-      const step2Result = await form.submitTransaction();
+      const step2Result = await submitAndSync(form);
       assert.strictEqual(step2Result, true);
       assert.strictEqual(form.isNegative, false);
 
@@ -2782,7 +2904,7 @@ describe("intakeForm Merchant Autocomplete Dropdown (#114)", () => {
     }) as unknown as typeof fetch;
 
     try {
-      const result = await form.submitTransaction();
+      const result = await submitAndSync(form);
       assert.strictEqual(result, true);
       assert.strictEqual(form.merchantSuggestionsOpen, false);
       assert.strictEqual(form.highlightedMerchantIndex, -1);
@@ -2811,7 +2933,7 @@ describe("intakeForm Merchant Autocomplete Dropdown (#114)", () => {
     }) as unknown as typeof fetch;
 
     try {
-      const result = await form.submitTransaction();
+      const result = await submitAndSync(form);
       assert.strictEqual(result, true);
       assert.strictEqual(form.merchantSuggestionsOpen, false);
       assert.strictEqual(form.highlightedMerchantIndex, -1);
@@ -3038,12 +3160,12 @@ describe("Direct merchant autocomplete input (Issue #144)", () => {
       form.updateMerchant("Corner Bodega");
       assert.strictEqual(form.merchant, "Corner Bodega");
 
-      const success = await form.submitTransaction();
+      const success = await submitAndSync(form);
       assert.strictEqual(success, true);
       assert.ok(submittedPayload);
       assert.strictEqual(submittedPayload?.merchant, "Corner Bodega");
       assert.ok(form.allMerchants.includes("Corner Bodega"));
-      assert.strictEqual(form.merchant, "Corner Bodega");
+      assert.strictEqual(form.merchant, "");
     } finally {
       globalThis.fetch = originalFetch;
     }
