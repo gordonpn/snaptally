@@ -13,6 +13,6 @@ CREATE TABLE monthly_budgets (
         AND target_amount >= 0.0
         AND target_amount <= 1.7976931348623157e308
     ),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (year_month, parent_bucket, subcategory)
 );

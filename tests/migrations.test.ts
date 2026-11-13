@@ -559,6 +559,29 @@ describe("Monthly budget targets migration (0006)", () => {
     assert.match(String(row.created_at), /^\d{4}-\d{2}-\d{2} /);
   });
 
+  it("rejects explicit null creation timestamps on insert and update", (t) => {
+    const db = createTestDatabase();
+    t.after(() => db.close());
+    assert.throws(
+      () =>
+        db
+          .prepare(`INSERT INTO monthly_budgets
+        (id, year_month, parent_bucket, subcategory, target_amount, created_at)
+        VALUES ('missing-time', '2026-11', 'Fixed Costs', 'Rent', 100, NULL)`)
+          .run(),
+      /NOT NULL constraint failed/,
+    );
+    db.prepare(insertSql).run("valid-time", "2026-11", "Fixed Costs", "Rent", 100);
+    assert.throws(
+      () => db.prepare("UPDATE monthly_budgets SET created_at = NULL").run(),
+      /NOT NULL constraint failed/,
+    );
+    assert.match(
+      String(db.prepare("SELECT created_at FROM monthly_budgets").get()?.created_at),
+      /^\d{4}-\d{2}-\d{2} /,
+    );
+  });
+
   it("preserves existing transaction rows and does not seed production targets", (t) => {
     const db = new DatabaseSync(":memory:");
     t.after(() => db.close());
