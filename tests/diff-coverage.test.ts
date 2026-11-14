@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   evaluateDiffCoverage,
   parseLcov,
   parseUnifiedDiff,
+  runCli,
 } from "../scripts/check-diff-coverage.mjs";
 
 describe("Diff Coverage Checker", () => {
@@ -94,5 +98,64 @@ describe("Diff Coverage Checker", () => {
     assert.strictEqual(coveredResult.passed, true);
     assert.strictEqual(coveredResult.totalLines, 2);
     assert.strictEqual(coveredResult.coveredLines, 2);
+  });
+
+  it("runCli exits 1 when LCOV file is missing", () => {
+    const errors: string[] = [];
+    let exitCode: number | undefined;
+
+    runCli({
+      lcovPath: "/nonexistent/lcov.info",
+      exit: (code) => {
+        exitCode = code;
+      },
+      error: (msg) => errors.push(msg),
+    });
+
+    assert.strictEqual(exitCode, 1);
+    assert.ok(errors.some((line) => line.includes("missing LCOV file")));
+  });
+
+  it("runCli passes and fails based on diff coverage against LCOV file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "diff-cov-"));
+    try {
+      const lcovPath = join(dir, "lcov.info");
+      writeFileSync(lcovPath, "SF:src/a.ts\nDA:10,1\nDA:11,0\nend_of_record\n", "utf8");
+
+      const logs: string[] = [];
+      const errors: string[] = [];
+      let exitCode: number | undefined;
+
+      runCli({
+        lcovPath,
+        threshold: 85,
+        execDiff: () => "+++ b/src/a.ts\n@@ -9,0 +10,1 @@\n",
+        exit: (code) => {
+          exitCode = code;
+        },
+        log: (msg) => logs.push(msg),
+        error: (msg) => errors.push(msg),
+      });
+
+      assert.strictEqual(exitCode, undefined);
+      assert.ok(logs.some((line) => line.includes("1/1 lines (100.00%")));
+      assert.strictEqual(errors.length, 0);
+
+      runCli({
+        lcovPath,
+        threshold: 85,
+        execDiff: () => "+++ b/src/a.ts\n@@ -9,0 +10,2 @@\n",
+        exit: (code) => {
+          exitCode = code;
+        },
+        log: (msg) => logs.push(msg),
+        error: (msg) => errors.push(msg),
+      });
+
+      assert.strictEqual(exitCode, 1);
+      assert.ok(errors.some((line) => line.includes("src/a.ts: 11")));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

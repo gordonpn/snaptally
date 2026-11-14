@@ -125,37 +125,41 @@ export function evaluateDiffCoverage({ lcovMap, diffMap, threshold = 85 }) {
   };
 }
 
-function runCli() {
-  const lcovPath = process.env.LCOV_PATH ?? "coverage/lcov.info";
-  const threshold = Number.parseFloat(process.env.DIFF_COVERAGE_MIN ?? "85");
-  const baseRef = process.env.GITHUB_BASE_REF
-    ? `origin/${process.env.GITHUB_BASE_REF}`
-    : "origin/main";
-
+export function runCli({
+  lcovPath = process.env.LCOV_PATH ?? "coverage/lcov.info",
+  threshold = Number.parseFloat(process.env.DIFF_COVERAGE_MIN ?? "85"),
+  baseRef = process.env.GITHUB_BASE_REF ? `origin/${process.env.GITHUB_BASE_REF}` : "origin/main",
+  execDiff = (ref) =>
+    execFileSync("git", ["diff", "-U0", "--diff-filter=AMR", `${ref}...HEAD`], {
+      encoding: "utf8",
+    }),
+  exit = (code) => process.exit(code),
+  log = console.log,
+  error = console.error,
+} = {}) {
   if (!existsSync(lcovPath)) {
-    console.error(`Diff coverage check failed: missing LCOV file at ${lcovPath}`);
-    process.exit(1);
+    error(`Diff coverage check failed: missing LCOV file at ${lcovPath}`);
+    exit(1);
+    return;
   }
 
   const lcovText = readFileSync(lcovPath, "utf8");
-  const diffText = execFileSync("git", ["diff", "-U0", "--diff-filter=AMR", `${baseRef}...HEAD`], {
-    encoding: "utf8",
-  });
+  const diffText = execDiff(baseRef);
 
   const lcovMap = parseLcov(lcovText);
   const diffMap = parseUnifiedDiff(diffText);
   const result = evaluateDiffCoverage({ lcovMap, diffMap, threshold });
 
-  console.log(
+  log(
     `Diff coverage: ${result.coveredLines}/${result.totalLines} lines (${result.percentage.toFixed(2)}%, threshold ${threshold}%)`,
   );
 
   if (!result.passed) {
-    console.error("Uncovered diff lines:");
+    error("Uncovered diff lines:");
     for (const [file, lines] of Object.entries(result.uncoveredByFile)) {
-      console.error(`  ${file}: ${lines.join(", ")}`);
+      error(`  ${file}: ${lines.join(", ")}`);
     }
-    process.exit(1);
+    exit(1);
   }
 }
 
