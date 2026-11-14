@@ -188,11 +188,41 @@ export function createSeedTransactions(referenceDate: Date = new Date()): Recent
   ];
 }
 
+let memoryTransactions: RecentTransaction[] | null = null;
+
 function getStorage(): Storage | null {
   try {
     return typeof localStorage !== "undefined" ? localStorage : null;
   } catch {
     return null;
+  }
+}
+
+function safeGetItem(storage: Storage | null, key: string): string | null {
+  if (!storage) return null;
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetItem(storage: Storage | null, key: string, value: string): boolean {
+  if (!storage) return false;
+  try {
+    storage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeRemoveItem(storage: Storage | null, key: string): void {
+  if (!storage) return;
+  try {
+    storage.removeItem(key);
+  } catch {
+    // Ignore storage removal errors in restricted browser environments.
   }
 }
 
@@ -202,27 +232,34 @@ function getStorage(): Storage | null {
 export function loadPreviewTransactions(referenceDate: Date = new Date()): RecentTransaction[] {
   const storage = getStorage();
   if (!storage) {
-    return createSeedTransactions(referenceDate);
+    memoryTransactions ??= createSeedTransactions(referenceDate);
+    return memoryTransactions;
   }
 
-  if (!storage.getItem(TOKEN_STORAGE_KEY)) {
-    storage.setItem(TOKEN_STORAGE_KEY, PREVIEW_DEMO_TOKEN);
+  if (!safeGetItem(storage, TOKEN_STORAGE_KEY)) {
+    safeSetItem(storage, TOKEN_STORAGE_KEY, PREVIEW_DEMO_TOKEN);
   }
 
-  const raw = storage.getItem(PREVIEW_TRANSACTIONS_KEY);
+  const raw = safeGetItem(storage, PREVIEW_TRANSACTIONS_KEY);
   if (raw !== null) {
     try {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed as RecentTransaction[];
+        memoryTransactions = parsed as RecentTransaction[];
+        return memoryTransactions;
       }
     } catch {
       // Fall through to re-seed on corrupt preview JSON.
     }
   }
 
+  if (memoryTransactions !== null) {
+    return memoryTransactions;
+  }
+
   const seeded = createSeedTransactions(referenceDate);
-  storage.setItem(PREVIEW_TRANSACTIONS_KEY, JSON.stringify(seeded));
+  memoryTransactions = seeded;
+  safeSetItem(storage, PREVIEW_TRANSACTIONS_KEY, JSON.stringify(seeded));
   return seeded;
 }
 
@@ -230,9 +267,8 @@ export function loadPreviewTransactions(referenceDate: Date = new Date()): Recen
  * Persist preview transactions to localStorage.
  */
 export function savePreviewTransactions(transactions: RecentTransaction[]): void {
-  const storage = getStorage();
-  if (!storage) return;
-  storage.setItem(PREVIEW_TRANSACTIONS_KEY, JSON.stringify(transactions));
+  memoryTransactions = transactions;
+  safeSetItem(getStorage(), PREVIEW_TRANSACTIONS_KEY, JSON.stringify(transactions));
 }
 
 /**
@@ -240,12 +276,11 @@ export function savePreviewTransactions(transactions: RecentTransaction[]): void
  */
 export function resetPreviewData(referenceDate: Date = new Date()): RecentTransaction[] {
   const seeded = createSeedTransactions(referenceDate);
+  memoryTransactions = seeded;
   const storage = getStorage();
-  if (storage) {
-    storage.setItem(PREVIEW_TRANSACTIONS_KEY, JSON.stringify(seeded));
-    storage.setItem(TOKEN_STORAGE_KEY, PREVIEW_DEMO_TOKEN);
-    storage.removeItem(MERCHANTS_STORAGE_KEY);
-  }
+  safeSetItem(storage, PREVIEW_TRANSACTIONS_KEY, JSON.stringify(seeded));
+  safeSetItem(storage, TOKEN_STORAGE_KEY, PREVIEW_DEMO_TOKEN);
+  safeRemoveItem(storage, MERCHANTS_STORAGE_KEY);
   return seeded;
 }
 

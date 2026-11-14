@@ -235,4 +235,62 @@ describe("Preview Mock Mode", () => {
     assert.strictEqual(form.token, PREVIEW_DEMO_TOKEN);
     assert.strictEqual(form.demoResetMessage, "Demo data restored.");
   });
+
+  it("falls back to in-memory persistence when localStorage operations throw", async () => {
+    const brokenStorage = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+      removeItem: () => {
+        throw new Error("SecurityError");
+      },
+    } as unknown as Storage;
+
+    Object.defineProperty(globalThis, "localStorage", {
+      value: brokenStorage,
+      configurable: true,
+      writable: true,
+    });
+
+    const fakeWindow = {
+      location: { origin: "https://preview.pages.dev" },
+      fetch: async () => new Response("ok", { status: 200 }),
+    } as unknown as Window & typeof globalThis;
+
+    Object.defineProperty(globalThis, "window", {
+      value: fakeWindow,
+      configurable: true,
+      writable: true,
+    });
+
+    installPreviewFetchMock();
+
+    const postRes = await fakeWindow.fetch("/api/transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "mem-only-1",
+        date: "2026-11-14",
+        card: "Visa",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
+        merchant: "Memory Bistro",
+        gross_amount: 19.5,
+        reimbursement: 0,
+        currency: "USD",
+      }),
+    });
+    assert.strictEqual(postRes.status, 201);
+
+    const listRes = await fakeWindow.fetch("/api/transactions?limit=50");
+    const listData = (await listRes.json()) as { transactions: Array<{ id: string }> };
+    assert.ok(listData.transactions.some((tx) => tx.id === "mem-only-1"));
+
+    resetPreviewData();
+    assert.strictEqual(
+      loadPreviewTransactions().some((tx) => tx.id === "mem-only-1"),
+      false,
+    );
+  });
 });
