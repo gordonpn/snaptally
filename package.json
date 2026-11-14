@@ -12,9 +12,9 @@
     "dev": "astro build && wrangler pages dev ./dist",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "test": "node --experimental-test-coverage --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 --test-coverage-include=\"src/**/*.ts\" --test-coverage-include=\"functions/**/*.ts\" --test-coverage-include=\"scripts/**/*.ts\" --test-coverage-include=\"scripts/**/*.mjs\" --test-coverage-exclude=\"tests/**\" --import ./tests/register-loader.js --test tests/*.test.ts",
+    "test": "node --experimental-test-coverage --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 --test-coverage-exclude=\"tests/**\" --import ./tests/register-loader.js --test tests/*.test.ts",
     "test:e2e": "playwright test",
-    "test:coverage": "node -e \"require('node:fs').mkdirSync('coverage', { recursive: true })\" && node --experimental-test-coverage --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 --test-coverage-include=\"src/**/*.ts\" --test-coverage-include=\"functions/**/*.ts\" --test-coverage-include=\"scripts/**/*.ts\" --test-coverage-include=\"scripts/**/*.mjs\" --test-coverage-exclude=\"tests/**\" --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info --import ./tests/register-loader.js --test tests/*.test.ts",
+    "test:coverage": "node -e \"require('node:fs').mkdirSync('coverage', { recursive: true })\" && node --experimental-test-coverage --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 --test-coverage-exclude=\"tests/**\" --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info --import ./tests/register-loader.js --test tests/*.test.ts",
     "typecheck": "tsc --noEmit && tsc --project tsconfig.backfill.json",
     "db:migrate:local": "wrangler d1 migrations apply budget-db --local"
   },
