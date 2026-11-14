@@ -631,3 +631,46 @@ releases the shared sync lock and retains the transaction for retry unless an HT
 For an authentication warning, open **Settings**, correct the bearer token, and
 save it. The warning clears after a successful authenticated request. The warning
 and failed-item count are independent of transient amount or save messages.
+
+## Dependency and workflow maintenance
+
+`.github/dependabot.yml` schedules npm/pnpm and GitHub Actions version updates
+each Monday at 09:00 America/New_York on the default branch (`main`), with at most
+five open version-update PRs per ecosystem. Runtime and development minor/patch
+updates are grouped separately. Major npm updates remain separate for explicit
+compatibility review. Action updates are grouped and retain immutable commit pins.
+
+Security updates are event-driven by advisories, independently of the weekly
+version-update schedule. The `security` groups apply only to security updates.
+In repository Settings, enable Dependency graph, Dependabot alerts, and Dependabot
+security updates. Configuration alone cannot enable these repository settings.
+Do not set a custom `target-branch`: security updates must continue to target the
+default branch. See [GitHub's security-update configuration](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configure-security-updates).
+
+For each update PR:
+
+1. Review the advisory, upstream release notes and grouped dependency changes.
+   Run `pnpm audit` to assess the current lockfile; old issue counts are not a
+   current vulnerability report. Resolve transitive findings through a compatible
+   direct dependency upgrade rather than bypassing audit findings.
+2. Require CI typecheck, unit tests, build, coverage, CodeQL and reviewdog results.
+   Dependabot PRs receive a read-only token and no application deployment secrets;
+   preview deployment and LLM reviews are intentionally skipped. Reviewdog can
+   report read-only PR findings as workflow annotations.
+3. Verify intake, offline queueing and synchronization for runtime changes.
+   Review pnpm lockfile changes together with the manifest.
+4. Merge only after review. No auto-merge is configured, including major upgrades.
+
+All workflow actions are pinned to full upstream commit SHAs with release-tag
+comments. Verify the upstream repository and peeled commit (`git ls-remote
+https://github.com/OWNER/REPO.git refs/tags/VERSION 'refs/tags/VERSION^{}'`) when
+reviewing a pin update. The standalone reviewdog binary is pinned to `v0.21.0`;
+review and update that input explicitly when upgrading it. Checkouts disable
+credential persistence so later dependency scripts do not inherit git credentials.
+
+PR-Agent runs only for ready-for-review same-repository PRs or maintainer comments
+beginning with `/review`, `/describe`, `/improve` or `/ask` followed by whitespace
+or the end of the comment. A separate read-only authorization job checks the live
+PR's origin, open state and draft state before the job with LLM secrets can run.
+It does not check out PR code. Ordinary review conversation does not invoke the
+agent, and fork PRs cannot pass authorization.
