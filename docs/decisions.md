@@ -12,7 +12,7 @@ This document records non-obvious engineering and implementation decisions made 
 ## 2026-11-13: Static response CSP headers, PWA metadata revalidation, and multi-page precaching
 
 - Decision: Add Cloudflare Pages `_headers` CSP rules blocking framing, object embedding, inline scripts, and external API origins (keeping the documented `script-src 'unsafe-eval'` exception for standard Alpine), require HTTP revalidation for `/sw.js` and `/manifest.json`, cache hashed Astro bundles immutably for one year, and scan every precached HTML entrypoint during service worker install to precache Activity bundles as well as intake bundles.
-- Rationale: Protect static documents from injection and clickjacking, avoid stale PWA metadata, and ensure `/activity` works offline even before a user's first Activity visit.
+- Rationale: Protect static documents from injection and clickjacking, avoid stale PWA metadata, and cache the `/activity` HTML before a user's first Activity visit. Its scripts are cached only when the install-time bundle fetch succeeds.
 - Rejected alternatives: Immediate migration to the Alpine CSP build (deferred and documented in `docs/security-headers.md`).
 - Source: [#175 fix(pwa): secure static responses and revalidate PWA metadata](https://github.com/gordonpn/snaptally/pull/175), [#180 fix(pwa): precache bundles from all application pages](https://github.com/gordonpn/snaptally/pull/180), [#133 Static security headers and PWA caching](https://github.com/gordonpn/snaptally/issues/133), [#139 Precache Activity page bundles](https://github.com/gordonpn/snaptally/issues/139), [security-headers.md](security-headers.md)
 
