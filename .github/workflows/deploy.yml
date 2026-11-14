@@ -59,6 +59,8 @@ jobs:
 
       - name: Build static assets
         if: steps.check-credentials.outputs.configured == 'true'
+        env:
+          PUBLIC_PREVIEW_MOCK: ${{ github.event_name == 'pull_request' && 'true' || 'false' }}
         run: pnpm build
 
       - name: Apply D1 database migrations
