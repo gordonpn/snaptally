@@ -13,6 +13,11 @@ SnapTally operates as a serverless edge application on Cloudflare:
 - **Database**: Cloudflare D1 (serverless SQLite) bound to Pages Functions under the environment variable `DB`.
 - **Authentication**: Pre-shared Bearer token stored in the client and validated against the secret environment variable `API_BEARER_TOKEN`.
 
+See [API security](API-SECURITY.md) for validation bounds, per-client rate limits,
+preview migration requirements, and fail-closed recovery. Schema-changing PRs
+validate migrations in a fresh local database and skip shared-database previews
+until merge; only main pushes apply remote preview migrations.
+
 ---
 
 ## 2. Prerequisites

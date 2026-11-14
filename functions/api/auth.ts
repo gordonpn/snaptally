@@ -1,3 +1,4 @@
+import { hashClientIp } from "./client-ip.ts";
 import { logger } from "./logger.ts";
 
 export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
@@ -28,38 +29,51 @@ export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   return mismatch === 0;
 }
 
+/** Validates the bearer credential and logs safe request context on rejection. */
 export async function validateBearerToken(
   request: Request,
   expectedToken?: string,
+  auditClientIpHash?: string,
 ): Promise<Response | null> {
+  const metadata = {
+    method: request.method,
+    pathname: new URL(request.url).pathname,
+    cfRay: request.headers.get("cf-ray")?.slice(0, 100) ?? null,
+    clientIpHash:
+      auditClientIpHash ?? (await hashClientIp(request, Math.floor(Date.now() / 60_000))),
+  };
   const authHeader = request.headers.get("Authorization");
   if (!authHeader) {
-    logger.warn("Authentication failed: missing Authorization header");
+    logger.warn("Authentication failed: missing Authorization header", metadata);
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   if (!match) {
-    logger.warn("Authentication failed: malformed Authorization header, expected Bearer scheme");
+    logger.warn(
+      "Authentication failed: malformed Authorization header, expected Bearer scheme",
+      metadata,
+    );
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const token = match[1]?.trim() ?? "";
   if (token.length === 0) {
-    logger.warn("Authentication failed: empty Bearer token");
+    logger.warn("Authentication failed: empty Bearer token", metadata);
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   if (!expectedToken || expectedToken.trim().length === 0) {
     logger.error(
       "Authentication failed: API_BEARER_TOKEN is not configured in environment bindings",
+      metadata,
     );
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+    return Response.json({ error: "Authentication unavailable" }, { status: 500 });
   }
 
   const isValid = await timingSafeEqual(token, expectedToken.trim());
   if (!isValid) {
-    logger.warn("Authentication failed: invalid Bearer token");
+    logger.warn("Authentication failed: invalid Bearer token", metadata);
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

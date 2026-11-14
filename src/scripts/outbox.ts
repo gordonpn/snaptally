@@ -56,6 +56,29 @@ export const FALLBACK_STORAGE_KEY = "snaptally_outbox_fallback";
 export const DLQ_FALLBACK_STORAGE_KEY = "snaptally_dlq_fallback";
 export const MAX_ROLLBACK_RETRIES = 10;
 export const MAX_SYNC_RETRIES = 10;
+const SERVER_BACKOFF_KEY = "snaptally_outbox_server_backoff";
+let serverBackoffUntil = 0;
+
+/** Reads the queue-wide server deadline, including one saved by another tab. */
+function getServerBackoff(): number {
+  try {
+    const stored = Number(localStorage.getItem(SERVER_BACKOFF_KEY));
+    if (Number.isFinite(stored)) serverBackoffUntil = Math.max(serverBackoffUntil, stored);
+  } catch {
+    // Retain the in-memory deadline when storage is unavailable.
+  }
+  return serverBackoffUntil;
+}
+
+/** Persists server-directed backoff separately from individual queue items. */
+function setServerBackoff(deadline: number): void {
+  serverBackoffUntil = deadline;
+  try {
+    localStorage.setItem(SERVER_BACKOFF_KEY, String(deadline));
+  } catch {
+    // The in-memory deadline still protects this tab.
+  }
+}
 
 /** Returns the total transport, server and rollback retries recorded for a transaction. */
 export function getRetryCount(item: OutboxItem): number {
@@ -294,6 +317,7 @@ export function clearRetryTimer(): void {
  */
 export async function clearOutbox(): Promise<void> {
   clearRetryTimer();
+  setServerBackoff(0);
   try {
     const db = await openDatabase();
     await new Promise<void>((resolve, reject) => {
@@ -551,6 +575,7 @@ export async function syncOutbox(options: SyncOptions = {}): Promise<SyncResult>
   }
 }
 
+/** Flushes due items while preserving queue-wide server backoff and per-item retry limits. */
 async function flushOutbox(options: SyncOptions): Promise<SyncResult> {
   let syncedCount = 0;
   let failedCount = 0;
@@ -562,6 +587,10 @@ async function flushOutbox(options: SyncOptions): Promise<SyncResult> {
   try {
     const items = await getOutbox();
     options.onStatusChange?.(true, items.length);
+    if (!options.force && getServerBackoff() > Date.now()) {
+      retryError = "Sync paused by server. Saved transactions will retry.";
+      return { syncedCount, failedCount, unauthorized, retryError };
+    }
 
     for (const item of items) {
       if (
@@ -667,6 +696,30 @@ async function flushOutbox(options: SyncOptions): Promise<SyncResult> {
           break;
         }
 
+        if (
+          response.status === 429 ||
+          (response.status === 503 && response.headers.has("Retry-After"))
+        ) {
+          // Throttling and temporary guard outages do not exhaust the server retry budget.
+          const header = response.headers.get("Retry-After");
+          const seconds = header && /^\d+$/.test(header) ? Number(header) : Number.NaN;
+          const deadline = header && !Number.isFinite(seconds) ? Date.parse(header) : Number.NaN;
+          const requestedDelay = Number.isFinite(seconds) ? seconds * 1000 : deadline - Date.now();
+          const delayMs =
+            Number.isFinite(requestedDelay) && (Number.isFinite(seconds) || requestedDelay > 0)
+              ? Math.max(1000, Math.min(86_400_000, requestedDelay))
+              : 60_000;
+          item.next_retry_at = Date.now() + delayMs;
+          setServerBackoff(item.next_retry_at);
+          clearRetryTimer();
+          await saveOutboxItem(item);
+          retryError = "Sync paused by server. Saved transactions will retry.";
+          failedCount++;
+          scheduleDueRetry(delayMs, options, item.next_retry_at);
+          transportHalted = true;
+          break;
+        }
+
         // Server error or unexpected status: apply exponential backoff (1s, 2s, 4s, capped at 60s)
         const serverRetryCount = (item.server_retry_count ?? 0) + 1;
         item.server_retry_count = serverRetryCount;
@@ -712,6 +765,9 @@ async function flushOutbox(options: SyncOptions): Promise<SyncResult> {
     const remainingCount = remaining.length;
     if (remainingCount === 0 || unauthorized) {
       clearRetryTimer();
+    } else if (getServerBackoff() > Date.now()) {
+      clearRetryTimer();
+      scheduleDueRetry(getServerBackoff() - Date.now(), options, getServerBackoff());
     } else {
       const activePendingItems = remaining.filter(
         (item) => (item.rollback_retry_count ?? 0) <= MAX_ROLLBACK_RETRIES,
@@ -829,7 +885,8 @@ export function setupSyncListeners(triggerSync: (force?: boolean) => void): () =
 
   const handleOnline = () => {
     clearRetryTimer();
-    triggerSync(true);
+    // Reconnect may bypass transport retries, but must honor server throttling.
+    triggerSync(getServerBackoff() <= Date.now());
   };
   const handleVisibility = () => {
     if (document.visibilityState === "visible") {
