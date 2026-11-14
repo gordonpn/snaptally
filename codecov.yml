@@ -9,12 +9,12 @@ coverage:
   status:
     project:
       default:
-        target: 80%
-        threshold: 1%
+        target: auto
+        threshold: 0%
     patch:
       default:
-        target: 80%
-        threshold: 1%
+        target: 85%
+        threshold: 0%
 
 ignore:
   - "tests/**"
