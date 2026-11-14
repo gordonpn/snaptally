@@ -24,18 +24,25 @@ self.addEventListener("install", (event) => {
       .open(CACHE_NAME)
       .then(async (cache) => {
         await cache.addAll(PRECACHE_ASSETS);
-        try {
-          const indexResponse = await cache.match("/index.html");
-          if (indexResponse) {
-            const html = await indexResponse.text();
-            const matches = html.matchAll(/(?:href|src)="(\/_astro\/[^"]+)"/g);
-            const bundleUrls = Array.from(new Set([...matches].map((m) => m[1])));
-            if (bundleUrls.length > 0) {
-              await cache.addAll(bundleUrls);
+        const bundleUrls = new Set();
+        for (const page of PRECACHE_ASSETS.filter((asset) => asset.endsWith(".html"))) {
+          try {
+            const response = await cache.match(page);
+            if (!response) continue;
+            const html = await response.text();
+            for (const match of html.matchAll(/(?:href|src)="(\/_astro\/[^"]+)"/g)) {
+              bundleUrls.add(match[1]);
             }
+          } catch {
+            // One unavailable page must not prevent discovery from the other routes.
           }
-        } catch {
-          // Precache failure of dynamic bundles should not abort service worker installation
+        }
+        if (bundleUrls.size > 0) {
+          try {
+            await cache.addAll(Array.from(bundleUrls));
+          } catch {
+            // Dynamic bundle failures must not abort service worker installation.
+          }
         }
       })
       .then(() => self.skipWaiting()),

@@ -10,6 +10,81 @@ const SW_PATH = path.join(ROOT_DIR, "public", "sw.js");
 const ICONS_DIR = path.join(ROOT_DIR, "public", "icons");
 const LAYOUT_PATH = path.join(ROOT_DIR, "src", "layouts", "Layout.astro");
 
+describe("Pages static security and cache policies", () => {
+  const text = fs.readFileSync(path.join(ROOT_DIR, "public", "_headers"), "utf-8");
+  const rules = new Map<string, Map<string, string>>();
+  let current: Map<string, string> | undefined;
+
+  for (const line of text.split("\n")) {
+    if (!line.trim() || line.trimStart().startsWith("#")) continue;
+    assert.ok(line.length <= 2000, "Pages header lines must fit its 2000-character limit");
+    if (!/^\s/.test(line)) {
+      assert.ok(line.startsWith("/"), "header rules must use absolute paths");
+      assert.ok(!rules.has(line), `duplicate header rule: ${line}`);
+      current = new Map();
+      rules.set(line, current);
+    } else {
+      const match = line.match(/^\s+([\w-]+):\s+(.+)$/);
+      assert.ok(match && current, "header values must be indented beneath a path");
+      const name = match[1].toLowerCase();
+      assert.ok(!current.has(name), `duplicate header: ${name}`);
+      current.set(name, match[2]);
+    }
+  }
+
+  it("protects all static routes against framing and content-type confusion", () => {
+    const global = rules.get("/*");
+    assert.ok(global);
+    assert.equal(global.get("x-frame-options"), "DENY");
+    assert.equal(global.get("x-content-type-options"), "nosniff");
+    assert.equal(global.get("referrer-policy"), "strict-origin-when-cross-origin");
+    assert.equal(global.get("permissions-policy"), "camera=(), microphone=(), geolocation=()");
+  });
+
+  it("limits active resources to this origin while preserving standard Alpine evaluation", () => {
+    const policy = rules.get("/*")?.get("content-security-policy");
+    assert.ok(policy);
+    const directives = new Map(
+      policy.split(";").map((part) => {
+        const [name, ...sources] = part.trim().split(/\s+/);
+        return [name, sources];
+      }),
+    );
+    for (const directive of [
+      "default-src",
+      "connect-src",
+      "font-src",
+      "worker-src",
+      "base-uri",
+      "form-action",
+    ]) {
+      assert.deepEqual(directives.get(directive), ["'self'"], directive);
+    }
+    assert.deepEqual(directives.get("script-src"), ["'self'", "'unsafe-eval'"]);
+    assert.deepEqual(directives.get("style-src"), ["'self'", "'unsafe-inline'"]);
+    assert.deepEqual(directives.get("img-src"), ["'self'", "data:"]);
+    assert.deepEqual(directives.get("object-src"), ["'none'"]);
+    assert.deepEqual(directives.get("frame-ancestors"), ["'none'"]);
+  });
+
+  it("requires service worker and manifest HTTP cache revalidation", () => {
+    for (const asset of ["/sw.js", "/manifest.json"]) {
+      assert.equal(rules.get(asset)?.get("cache-control"), "public, max-age=0, must-revalidate");
+    }
+  });
+
+  it("reserves immutable caching for content-hashed Astro assets", () => {
+    assert.equal(
+      rules.get("/_astro/*")?.get("cache-control"),
+      "public, max-age=31536000, immutable",
+    );
+    assert.equal(rules.get("/*")?.has("cache-control"), false);
+    for (const [route, headers] of rules) {
+      if (route !== "/_astro/*") assert.ok(!headers.get("cache-control")?.includes("immutable"));
+    }
+  });
+});
+
 describe("PWA Web App Manifest (Scenario 1)", () => {
   it("manifest.json exists and contains standalone configuration and required fields", () => {
     assert.strictEqual(fs.existsSync(MANIFEST_PATH), true, "manifest.json must exist in public/");
@@ -286,6 +361,11 @@ describe("PWA HTML Head and Meta Tags in Layout", () => {
       /<header[^>]+flex-none/,
       "header must be flex-none to avoid offscreen scroll",
     );
+    assert.doesNotMatch(
+      indexContent.match(/<header\b[^>]*>/)?.[0] ?? "",
+      /\bflex-wrap\b/,
+      "header must not use flex-wrap to avoid multi-line shift on narrow viewports",
+    );
     assert.match(
       indexContent,
       /<footer[^>]+flex-none/,
@@ -373,6 +453,34 @@ describe("Currency selection and display", () => {
 });
 
 describe("Intake text input assistance", () => {
+  it("gives the custom card input a persistent accessible name", () => {
+    const markup = fs.readFileSync(path.join(ROOT_DIR, "src/pages/index.astro"), "utf-8");
+    const input = [...markup.matchAll(/<input\b[^>]*>/g)]
+      .map(([tag]) => tag)
+      .find((tag) => tag.includes('x-model="customCardInput"'));
+    assert.ok(input);
+    assert.match(input, /aria-label="Custom card name"/);
+  });
+
+  it("keeps merchant options at least 44px high within the scrollable list", () => {
+    const markup = fs.readFileSync(path.join(ROOT_DIR, "src/pages/index.astro"), "utf-8");
+    const option = markup.match(/<li\b[\s\S]*?role="option"[\s\S]*?<\/li>/)?.[0];
+    assert.ok(option);
+    assert.match(option, /min-h-\[44px\]/);
+    assert.match(option, /@click="chooseMerchantSuggestion\(s\)"/);
+    assert.match(markup, /max-h-48 overflow-y-auto/);
+  });
+
+  it("announces the full amount and credit mode in a named polite status region", () => {
+    const markup = fs.readFileSync(path.join(ROOT_DIR, "src/pages/index.astro"), "utf-8");
+    const region = markup.match(/<div\b[^>]*role="status"[^>]*aria-label="Transaction amount"[\s\S]*?<\/div>/)?.[0];
+    assert.ok(region);
+    assert.match(region, /aria-live="polite"/);
+    assert.match(region, /aria-atomic="true"/);
+    assert.match(region, /class="sr-only" x-text="isNegative \? 'Credit of ' : ''"/);
+    assert.match(region, /currency \+ ' ' \+ formattedAmount/);
+  });
+
   it("configures native text assistance attributes on merchant, card, and token inputs", () => {
     const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
     const indexContent = fs.readFileSync(indexPath, "utf-8");
@@ -545,6 +653,61 @@ describe("Standalone iOS PWA Viewport and Touch Handling (Issue #105)", () => {
       "submit button must satisfy minimum 44px touch target requirement",
     );
   });
+
+  it("prevents intake header wrapping on narrow viewports while preserving touch targets across themes (Issue #157)", () => {
+    const indexPath = path.join(ROOT_DIR, "src", "pages", "index.astro");
+    const indexContent = fs.readFileSync(indexPath, "utf-8");
+
+    const headerMatch = indexContent.match(/<header\b[^>]*>/);
+    assert.ok(headerMatch, "index.astro must contain a <header> element");
+    const headerTag = headerMatch[0];
+
+    assert.doesNotMatch(
+      headerTag,
+      /\bflex-wrap\b/,
+      "header must not use flex-wrap to avoid multi-line shift on narrow viewports",
+    );
+    assert.match(headerTag, /\bflex-none\b/, "header must maintain flex-none docking");
+    assert.match(
+      headerTag,
+      /\bjustify-between\b/,
+      "header must distribute logo, date chip, and actions across a single row",
+    );
+
+    assert.match(
+      indexContent,
+      /<div[^>]*aria-label="SnapTally"/,
+      "logo container must provide accessible aria-label",
+    );
+    assert.match(
+      indexContent,
+      /<span[^>]*class="[^"]*hidden\s+sm:inline[^"]*"[^>]*>SnapTally<\/span>/,
+      "logo text must hide on compact viewports and display on sm screens",
+    );
+
+    assert.match(
+      indexContent,
+      /<button[^>]*class="[^"]*min-h-\[44px\][^"]*"[^>]*>\s*<IconCalendar/s,
+      "date chip button must satisfy min-h-[44px] touch target requirement",
+    );
+    assert.match(
+      indexContent,
+      /<a[^>]*href="\/activity"[^>]*min-h-\[44px\]\s+min-w-\[44px\]/,
+      "activity link must satisfy 44x44px touch target requirement",
+    );
+    const settingsBtnMatch = indexContent.match(/<button[^>]*@click="openSettings\(\)"[^>]*>/);
+    assert.ok(settingsBtnMatch, "settings button must exist");
+    assert.match(
+      settingsBtnMatch[0],
+      /min-h-\[44px\]/,
+      "settings button must satisfy 44px min height",
+    );
+    assert.match(
+      settingsBtnMatch[0],
+      /min-w-\[44px\]/,
+      "settings button must satisfy 44px min width",
+    );
+  });
 });
 
 describe("Configurable UI Themes and Appearance", () => {
@@ -693,5 +856,22 @@ describe("Configurable UI Themes and Appearance", () => {
         "Every theme selector button must bind aria-pressed state",
       );
     }
+  });
+});
+
+describe("Settings native modal lifecycle", () => {
+  it("uses a native modal with cancellation, initial focus and trigger restoration", () => {
+    const indexContent = fs.readFileSync(path.join(ROOT_DIR, "src/pages/index.astro"), "utf-8");
+    const dialog = indexContent.match(
+      /<dialog[^>]*aria-labelledby="settings-dialog-title"[^>]*>/,
+    )?.[0];
+    assert.ok(dialog);
+    assert.match(dialog, /\$el\.showModal\(\)/);
+    assert.match(dialog, /\$el\.close\(\)/);
+    assert.match(dialog, /@cancel\.prevent="closeSettings\(\)"/);
+    assert.match(dialog, /@close="closeSettings\(\); \$refs\.settingsTrigger\.focus\(\)"/);
+    assert.doesNotMatch(dialog, /modal-open/);
+    assert.match(indexContent, /x-ref="settingsTrigger"/);
+    assert.match(indexContent, /aria-label="Close Settings"\s+autofocus/);
   });
 });

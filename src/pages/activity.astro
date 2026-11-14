@@ -133,6 +133,12 @@ import Layout from "../layouts/Layout.astro";
       </div>
     </section>
 
+    <template x-if="showingCached">
+      <div class="flex-none rounded-xl neu-inset p-3 my-2 text-xs text-neu-text" role="status">
+        Offline - showing cached transactions. Refresh to check for updates.
+      </div>
+    </template>
+
     <!-- Error Banner -->
     <template x-if="error">
       <div class="flex-none rounded-xl neu-inset border-l-4 border-error p-3 my-2 text-xs text-neu-text flex items-center justify-between gap-2" role="alert">
