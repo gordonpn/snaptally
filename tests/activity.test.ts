@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import { type ActivityTransaction, activityView } from "../src/scripts/activity.ts";
+import {
+  ACTIVITY_CACHE_KEY,
+  type ActivityTransaction,
+  activityView,
+} from "../src/scripts/activity.ts";
 import { TOKEN_STORAGE_KEY } from "../src/scripts/intake-form.ts";
 
 class MockLocalStorage {
@@ -98,6 +102,100 @@ describe("activityView", () => {
       assert.strictEqual(view.monthSpendFormatted, "25.50");
       assert.strictEqual(view.monthCount, 1);
       assert.strictEqual(view.monthLabel, "October 2026");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("restores the matching first page and summary after a network failure", async () => {
+    const originalFetch = globalThis.fetch;
+    const summary = { month: "2026-11", net_spend: 25.5, total_count: 7 };
+    try {
+      globalThis.fetch = async () =>
+        Response.json({
+          transactions: [createSampleTx()],
+          total_count: 7,
+          has_more: true,
+          next_offset: 20,
+          month_summary: summary,
+        });
+      const online = activityView();
+      online.token = "cache-secret";
+      await online.fetchTransactions(true);
+      const stored = mockStorage.getItem(ACTIVITY_CACHE_KEY) ?? "";
+      assert.ok(stored);
+      assert.ok(!stored.includes("cache-secret"));
+      globalThis.fetch = async () => {
+        throw new TypeError("Offline");
+      };
+      const offline = activityView();
+      offline.token = "cache-secret";
+      await offline.fetchTransactions(true);
+      assert.equal(offline.transactions[0].id, "tx-1");
+      assert.deepEqual(offline.monthSummary, summary);
+      assert.equal(offline.totalCount, 7);
+      assert.equal(offline.hasMore, false);
+      assert.equal(offline.showingCached, true);
+      assert.equal(offline.error, null);
+      globalThis.fetch = async () => Response.json({ transactions: [], total_count: 0 });
+      await offline.fetchTransactions(true);
+      assert.equal(offline.showingCached, false);
+      assert.deepEqual(offline.transactions, []);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("does not restore another token, filter, or month and rejects corrupt caches", async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () => Response.json({ transactions: [createSampleTx()] });
+      const view = activityView();
+      view.token = "owner";
+      await view.fetchTransactions(true);
+      const saved = mockStorage.getItem(ACTIVITY_CACHE_KEY) ?? "";
+      globalThis.fetch = async () => {
+        throw new TypeError("Offline");
+      };
+      for (const mismatch of ["token", "bucket", "search", "month", "corrupt"]) {
+        mockStorage.setItem(ACTIVITY_CACHE_KEY, saved);
+        const offline = activityView();
+        offline.token = mismatch === "token" ? "someone-else" : "owner";
+        if (mismatch === "bucket") offline.selectedBucket = "Income";
+        if (mismatch === "search") offline.searchQuery = "Other merchant";
+        if (mismatch === "month") {
+          const cache = JSON.parse(saved);
+          cache.query = cache.query.replace(/month=[^&]+/, "month=2000-01");
+          mockStorage.setItem(ACTIVITY_CACHE_KEY, JSON.stringify(cache));
+        }
+        if (mismatch === "corrupt") mockStorage.setItem(ACTIVITY_CACHE_KEY, "{");
+        await offline.fetchTransactions(true);
+        assert.equal(offline.transactions.length, 0, mismatch);
+        assert.equal(offline.showingCached, false, mismatch);
+        assert.equal(offline.error, "Offline", mismatch);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("does not mask HTTP errors with cached data and clears unauthorized caches", async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () => Response.json({ transactions: [createSampleTx()] });
+      const view = activityView();
+      view.token = "owner";
+      await view.fetchTransactions(true);
+      const saved = mockStorage.getItem(ACTIVITY_CACHE_KEY);
+      globalThis.fetch = async () => new Response("Server error", { status: 500 });
+      await view.fetchTransactions(true);
+      assert.equal(view.showingCached, false);
+      assert.equal(view.transactions.length, 0);
+      assert.equal(mockStorage.getItem(ACTIVITY_CACHE_KEY), saved);
+      globalThis.fetch = async () => new Response("Unauthorized", { status: 401 });
+      await view.fetchTransactions(true);
+      assert.equal(mockStorage.getItem(ACTIVITY_CACHE_KEY), null);
+      assert.equal(view.monthSummary, null);
     } finally {
       globalThis.fetch = originalFetch;
     }

@@ -10,6 +10,8 @@ node_modules/
 dist/
 .astro/
 coverage/
+playwright-report/
+test-results/
 .DS_Store
 data/
 *.csv

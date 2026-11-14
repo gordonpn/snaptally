@@ -16,16 +16,16 @@ import Layout from "../layouts/Layout.astro";
     x-data="intakeForm"
   >
     <!-- Header -->
-    <header class="flex-none flex flex-wrap gap-2 items-center justify-between pb-1.5 border-b border-base-content/10">
-      <div class="flex items-center gap-2">
-        <div class="w-8 h-8 rounded-xl neu-raised-sm flex items-center justify-center text-primary">
+    <header class="flex-none flex items-center justify-between pb-1.5 border-b border-base-content/10 gap-1.5 sm:gap-2">
+      <div class="flex items-center gap-2 shrink-0" aria-label="SnapTally">
+        <div class="w-8 h-8 rounded-xl neu-raised-sm flex items-center justify-center text-primary shrink-0">
           <IconReceipt2 class="w-5 h-5" />
         </div>
-        <span class="text-lg font-bold tracking-tight text-neu-text">SnapTally</span>
+        <span class="text-lg font-bold tracking-tight text-neu-text hidden sm:inline truncate">SnapTally</span>
       </div>
 
       <!-- Date selector chip -->
-      <div class="relative focus-within:ring-2 focus-within:ring-primary/40 rounded-full">
+      <div class="relative focus-within:ring-2 focus-within:ring-primary/40 rounded-full shrink min-w-0">
         <input
           type="date"
           class="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
@@ -35,16 +35,16 @@ import Layout from "../layouts/Layout.astro";
         />
         <button
           type="button"
-          class="neu-raised-sm rounded-full px-3 py-1.5 min-h-[44px] inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium pointer-events-none transition-all"
+          class="neu-raised-sm rounded-full px-2 sm:px-3 py-1.5 min-h-[44px] inline-flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-medium pointer-events-none transition-all max-w-full"
           :class="isBackfill ? 'text-warning font-semibold outline outline-1 outline-warning/50' : 'text-neu-text'"
         >
-          <IconCalendar class="w-4 h-4 text-primary" />
-          <span x-text="isToday ? 'Today' : date"></span>
+          <IconCalendar class="w-4 h-4 text-primary shrink-0" />
+          <span class="truncate" x-text="isToday ? 'Today' : date"></span>
         </button>
       </div>
 
       <!-- Actions: Recent, Outbox & Settings -->
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
         <button
           type="button"
           x-show="outboxCount > 0"
@@ -78,6 +78,7 @@ import Layout from "../layouts/Layout.astro";
         <button
           type="button"
           class="w-11 h-11 rounded-full neu-raised-sm neu-pressed flex items-center justify-center text-neu-text transition-all min-h-[44px] min-w-[44px] relative"
+          x-ref="settingsTrigger"
           @click="openSettings()"
           aria-label="Settings"
         >
@@ -137,10 +138,13 @@ import Layout from "../layouts/Layout.astro";
               isNegative ? 'text-secondary' : 'text-neu-text',
               amountFontSizeClass
             ]"
-            x-text="(isNegative ? '-' : '') + currency + ' ' + formattedAmount"
-            aria-live="off"
+            role="status"
+            aria-label="Transaction amount"
+            aria-live="polite"
+            aria-atomic="true"
           >
-            $0.00
+            <span class="sr-only" x-text="isNegative ? 'Credit of ' : ''"></span>
+            <span x-text="(isNegative ? '-' : '') + currency + ' ' + formattedAmount">USD 0.00</span>
           </div>
           <template x-if="isNegative">
             <span class="text-[10px] font-bold uppercase tracking-wider text-secondary mt-0.5 whitespace-nowrap">Refund / Credit</span>
@@ -205,7 +209,7 @@ import Layout from "../layouts/Layout.astro";
                 :id="`merchant-opt-${index}`"
                 role="option"
                 :aria-selected="highlightedMerchantIndex === index"
-                class="w-full text-left px-3 py-2 text-sm text-neu-text transition-colors flex items-center justify-between cursor-pointer select-none"
+                class="w-full min-h-[44px] text-left px-3 py-2 text-sm text-neu-text transition-colors flex items-center justify-between cursor-pointer select-none"
                 :class="highlightedMerchantIndex === index ? 'neu-inset-sm font-semibold text-primary bg-primary/10' : 'hover:bg-base-content/5'"
                 @mouseenter="highlightedMerchantIndex = index; highlightedMerchant = s"
                 @mousedown.prevent
@@ -278,6 +282,7 @@ import Layout from "../layouts/Layout.astro";
             autocapitalize="off"
             spellcheck="false"
             placeholder="Type card name..."
+            aria-label="Custom card name"
             class="neu-inset w-full rounded-xl px-3 py-2 text-base text-neu-text focus:outline-none focus:ring-2 focus:ring-primary/40 mt-1"
             x-model="customCardInput"
             @input="updateCustomCard($event.target.value)"
@@ -482,7 +487,10 @@ import Layout from "../layouts/Layout.astro";
     </dialog>
 
     <!-- Settings Modal -->
-    <dialog class="modal" :class="{ 'modal-open': isSettingsOpen }" aria-labelledby="settings-dialog-title">
+    <dialog class="modal" aria-labelledby="settings-dialog-title"
+      x-effect="isSettingsOpen ? $el.showModal() : $el.close()"
+      @cancel.prevent="closeSettings()"
+      @close="closeSettings(); $refs.settingsTrigger.focus()">
       <div class="modal-box p-5 max-w-sm rounded-2xl max-h-[85vh] overflow-y-auto neu-raised">
         <div class="flex items-center justify-between pb-2 border-b border-base-content/10">
           <h3 id="settings-dialog-title" class="font-bold text-lg text-neu-text">Settings</h3>
@@ -491,6 +499,7 @@ import Layout from "../layouts/Layout.astro";
             class="neu-raised-sm rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center text-neu-text"
             @click="closeSettings()"
             aria-label="Close Settings"
+            autofocus
           >
             <IconX class="w-5 h-5" />
           </button>

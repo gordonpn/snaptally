@@ -905,6 +905,9 @@ describe("intakeForm Token Persistence (Scenario 3)", () => {
 
     assert.strictEqual(form.isSettingsOpen, false);
     assert.strictEqual(form.token, "initial-token");
+    assert.strictEqual(form.settingsTokenInput, "initial-token");
+    form.openSettings();
+    assert.strictEqual(form.settingsTokenInput, "initial-token");
   });
 
   it("handles storage exceptions gracefully when localStorage is restricted", () => {
