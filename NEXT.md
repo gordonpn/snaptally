@@ -1,54 +1,60 @@
 # Project Execution Queue
 
-- **Last Refined:** 2026-10-28
-- **Repository:** gordonpn/snaptally
+- **Last Refined:** 2026-11-15 UTC (2026-11-14 EST)
+- **Repository:** [gordonpn/snaptally](https://github.com/gordonpn/snaptally)
+- **Verified `main` Commit SHA:** `88cd562fb81173b6a60d42c590f49a91f258b4b9`
 - **GitHub Backlog:** https://github.com/gordonpn/snaptally/issues
 
 ## NOW - Recommended Next Task
 
-### [#78: Codify automated dependency maintenance and vulnerability remediation](https://github.com/gordonpn/snaptally/issues/78)
-- **Priority:** P1 | **Effort:** S | **Readiness:** READY
-- **Why this task is next:** The merchant defaults work is merged, and dependency maintenance remains the highest-priority ready task.
-- **First action:** Inspect existing dependency workflows, then add the Dependabot configuration described in the issue.
-- **Definition of Done:** Grouped npm and GitHub Actions updates validate against the Dependabot schema, run through CI, and have a documented review process.
-- **Unblocks:** Routine dependency and security update pull requests.
+### [#204: test(intake): make browser storage fixtures and coverage deterministic](https://github.com/gordonpn/snaptally/issues/204)
+
+- **Priority:** P1 | **Effort:** S (Medium-High confidence) | **Readiness:** READY
+- **Why this task is next:** Intermittent 1-branch timing variance in `src/scripts/outbox.ts` (`96.44%`/`96.84%` vs `97.21%`) and shared `localStorage`/init fixture coupling tripped `codecov/project` (`threshold: 0%`) on both PR #198 and PR #199, forcing manual CI reruns before unrelated PRs could merge.
+- **First action:** On a new task branch off `origin/main` (`88cd562`), audit `tests/outbox.test.ts` (`syncOutbox` / `scheduleDueRetry` `Date.now()` and timer branches) and `tests/intake-form.test.ts` global storage/async cleanup.
+- **Definition of Done:** Isolated browser-global/storage fixtures with settled async teardown across intake and outbox suites; deterministic tests covering `syncOutbox`/`scheduleDueRetry` deadline and cached-merchant startup branches; three consecutive fresh-process runs of `pnpm run test:coverage` yielding identical line and branch coverage on `src/scripts/outbox.ts` and `src/scripts/intake-form.ts`; and `just typecheck`, `just test-coverage`, and `just lint` passing.
+- **Unblocks:** Deterministic `codecov/project` CI gating across all upcoming PRs (#193, #205, #146, #40, #41).
 
 ## NEXT - Upcoming Work
 
-1. **[#80: Codify Playwright end-to-end browser and offline PWA test suites](https://github.com/gordonpn/snaptally/issues/80)**
-   - **Priority:** P1 | **Effort:** M | **Readiness:** Review requirements before starting.
-   - **Parallel:** Independent of #78.
+1. **[#193: Ops: Enable GitHub Dependabot alerts and remediate existing dependency vulnerabilities](https://github.com/gordonpn/snaptally/issues/193)**
+   - **Priority:** P1 | **Effort:** S | **Readiness:** READY (Repo settings verified enabled; 9 `pnpm audit` vulnerabilities remain on `sharp` and `undici`, where Dependabot run `43669247513` failed upstream semver resolution).
+   - **Parallel:** Independent of #204, #205, and UI work.
 
-2. **[#114: Interactive merchant autocomplete dropdown from transaction history](https://github.com/gordonpn/snaptally/issues/114)**
-   - **Priority:** P2 | **Effort:** S | **Readiness:** Review ranking data availability; #113 is closed.
-   - **Reason:** Adds touch and keyboard suggestions for merchant entry.
+2. **[#205: Restrict e2e workflow concurrency cancellation to pull_request events](https://github.com/gordonpn/snaptally/issues/205)**
+   - **Priority:** P2 | **Effort:** XS | **Readiness:** READY (Quick win).
+   - **Why next:** `.github/workflows/e2e.yml` sets `cancel-in-progress: true` unconditionally and cancelled 5 `main` push runs (`43667386374`, `43666189892`, `43665917242`, `43665807566`, `43665714045`).
+   - **Parallel:** Independent of application source changes.
 
-3. **[#105: Hardened viewport and safe-area handling for standalone iOS PWA](https://github.com/gordonpn/snaptally/issues/105)**
-   - **Priority:** P2 | **Effort:** S | **Readiness:** Review requirements before starting.
-   - **Parallel:** Independent of #78.
+3. **[#146: Fix: Keypad button outer shadows clipped by container overflow on mobile intake screen](https://github.com/gordonpn/snaptally/issues/146)**
+   - **Priority:** P2 | **Effort:** XS | **Readiness:** READY (Quick win).
+   - **Parallel:** Independent of backend and CI tasks.
 
+4. **[#189: Spike: Prepare SnapTally for month-long travel to Taipei, Hong Kong, and Vietnam](https://github.com/gordonpn/snaptally/issues/189)**
+   - **Priority:** P2 | **Effort:** S | **Readiness:** READY (Time-sensitive ahead of trip).
+   - **Parallel:** Can run alongside #204, #205, and #146; informs #191 (token/device-loss purge).
 
-## COMPLETED RECENTLY
-
-- **[#115: Infer category and card defaults from merchant transaction history](https://github.com/gordonpn/snaptally/issues/115)**: Closed after PR #119 merged; merchant rules and recent history now suggest category and card defaults while preserving manual choices.
-- **[#113: Disable native text assistance on intake inputs](https://github.com/gordonpn/snaptally/issues/113)**: Closed after PR #118 merged, with the documented iOS Safari limitation.
-- **[#101: Execute historical Google Sheets backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101)**: Production backup verified, migrations were current, and the 13-sheet import completed with 2,463 Historical rows (2,044 USD and 419 CAD); a rerun left counts unchanged. The issue remains open pending maintainer closure.
-- **[#108: Triage the batch-4 reconciliation queue](https://github.com/gordonpn/snaptally/issues/108)**: Closed after local review of 121 items: 19 confirmed duplicates, 91 locally appended transactions, and 11 excluded with reasons. The dry-run parsed 2,463 transactions with unique IDs and zero database writes.
-- **[#96: Feat: Implement Outbox and Sync Status Drawer in mobile intake UI](https://github.com/gordonpn/snaptally/issues/96)**: Resolved in merged PR #111.
-- **[#116: Refactor: Remove Reimbursement from Income and simplify to Salary and Other](https://github.com/gordonpn/snaptally/issues/116)**: Resolved in merged PR #117; Income is now Salary or Other, expense credits stay in their original categories, and historical records remain unchanged.
-- **[#107: Data: Categorize and ingest 7 held international FX transactions ($538.28 USD)](https://github.com/gordonpn/snaptally/issues/107)**: Local CSV ingestion completed and issue closed; seven transactions totaling $538.28 USD (CAD 753.45) were added, with no production D1 writes.
-- **[#103: Ops: Codify automated pre-flight D1 snapshot and backup recipe](https://github.com/gordonpn/snaptally/issues/103)**: Resolved in PR #110. Created `scripts/db-backup.sh`, added `just db-backup-remote` and `just db-backup-local`, gitignored `.backups/`, and updated backfill runbook.
-- **[#106: Data: Promote reconciled batch-4 budget CSVs (2,353 transactions) to primary backfill source](https://github.com/gordonpn/snaptally/issues/106)**: Resolved in PR #109. Primary backfill dataset promoted to 2,353 valid transactions across 12 sheets with BOM-hardened CSV parsing.
+5. **[#41: Define canonical category taxonomy and budget profile schema](https://github.com/gordonpn/snaptally/issues/41)**
+   - **Priority:** P2 | **Effort:** S | **Readiness:** READY (#104 prerequisite merged via `migrations/0006_monthly_budgets_schema.sql`).
+   - **Unblocks:** #42, #44, and #36 (per `docs/monthly-budgets.md` lines 46-53).
 
 ## BLOCKERS
 
-- [#101: Execute historical backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101) remains open pending maintainer closure. Its latest update records completed production execution and a separate paycheck verification question.
+- **Taxonomy reconciliation (#41):** Blocks #42 (monthly budget aggregation API), #44 (mobile analysis dashboard), and #36 (in-app budget pacing feedback) due to `Savings -> Investments` vs 4-bucket `Investments` target mapping (`docs/monthly-budgets.md` lines 46-53).
+- **Upstream transitive semver bounds (#193):** Patched `sharp` (`>=0.35.5`) and `undici` (`>=8.12.2` / `>=7.30.2`) currently fail automatic Dependabot resolution (`43669247513`) under `astro`/`wrangler` constraints.
+- **Contract decision (#151):** Needs maintainer confirmation on whether bounded negative expense credits remain permanent before closing #151.
+
+## CLOSED IN AUDIT (2026-11-15)
+
+Closed against verified `main` (`88cd562`) after maintainer approval:
+
+- **[#78: Ops: Codify automated dependency maintenance and vulnerability remediation (.github/dependabot.yml)](https://github.com/gordonpn/snaptally/issues/78)** -- Completed (`.github/dependabot.yml`, `docs/RUNBOOK.md`, grouped PRs #197/#198 verified; repo security controls enabled; active vuln remediation tracked in #193).
+- **[#101: Ops: Execute historical Google Sheets backfill against production Cloudflare D1](https://github.com/gordonpn/snaptally/issues/101)** -- Completed (2,463 Historical rows imported to production D1, idempotency verified; optional October 23 paycheck check noted separately).
+- **[#141: [Reliability] Preserve currency field in client OutboxItem and sync payload](https://github.com/gordonpn/snaptally/issues/141)** -- Completed (`src/scripts/outbox.ts`, `src/scripts/intake-form.ts`, `tests/outbox.test.ts` verified on `88cd562`).
+- **[#155: [Security][P3] Purge cached sensitive client data on token removal and expand logger secret redaction patterns](https://github.com/gordonpn/snaptally/issues/155)** -- Duplicate of [#191](https://github.com/gordonpn/snaptally/issues/191) (logger redaction landed in PR #182; remaining client-cleanup requirements consolidated into #191).
+- **[#137: [Infrastructure] Apply D1 database migrations to budget-db-preview in pull request deployments](https://github.com/gordonpn/snaptally/issues/137)** -- Not planned / superseded (PR #176 blocks unmerged PRs from mutating shared `budget-db-preview` and runs preview migrations only on `main` push).
 
 ## LATER
 
-All remaining medium- and low-priority enhancements are tracked directly in the GitHub Backlog:
-- **Testing & Tooling:** #77 (Mise Toolchain), #81 (Deterministic Seeds)
-- **Foundational Schemas & Hardening:** #104 (Monthly Budgets Schema)
-- **Analysis & Dashboard:** #42 (Monthly Aggregation API), #44 (Mobile Analysis Dashboard), #36 (In-App Pacing Toast), #40 (Income Entry Polish), #41 (Category Taxonomy Profile)
-- **Deferred Streams:** #21-#23 (Multi-tenancy), #37 (Webhook Alerts), #39 (Scheduled Cron Digests), #43 (Sinking Funds Engine), #52 (Edge Runtime Tests), #53 (Synthetic Canary Probes), #60 (Merchant Rulebook), #62 (Receipt Splitting), #63 (Montreal Property Tracker), #76 (OpenTofu IaC), #79 (OpenAPI 3.1 Spec)
-- View complete filtered view: [SnapTally Open Issues](https://github.com/gordonpn/snaptally/issues)
+All active P2 quick wins outside the top 5 (#40, #77, #81, #169, #192), open questions (#151, #161), and deferred P3 streams (#21-#23, #37, #39, #43, #52, #53, #60, #62, #63, #76, #79, #123-#125, #136, #158, #191, #194, #195, #203) are maintained on GitHub:
+- View full backlog: [SnapTally Open Issues](https://github.com/gordonpn/snaptally/issues)
