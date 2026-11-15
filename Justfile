@@ -27,6 +27,10 @@ test:
 test-e2e:
     pnpm run test:e2e
 
+# Run API HTTP integration tests against disposable local Pages and D1
+test-integration:
+    pnpm run test:integration
+
 # Run unit tests with coverage reporting
 test-coverage:
     pnpm run test:coverage

@@ -106,6 +106,16 @@ For local development with Cloudflare Pages Functions, configure this variable i
 
 5. Open `http://localhost:8788` in your browser (or your local network IP when using `just dev-network`).
 
+## Testing
+
+Run `pnpm test:integration` or `just test-integration` to exercise the API over real
+HTTP through local Cloudflare Pages Functions and D1. The suite applies all
+migrations to a fresh temporary database, generates a test bearer token, and
+starts Wrangler on `127.0.0.1:8798`. Keep that port free. It stops the server and
+removes its temporary assets and database after the run. No Cloudflare login,
+remote database, browser installation, or application build is required. CI runs
+this suite alongside `pnpm test` and `pnpm run typecheck`.
+
 ## Documentation
 
 Historical CSV imports use `just backfill-dry-run` to validate local exports before
