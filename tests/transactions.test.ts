@@ -279,7 +279,10 @@ describe("resolveMerchant", () => {
         insert.run(`repeat-${index}`, "Repeated Merchant", "2026-09-25 00:00:00");
       }
       const repeatedRows = db.prepare(selectDistinctMerchantsQuery).all();
-      assert.deepStrictEqual(repeatedRows.map((row) => row.merchant), ["Repeated Merchant"]);
+      assert.deepStrictEqual(
+        repeatedRows.map((row) => row.merchant),
+        ["Repeated Merchant"],
+      );
 
       insert.run("punctuated", "Trader Joe's", "2026-09-26 00:00:00");
       const adapter = {
