@@ -20,6 +20,7 @@ import {
   syncOutbox,
   type TransactionCurrency,
 } from "./outbox.ts";
+import { isPreviewMockEnabled, PREVIEW_DEMO_TOKEN, resetPreviewData } from "./preview-mock.ts";
 
 export interface RecentTransaction {
   id: string;
@@ -311,6 +312,8 @@ export function intakeForm() {
     token: "",
     isSettingsOpen: false,
     settingsTokenInput: "",
+    isPreviewMock: isPreviewMockEnabled(),
+    demoResetMessage: "",
     themeStyle: "neumorphic" as ThemeStyle,
     colorScheme: "system" as ColorScheme,
 
@@ -950,12 +953,28 @@ export function intakeForm() {
 
     openSettings(): void {
       this.settingsTokenInput = this.token;
+      this.demoResetMessage = "";
       this.isSettingsOpen = true;
     },
 
     closeSettings(): void {
       this.settingsTokenInput = this.token;
+      this.demoResetMessage = "";
       this.isSettingsOpen = false;
+    },
+
+    resetDemoData(): void {
+      if (!this.isPreviewMock) {
+        return;
+      }
+      resetPreviewData();
+      this.token = PREVIEW_DEMO_TOKEN;
+      this.settingsTokenInput = PREVIEW_DEMO_TOKEN;
+      this.authenticationFailed = false;
+      this.frequentMerchants = [...DEFAULT_FREQUENT_MERCHANTS];
+      this.demoResetMessage = "Demo data restored.";
+      this.loadFrequentMerchants();
+      this.loadRecentTransactions();
     },
 
     saveToken(): void {
