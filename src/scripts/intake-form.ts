@@ -377,6 +377,9 @@ export function intakeForm() {
     },
 
     get submitButtonLabel(): string {
+      if (this.parentBucket === "Income") {
+        return "Save Income";
+      }
       if (this.isNegative) {
         return "Save Credit";
       }

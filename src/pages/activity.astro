@@ -210,9 +210,9 @@ import Layout from "../layouts/Layout.astro";
                 <div class="text-right whitespace-nowrap">
                   <div
                     class="font-mono font-bold text-sm"
-                    :class="Number(tx.net_spend) < 0 ? 'text-secondary' : 'text-neu-text'"
+                    :class="tx.parent_bucket === 'Income' ? 'text-success' : Number(tx.net_spend) < 0 ? 'text-secondary' : 'text-neu-text'"
                   >
-                    <span x-text="(tx.currency === 'CAD' ? 'CAD ' : '') + (Number(tx.net_spend) < 0 ? '-$' + Math.abs(Number(tx.net_spend)).toFixed(2) : '$' + Number(tx.net_spend).toFixed(2))"></span>
+                    <span x-text="(tx.currency === 'CAD' ? 'CAD ' : '') + (tx.parent_bucket === 'Income' ? '+$' + Number(tx.net_spend).toFixed(2) : Number(tx.net_spend) < 0 ? '-$' + Math.abs(Number(tx.net_spend)).toFixed(2) : '$' + Number(tx.net_spend).toFixed(2))"></span>
                   </div>
                   <template x-if="Number(tx.reimbursement) > 0">
                     <div class="text-[11px] font-mono text-neu-text-muted">
