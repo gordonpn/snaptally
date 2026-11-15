@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
 
@@ -66,5 +68,42 @@ describe("Backfill CLI", () => {
     assert.equal(result.status, 1);
     assert.match(result.stderr, /Sheet directory not found/);
     assert.doesNotMatch(result.stdout, /completed successfully/);
+  });
+
+  it("infers apply when --yes is passed without a positional subcommand", (t) => {
+    const artifactsDir = mkdtempSync(resolve(tmpdir(), "backfill-cli-"));
+    t.after(() => rmSync(artifactsDir, { recursive: true, force: true }));
+
+    const result = runCli([
+      "--yes",
+      "--local",
+      "--dir",
+      resolve(FIXTURES_DIR, "missing"),
+      "--artifacts-dir",
+      artifactsDir,
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /Mode: APPLY/);
+    assert.match(result.stderr, /Sheet directory not found/);
+  });
+
+  it("infers resume when --run-id is passed without a positional subcommand", (t) => {
+    const artifactsDir = mkdtempSync(resolve(tmpdir(), "backfill-cli-"));
+    t.after(() => rmSync(artifactsDir, { recursive: true, force: true }));
+
+    const result = runCli([
+      "--run-id",
+      "missing-run",
+      "--local",
+      "--dir",
+      FIXTURES_DIR,
+      "--artifacts-dir",
+      artifactsDir,
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /Mode: RESUME/);
+    assert.match(result.stderr, /missing-run|run|artifact/i);
   });
 });
