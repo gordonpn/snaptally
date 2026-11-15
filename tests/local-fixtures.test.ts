@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
@@ -118,6 +119,45 @@ test("SQL checks compile actual schema and queries and catch convention violatio
     );
     writeFileSync(resolve(temp, "queries/bad.sql"), "select missing FROM absent");
     assert.throws(() => lintSql(temp), /uppercase[\s\S]*no such table[\s\S]*missing_index/);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test("fixture CLI rejects remote targets before writes and SQL lint CLI reports success", () => {
+  const temp = mkdtempSync(resolve(tmpdir(), "snaptally-fixture-cli-"));
+  try {
+    const rejected = spawnSync(
+      process.execPath,
+      [resolve(root, "scripts/local-fixtures.mjs"), "seed", "--remote"],
+      { cwd: temp, encoding: "utf8" },
+    );
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stderr, /local only/);
+    assert.deepEqual(readdirSync(temp), []);
+    const checked = spawnSync(process.execPath, [resolve(root, "scripts/sql-lint.mjs")], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    assert.equal(checked.status, 0, checked.stderr);
+    assert.match(
+      checked.stdout,
+      /SQLite schema, query compilation, conventions and index probes passed/,
+    );
+    mkdirSync(resolve(temp, "scripts"));
+    mkdirSync(resolve(temp, "migrations"));
+    writeFileSync(
+      resolve(temp, "scripts/sql-lint.json"),
+      JSON.stringify({ directories: ["migrations"], uppercaseKeywords: [], indexProbes: [] }),
+    );
+    writeFileSync(resolve(temp, "migrations/broken.sql"), "CREATE TABLE broken (");
+    const invalid = spawnSync(process.execPath, [resolve(root, "scripts/sql-lint.mjs")], {
+      cwd: temp,
+      encoding: "utf8",
+    });
+    assert.notEqual(invalid.status, 0);
+    assert.match(invalid.stderr, /migrations\/broken.sql/);
+    assert.doesNotMatch(invalid.stdout, /passed/);
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
