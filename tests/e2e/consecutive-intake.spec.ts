@@ -1,11 +1,16 @@
 import { expect, test } from "@playwright/test";
 import { enterExpense, openIntake, readOutbox } from "./helpers";
 
+// Keep requests observable by Playwright; service workers can bypass network routes.
+test.use({ serviceWorkers: "block" });
+
 for (const network of ["delayed", "offline"] as const) {
   test(`consecutive entry resets inputs while sync is ${network}`, async ({ page, context }) => {
+    let heldPosts = 0;
     // Routing disables the cache and keeps the POST pending until both entries are accepted.
     await context.route("**/api/transactions", async (route) => {
       if (route.request().method() !== "POST") return route.continue();
+      heldPosts++;
       await new Promise<void>((resolve) => {
         page.once("close", resolve);
       });
@@ -31,7 +36,10 @@ for (const network of ["delayed", "offline"] as const) {
         : undefined;
     const save = page.getByRole("button", { name: "Save Transaction", exact: true });
     await save.click();
-    if (postStarted) await postStarted;
+    if (postStarted) {
+      await postStarted;
+      await expect.poll(() => heldPosts).toBeGreaterThan(0);
+    }
 
     await expect(page.getByText("USD $0.00", { exact: true })).toBeVisible();
     await expect(page.getByRole("combobox", { name: "Merchant name" })).toHaveValue("");
