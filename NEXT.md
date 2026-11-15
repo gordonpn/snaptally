@@ -12,7 +12,7 @@
 - **Priority:** P1 | **Effort:** S (Medium-High confidence) | **Readiness:** READY
 - **Why this task is next:** Intermittent 1-branch timing variance in `src/scripts/outbox.ts` (`96.44%`/`96.84%` vs `97.21%`) and shared `localStorage`/init fixture coupling tripped `codecov/project` (`threshold: 0%`) on both PR #198 and PR #199, forcing manual CI reruns before unrelated PRs could merge.
 - **First action:** On a new task branch off `origin/main` (`88cd562`), audit `tests/outbox.test.ts` (`syncOutbox` / `scheduleDueRetry` `Date.now()` and timer branches) and `tests/intake-form.test.ts` global storage/async cleanup.
-- **Definition of Done:** Three consecutive fresh-process runs of `pnpm run test:coverage` yield identical line and branch coverage on `src/scripts/outbox.ts` and `src/scripts/intake-form.ts`; `just typecheck`, `just test`, and `just lint` pass.
+- **Definition of Done:** Isolated browser-global/storage fixtures with settled async teardown across intake and outbox suites; deterministic tests covering `syncOutbox`/`scheduleDueRetry` deadline and cached-merchant startup branches; three consecutive fresh-process runs of `pnpm run test:coverage` yielding identical line and branch coverage on `src/scripts/outbox.ts` and `src/scripts/intake-form.ts`; and `just typecheck`, `just test-coverage`, and `just lint` passing.
 - **Unblocks:** Deterministic `codecov/project` CI gating across all upcoming PRs (#193, #205, #146, #40, #41).
 
 ## NEXT - Upcoming Work
