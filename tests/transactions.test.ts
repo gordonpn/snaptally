@@ -261,6 +261,56 @@ describe("toAlphanumericKey", () => {
 });
 
 describe("resolveMerchant", () => {
+  it("bounds historical reads before grouping and resolves recent punctuation variants", async () => {
+    const db = createTestDatabase();
+    try {
+      const insert = db.prepare(`INSERT INTO transactions
+        (id, date, card, parent_bucket, subcategory, merchant, gross_amount, created_at)
+        VALUES (?, '2026-09-25', 'Test', 'Guilt-Free', 'Dining', ?, 1, ?)`);
+      insert.run("old", "OLD Brand", "2026-09-25 00:00:00");
+      for (let index = 0; index < 200; index++) {
+        insert.run(`recent-${index}`, `Recent ${index}`, "2026-09-25 00:00:00");
+      }
+      const rows = db.prepare(selectDistinctMerchantsQuery).all() as { merchant: string }[];
+      assert.strictEqual(rows.length, 200);
+      assert.ok(!rows.some((row) => row.merchant === "OLD Brand"));
+
+      for (let index = 0; index < 200; index++) {
+        insert.run(`repeat-${index}`, "Repeated Merchant", "2026-09-25 00:00:00");
+      }
+      const repeatedRows = db.prepare(selectDistinctMerchantsQuery).all();
+      assert.deepStrictEqual(repeatedRows.map((row) => row.merchant), ["Repeated Merchant"]);
+
+      insert.run("punctuated", "Trader Joe's", "2026-09-26 00:00:00");
+      const adapter = {
+        prepare(query: string) {
+          return {
+            async all() {
+              return { results: db.prepare(query).all() };
+            },
+          };
+        },
+      } as unknown as D1Database;
+      assert.strictEqual(
+        await resolveMerchant(adapter, selectDistinctMerchantsQuery, "trader joes"),
+        "Trader Joe's",
+      );
+      assert.strictEqual(
+        await resolveMerchant(adapter, selectDistinctMerchantsQuery, "old brand"),
+        "Old Brand",
+      );
+
+      const plan = db.prepare(`EXPLAIN QUERY PLAN ${selectDistinctMerchantsQuery}`).all() as {
+        detail: string;
+      }[];
+      // The bounded inner window walks the rowid b-tree directly; only its result is sorted/grouped.
+      assert.ok(plan.some((row) => row.detail === "SCAN transactions"));
+      assert.ok(!plan.some((row) => /INDEX idx_transactions_merchant/.test(row.detail)));
+    } finally {
+      db.close();
+    }
+  });
+
   it("resolves to existing canonical merchant when alphanumeric key matches", async () => {
     const mockDb = {
       prepare(query: string) {
