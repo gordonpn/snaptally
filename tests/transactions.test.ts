@@ -1762,10 +1762,7 @@ describe("Paginated Transactions SQLite Query Integration", () => {
         { month_net_spend: 120, month_count: 3 },
       );
       for (const month of ["2026-02", "2026-03"]) {
-        assert.deepStrictEqual(
-          { ...summary.get(month) },
-          { month_net_spend: 0, month_count: 0 },
-        );
+        assert.deepStrictEqual({ ...summary.get(month) }, { month_net_spend: 0, month_count: 0 });
       }
 
       // Income remains available in the transaction feed and its pagination count.
@@ -1773,7 +1770,9 @@ describe("Paginated Transactions SQLite Query Integration", () => {
         total: number;
       };
       assert.strictEqual(incomeCount.total, 3);
-      const plan = db.prepare(`EXPLAIN QUERY PLAN ${selectMonthSummaryQuery}`).all("2026-12") as Array<{
+      const plan = db
+        .prepare(`EXPLAIN QUERY PLAN ${selectMonthSummaryQuery}`)
+        .all("2026-12") as Array<{
         detail: string;
       }>;
       assert.ok(

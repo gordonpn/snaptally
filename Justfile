@@ -9,11 +9,11 @@ install:
 
 # Run static analysis and formatting checks
 lint:
-    biome check .
+    pnpm run lint
 
 # Apply automatic formatting fixes
 format:
-    biome format --write .
+    pnpm run format
 
 # Run TypeScript compiler checks
 typecheck:
