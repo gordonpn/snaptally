@@ -25,8 +25,12 @@ until merge; only main pushes apply remote preview migrations.
 Before running deployment commands, ensure the following prerequisites are met:
 
 1. **Toolchain**:
-   - Node.js >= 22.18.0
-   - pnpm >= 10.0.0
+   - Install [mise](https://mise.jdx.dev/getting-started.html), review the repository
+     `.mise.toml`, and run `mise trust` followed by `mise install`.
+   - Run `mise exec -- bash scripts/verify-toolchain.sh` (or `just toolchain-verify`).
+   - Activate mise in your shell or prefix commands with `mise exec --`, then run
+     `pnpm install --frozen-lockfile` for project tools including Wrangler.
+   - See [toolchain onboarding](toolchain.md) for exact pins and upgrade guidance.
 2. **Cloudflare Authentication**:
    Verify that Wrangler is authenticated against your Cloudflare account:
    ```bash
