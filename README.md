@@ -121,6 +121,7 @@ Unterminated CSV quotes stop the import before database writes.
  
 - [Architecture & Design](docs/architecture.md): Detailed system design, data flows, database schemas, and free-tier operational limits.
 - [Budgeting Methodology & Category Taxonomy](docs/budgeting.md): Conscious Spending Plan parent buckets, subcategories, sinking funds, travel categorization, and expense credit rules.
+- [Monthly Budget Targets](docs/monthly-budgets.md): Category target schema, opt-in local examples, and USD reporting and taxonomy contracts for analysis.
 - [Operational Runbook](docs/RUNBOOK.md): Step-by-step procedures for production Cloudflare D1 provisioning, Pages configuration, deployments, and diagnostics.
 
 ### Sync Status

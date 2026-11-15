@@ -109,8 +109,8 @@ import Layout from "../layouts/Layout.astro";
     <!-- Status Message Alert -->
     <div
       x-show="statusMessage"
-      x-transition
-      class="text-xs text-center py-0.5 font-medium"
+      x-transition.opacity.duration.350ms
+      class="submission-feedback text-xs text-center py-0.5 font-medium"
       :class="isError ? 'text-error' : 'text-success'"
       role="status"
       aria-live="polite"
@@ -119,7 +119,7 @@ import Layout from "../layouts/Layout.astro";
 
     <!-- Amount Display (Debossed / Inset container) -->
     <section class="w-full py-0.5 sm:py-1 select-none">
-      <div class="neu-inset rounded-2xl py-2 sm:py-2.5 px-4 flex items-center justify-between transition-all duration-75 relative">
+      <div class="neu-inset rounded-2xl py-2 sm:py-2.5 px-4 flex items-center justify-between transition-all duration-200 motion-reduce:transition-none relative">
         <button
           type="button"
           class="neu-pressed rounded-xl w-11 h-11 min-h-[44px] min-w-[44px] flex items-center justify-center font-bold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
@@ -133,7 +133,7 @@ import Layout from "../layouts/Layout.astro";
         </button>
         <div class="flex-1 flex flex-col items-center justify-center min-w-0">
           <div
-            class="font-mono font-bold tracking-tight text-center transition-all truncate max-w-full"
+            class="font-mono font-bold tracking-tight text-center transition-all duration-200 motion-reduce:transition-none truncate max-w-full"
             :class="[
               isNegative ? 'text-secondary' : 'text-neu-text',
               amountFontSizeClass
@@ -565,6 +565,33 @@ import Layout from "../layouts/Layout.astro";
             >
               Dark
             </button>
+          </div>
+        </div>
+
+        <!-- Preview Demo Controls -->
+        <div
+          x-show="isPreviewMock"
+          class="my-4 pt-2 border-t border-base-content/10"
+        >
+          <label class="label py-1">
+            <span class="label-text font-semibold text-xs text-neu-text">Preview Demo Data</span>
+          </label>
+          <p class="text-xs text-neu-text-muted mt-1">
+            Changes persist in browser storage without calling Cloudflare Workers or D1.
+          </p>
+          <div class="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              class="neu-raised-sm neu-pressed rounded-xl px-3 py-2 text-xs font-semibold text-warning min-h-[44px]"
+              @click="resetDemoData()"
+            >
+              Reset Demo Data
+            </button>
+            <span
+              x-show="demoResetMessage"
+              x-text="demoResetMessage"
+              class="text-xs font-medium text-success"
+            ></span>
           </div>
         </div>
 

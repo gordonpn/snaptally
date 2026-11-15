@@ -20,6 +20,7 @@ import {
   syncOutbox,
   type TransactionCurrency,
 } from "./outbox.ts";
+import { isPreviewMockEnabled, PREVIEW_DEMO_TOKEN, resetPreviewData } from "./preview-mock.ts";
 
 export interface RecentTransaction {
   id: string;
@@ -311,6 +312,8 @@ export function intakeForm() {
     token: "",
     isSettingsOpen: false,
     settingsTokenInput: "",
+    isPreviewMock: isPreviewMockEnabled(),
+    demoResetMessage: "",
     themeStyle: "neumorphic" as ThemeStyle,
     colorScheme: "system" as ColorScheme,
 
@@ -950,12 +953,28 @@ export function intakeForm() {
 
     openSettings(): void {
       this.settingsTokenInput = this.token;
+      this.demoResetMessage = "";
       this.isSettingsOpen = true;
     },
 
     closeSettings(): void {
       this.settingsTokenInput = this.token;
+      this.demoResetMessage = "";
       this.isSettingsOpen = false;
+    },
+
+    resetDemoData(): void {
+      if (!this.isPreviewMock) {
+        return;
+      }
+      resetPreviewData();
+      this.token = PREVIEW_DEMO_TOKEN;
+      this.settingsTokenInput = PREVIEW_DEMO_TOKEN;
+      this.authenticationFailed = false;
+      this.frequentMerchants = [...DEFAULT_FREQUENT_MERCHANTS];
+      this.demoResetMessage = "Demo data restored.";
+      this.loadFrequentMerchants();
+      this.loadRecentTransactions();
     },
 
     saveToken(): void {
@@ -1550,13 +1569,14 @@ export function intakeForm() {
           this.persistMerchants();
         }
 
-        if (this.isCustomMerchant) {
-          this.clearInferredDefaults();
-          this.isCustomMerchant = false;
-          this.merchantUserSelected = false;
-          this.merchant = "";
-          this.customMerchantInput = "";
-        }
+        this.inferredCategoryBaseline = undefined;
+        this.inferredCardBaseline = undefined;
+        this.parentBucket = "Guilt-Free";
+        this.subcategory = BUCKET_SUBCATEGORIES["Guilt-Free"][0];
+        this.isCustomMerchant = false;
+        this.merchantUserSelected = false;
+        this.merchant = "";
+        this.customMerchantInput = "";
 
         const nextCards = this.cards.includes(trimmedCard)
           ? [...this.cards]
@@ -1571,19 +1591,16 @@ export function intakeForm() {
         );
         this.persistCards();
 
-        if (this.isCustomCard) {
-          this.isCustomCard = false;
-          this.autoCustomCard = false;
-          this.customCardInput = "";
-          this.card = trimmedCard;
-        }
+        this.isCustomCard = false;
+        this.autoCustomCard = false;
+        this.customCardInput = "";
+        this.card = this.cards[0] || "";
 
-        // 3. Trigger background sync
-        const syncResult = await this.syncPendingOutbox();
-        if (syncResult.lastError) {
-          return false;
-        }
-
+        // Local acceptance is complete; network work must not lock the next entry.
+        this.loading = false;
+        void this.syncPendingOutbox().catch((error: unknown) => {
+          this.syncError = error instanceof Error ? error.message : "Unable to sync transactions.";
+        });
         return true;
       } finally {
         this.loading = false;

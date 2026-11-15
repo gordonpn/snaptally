@@ -473,7 +473,9 @@ describe("Intake text input assistance", () => {
 
   it("announces the full amount and credit mode in a named polite status region", () => {
     const markup = fs.readFileSync(path.join(ROOT_DIR, "src/pages/index.astro"), "utf-8");
-    const region = markup.match(/<div\b[^>]*role="status"[^>]*aria-label="Transaction amount"[\s\S]*?<\/div>/)?.[0];
+    const region = markup.match(
+      /<div\b[^>]*role="status"[^>]*aria-label="Transaction amount"[\s\S]*?<\/div>/,
+    )?.[0];
     assert.ok(region);
     assert.match(region, /aria-live="polite"/);
     assert.match(region, /aria-atomic="true"/);

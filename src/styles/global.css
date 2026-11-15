@@ -387,3 +387,12 @@ input[type="search"] {
     }
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .submission-feedback {
+    /* biome-ignore lint/complexity/noImportantStyles: Override Alpine x-transition inline durations for reduced-motion users. */
+    transition-duration: 0s !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Keep reduced-motion overrides effective against inline animation styles. */
+    animation: none !important;
+  }
+}
