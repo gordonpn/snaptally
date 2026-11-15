@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import {
+  intakeForm as createIntakeForm,
   DEFAULT_FREQUENT_MERCHANTS,
-  intakeForm,
   MERCHANTS_STORAGE_KEY,
 } from "../src/scripts/intake-form.ts";
 import {
@@ -28,6 +28,14 @@ import {
   syncOutbox,
 } from "../src/scripts/outbox.ts";
 
+import { isolateBrowser, trackForm } from "./browser-fixture.ts";
+
+isolateBrowser();
+
+function intakeForm(): ReturnType<typeof createIntakeForm> {
+  return trackForm(createIntakeForm());
+}
+
 // Helper mock storage
 class MockLocalStorage {
   private store = new Map<string, string>();
@@ -48,6 +56,14 @@ class MockLocalStorage {
     this.store.clear();
   }
 }
+
+beforeEach(() => {
+  mock.method(Date, "now", () => 1_800_000_000_000);
+});
+afterEach(() => {
+  clearRetryTimer();
+  mock.restoreAll();
+});
 
 describe("Optimistic Outbox Storage", () => {
   beforeEach(async () => {
@@ -403,6 +419,68 @@ describe("Background Sync Manager", () => {
       clearRetryTimer();
     }
   });
+
+  for (const registered of [false, true]) {
+    it(`fires a scheduled retry at its exact deadline (${registered ? "registered listener" : "direct sync"})`, async () => {
+      mock.timers.enable({ apis: ["setTimeout"] });
+      let now = Date.now();
+      mock.method(Date, "now", () => now);
+      await saveOutboxItem({
+        id: "tx-exact-deadline",
+        date: "2026-10-02",
+        card: "Visa",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
+        merchant: "Retry Store",
+        gross_amount: 15,
+        reimbursement: 0,
+        created_at: new Date(now).toISOString(),
+      });
+      let calls = 0;
+      mock.method(globalThis, "fetch", async () => {
+        calls++;
+        return calls === 1
+          ? new Response("Internal Server Error", { status: 500 })
+          : new Response(JSON.stringify({ ok: true }), { status: 201 });
+      });
+      let complete!: () => void;
+      const completed = new Promise<void>((resolve) => {
+        complete = resolve;
+      });
+      const forces: (boolean | undefined)[] = [];
+      const cleanup = registered
+        ? setupSyncListeners((force) => {
+            forces.push(force);
+            complete();
+          })
+        : undefined;
+      try {
+        await syncOutbox({
+          token: "test-token",
+          onStatusChange: (syncing) => {
+            if (!syncing && calls === 2) complete();
+          },
+        });
+        mock.timers.tick(999);
+        assert.strictEqual(calls, 1);
+        assert.deepEqual(forces, []);
+        now += 1000;
+        mock.timers.tick(1);
+        await completed;
+        if (registered) {
+          assert.deepEqual(forces, [false]);
+          assert.strictEqual(calls, 1);
+        } else {
+          assert.strictEqual(calls, 2);
+          assert.deepEqual(await getOutbox(), []);
+        }
+      } finally {
+        cleanup?.();
+        clearRetryTimer();
+        mock.timers.reset();
+      }
+    });
+  }
 
   it("reschedules earliest pending retry on finalization when items remain", async () => {
     const item1: OutboxItem = {
