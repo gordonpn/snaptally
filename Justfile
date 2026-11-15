@@ -35,6 +35,18 @@ test-coverage:
 db-migrate-local:
     echo y | pnpm wrangler d1 migrations apply budget-db --local
 
+# Seed dedicated disposable local D1 state (never remote)
+db-seed-local:
+    node scripts/local-fixtures.mjs seed
+
+# Reset only dedicated owned fixture state, then migrate and seed
+db-reset-local:
+    node scripts/local-fixtures.mjs reset
+
+# Validate SQLite schema, queries and SQL conventions
+db-lint:
+    node scripts/sql-lint.mjs
+
 # List all transactions from the local D1 database
 db-list-local:
     pnpm wrangler d1 execute budget-db --local --command "SELECT * FROM transactions"

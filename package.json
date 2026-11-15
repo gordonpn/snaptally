@@ -10,7 +10,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "dev": "astro build && wrangler pages dev ./dist",
-    "lint": "biome check .",
+    "lint": "biome check . && node scripts/sql-lint.mjs",
     "format": "biome format --write .",
     "test": "node --experimental-test-coverage --test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85 --test-coverage-exclude=\"tests/**\" --import ./tests/register-loader.js --test tests/*.test.ts",
     "test:e2e": "playwright test",

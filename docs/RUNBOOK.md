@@ -40,6 +40,9 @@ Before running deployment commands, ensure the following prerequisites are met:
 
 ---
 
+For synthetic local fixtures, safe resets, and SQL checks, see
+[Local development database](local-database.md).
+
 ## 3. Remote Database Provisioning (Cloudflare D1)
 
 SnapTally requires a production Cloudflare D1 database named `budget-db`.
