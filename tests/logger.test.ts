@@ -71,6 +71,67 @@ describe("structured logger", () => {
       assert.strictEqual(sanitized.amount, 25.5);
     });
 
+    it("redacts compound sensitive keys while preserving ordinary request context", () => {
+      const keys = [
+        "expectedToken",
+        "requestToken",
+        "authHeader",
+        "apiToken",
+        "tokenHash",
+        "clientSecretValue",
+        "storedPassword",
+        "sessionCookie",
+        "x-api-key-value",
+      ];
+      const metadata = Object.fromEntries(keys.map((key) => [key, "private-value"]));
+      const sanitized = sanitizeMetadata({
+        ...metadata,
+        method: "POST",
+        pathname: "/api/transactions",
+        author: "operator",
+        status: 401,
+      }) as Record<string, unknown>;
+
+      for (const key of keys) assert.equal(sanitized[key], "[REDACTED]");
+      assert.equal(sanitized.method, "POST");
+      assert.equal(sanitized.pathname, "/api/transactions");
+      assert.equal(sanitized.author, "operator");
+      assert.equal(sanitized.status, 401);
+    });
+
+    it("redacts bearer values in strings, arrays, and errors without mutating input", () => {
+      const error = new Error("Rejected Authorization: bEaReR abc.DEF_~+/=-; retry later");
+      const input = {
+        detail: "Bearer first-token, Bearer second-token",
+        values: ["Bearer third-token"],
+        error,
+      };
+      const sanitized = sanitizeMetadata(input);
+      assert.deepEqual(sanitized, {
+        detail: "Bearer [REDACTED], Bearer [REDACTED]",
+        values: ["Bearer [REDACTED]"],
+        error: { name: "Error", message: "Rejected Authorization: Bearer [REDACTED]; retry later" },
+      });
+      assert.equal(input.values[0], "Bearer third-token");
+      assert.equal(error.message, "Rejected Authorization: bEaReR abc.DEF_~+/=-; retry later");
+      assert.equal(
+        sanitizeMetadata("ordinary request information"),
+        "ordinary request information",
+      );
+    });
+
+    it("redacts bearer credentials in the top-level message before invoking a sink", () => {
+      const records: LogRecord[] = [];
+      const testLogger = new Logger({ sink: (entry) => records.push(entry) });
+      const entry = testLogger.error("Request failed: Bearer top-level-secret", {
+        error: new Error("Request used Bearer nested-secret"),
+      });
+      assert.equal(entry?.message, "Request failed: Bearer [REDACTED]");
+      assert.equal(records[0], entry);
+      assert.ok(!JSON.stringify(records).includes("top-level-secret"));
+      assert.ok(!JSON.stringify(records).includes("nested-secret"));
+    });
+
     it("recursively redacts nested objects and arrays", () => {
       const nested = {
         headers: {

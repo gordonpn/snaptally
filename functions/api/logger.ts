@@ -8,10 +8,19 @@ const LOG_LEVEL_SEVERITY: Record<LogLevel, number> = {
 };
 
 const SENSITIVE_KEY_PATTERN =
-  /^(authorization|token|bearer|secret|password|credential|cookie|(?:x[_-]?)?api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key)$/i;
+  /(?:authorization|auth[_-]?header|token|bearer|secret|password|passwd|credential|cookie|api[_-]?key|private[_-]?key)/i;
 const REDACTED = "[REDACTED]";
+const BEARER_VALUE_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
+
+function redactBearerValues(value: string): string {
+  return value.replace(BEARER_VALUE_PATTERN, `Bearer ${REDACTED}`);
+}
 
 export function sanitizeMetadata(value: unknown, seen = new WeakSet()): unknown {
+  if (typeof value === "string") {
+    return redactBearerValues(value);
+  }
+
   if (typeof value === "bigint") {
     return value.toString();
   }
@@ -22,8 +31,8 @@ export function sanitizeMetadata(value: unknown, seen = new WeakSet()): unknown 
 
   if (value instanceof Error) {
     return {
-      name: value.name,
-      message: value.message,
+      name: redactBearerValues(value.name),
+      message: redactBearerValues(value.message),
     };
   }
 
@@ -97,7 +106,7 @@ export class Logger {
       ...sanitized,
       timestamp: new Date().toISOString(),
       level,
-      message,
+      message: redactBearerValues(message),
     };
 
     this.sink(entry, level);
