@@ -43,13 +43,33 @@ amounts explicitly; do not copy zero-value demo rows into an active month.
   filter to USD or use an explicit, documented CAD-to-USD conversion before
   comparing spend with these targets. Never sum raw USD and CAD values together.
   Currency normalization remains part of #63.
-- The four-bucket analysis model includes `Investments`, while current intake
-  records investment transfers as `Savings -> Investments`. The demo's
-  `Investments -> Investments` row is an analysis placeholder. It will not match
-  those transactions without the explicit taxonomy mapping to be reconciled in
-  #41. This migration does not move or recategorize historical records.
-- Bucket and subcategory strings are intentionally not constrained to a new SQL
-  taxonomy. Callers must validate against the agreed profile before writing real
-  targets. This preserves compatibility with the upcoming taxonomy work.
+- `src/config/budget-profile.ts` defines the four-bucket analysis profile, derived
+  from intake. `toAnalysisCategory` maps `Savings -> Investments` transactions to
+  `Investments -> Investments` without mutating stored rows. Other recognized
+  spending categories retain their pair; Income and unknown categories return
+  `null` and must be excluded or surfaced separately by analysis callers.
+- Writers must call `isMonthlyBudgetTarget` before persisting real targets. It
+  requires an analysis bucket/subcategory pair, an exact `YYYY-MM` month (01–12),
+  and a finite nonnegative numeric USD `target_amount`. It rejects the intake
+  alias `Savings -> Investments`; targets use `Investments -> Investments` so
+  investments cannot have two target identities. SQL strings remain unconstrained
+  for historical compatibility; this helper does not install API validation.
+- `CSP_BENCHMARKS` supplies percentage ranges of net take-home pay: Fixed Costs
+  50–60%, Investments 10% or more, Savings 5–10%, and Guilt-Free 20–35%.
+  These are reference metadata, not actual configured budgets, and must not be
+  inserted as dollar targets. `CATEGORY_CARD_PREFERENCES` has one entry per
+  analysis category with `preferred_card: null` (no hint). Callers must supply
+  the owner's actual preferences rather than assume a wallet.
+
+```ts
+import { isMonthlyBudgetTarget, toAnalysisCategory } from "../src/config/budget-profile.ts";
+
+const category = toAnalysisCategory({ parent_bucket: "Savings", subcategory: "Investments" });
+// category: { parent_bucket: "Investments", subcategory: "Investments" }
+const target = { year_month: "2026-11", ...category, target_amount: 250 };
+if (!isMonthlyBudgetTarget(target)) throw new Error("Invalid monthly budget target");
+// Persist target with an application-generated ID through a parameterized writer.
+```
+
 - No budget CRUD API, pacing computation, alerts, FX conversion, or UI is included
   here. This schema is the foundation for #42, #44, and #36.

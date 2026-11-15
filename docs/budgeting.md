@@ -137,9 +137,11 @@ With the dual-scope expansion into both intake and analysis, SnapTally computes 
 
 ## 6. Credit Card Multiplier and Payment Routing Matrix
 
-> **Target Architecture Note:** The 6-bucket model below (`Fixed Essentials`, `Variable Essentials`, `Guilt-Free Living`, `Debt Service`, `Sinking Funds`, `Long-Term Wealth`) represents the planned expansion specified in Issue #41, refining the baseline 4-bucket schema from Section 2.
-
-To maximize cash flow rewards without cognitive friction at the point of sale, categories map to target payment methods based on reward multipliers:
+> **Illustrative, unimplemented proposal:** This six-bucket matrix is not the
+> active taxonomy or a planned expansion in issue #41. The implemented contract
+> remains the [four-bucket analysis profile](monthly-budgets.md#contracts-for-downstream-analysis).
+> Card names and rewards below are examples, not the owner's wallet or application
+> defaults. Shared category preferences start at `null` (no routing hint).
 
 | Category Bucket | Subcategory | Target Card / Payment Method | Reward Optimization |
 | :--- | :--- | :--- | :--- |
