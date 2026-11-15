@@ -14,6 +14,7 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { localFixtures } from "../scripts/local-fixtures.mjs";
 import { conventions, lintSql } from "../scripts/sql-lint.mjs";
+import { BUCKET_SUBCATEGORIES, type ParentBucket } from "../src/config/intake.ts";
 
 const root = resolve(import.meta.dirname, "..");
 
@@ -51,6 +52,14 @@ test("local fixtures persist, seed idempotently and reset only owned state", () 
     let db = new DatabaseSync(resolve(temp, ".wrangler/dev-fixtures/test.sqlite"));
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM transactions").get()?.n, 8);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM monthly_budgets").get()?.n, 4);
+    for (const row of db.prepare("SELECT parent_bucket, subcategory FROM transactions").all()) {
+      const categories: readonly string[] = BUCKET_SUBCATEGORIES[row.parent_bucket as ParentBucket];
+      assert.ok(
+        categories?.includes(String(row.subcategory)),
+        `Invalid fixture category: ${row.parent_bucket}/${row.subcategory}`,
+      );
+    }
+
     const merchants = db
       .prepare(readFileSync(resolve(root, "queries/select_frequent_merchants.sql"), "utf8"))
       .all(20)
