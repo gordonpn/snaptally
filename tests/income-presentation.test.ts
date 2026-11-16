@@ -44,5 +44,11 @@ describe("Income presentation", () => {
       assert.equal(amountClass(tx), "text-secondary");
       assert.equal(amountText(tx), `${prefix}-$12.50`);
     });
+    it(`preserves a negative ${currency} Income amount from historical or preview data`, () => {
+      const tx = { parent_bucket: "Income", net_spend: "-25", currency };
+
+      assert.equal(amountClass(tx), "text-secondary");
+      assert.equal(amountText(tx), `${prefix}-$25.00`);
+    });
   }
 });
