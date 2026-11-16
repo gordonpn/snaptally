@@ -2,10 +2,12 @@ name: DeepSeek Review
 
 on:
   pull_request:
-    types: [ready_for_review]
+    types: [opened, ready_for_review]
+  issue_comment:
+    types: [created, edited]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -17,12 +19,22 @@ jobs:
     name: runner / deepseek-review
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+    if: |
+      github.event.sender.type != 'Bot' &&
+      github.actor != 'dependabot[bot]' &&
+      ((github.event_name == 'pull_request' &&
+        !github.event.pull_request.draft &&
+        github.event.pull_request.head.repo.full_name == github.repository) ||
+        (github.event_name == 'issue_comment' &&
+         github.event.issue.pull_request &&
+         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
+         contains(github.event.comment.body, '/review')))
     steps:
       - name: DeepSeek Code Review
         uses: hustcer/deepseek-review@15a228bf15e01ef1f4d195eab4febbd7809dd2ed # v1
         with:
           chat-token: ${{ secrets.DEEPSEEK_API_KEY }}
+          watch-mention: '/review'
           sys-prompt: |
             # Role
             Act as a skeptical correctness reviewer. Assume the implementation may be subtly wrong even if tests pass.
