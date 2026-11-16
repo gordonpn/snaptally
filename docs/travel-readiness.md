@@ -22,6 +22,11 @@ Use SnapTally for supported, correctly labeled expenses only after the checklist
 
 ## Evidence and gaps
 
+The intake keypad has a lower entry ceiling than the API: `maxCents` is
+10,000,000, equivalent to 100,000 in the current two-decimal currencies. The API
+accepts up to 1,000,000 in magnitude. Native-currency validation must cover both
+limits, particularly for VND; API acceptance alone does not establish keypad entry.
+
 The [architecture](architecture.md) describes intended capabilities as well as implemented ones. The following paths are the evidence for current behavior.
 
 - [Intake](../src/scripts/intake-form.ts) defaults the transaction date through `getTodayDate`, stores a client UUID and `created_at`, and queues before sync. The amount keypad shifts cents and shows two decimal places. [Outbox types](../src/scripts/outbox.ts) restrict currency to USD/CAD; [API validation](../functions/api/transactions.ts) accepts only those currencies and caps absolute amount at 1,000,000. This ceiling and minor-unit convention need review for VND. [Insertion SQL](../queries/insert_transaction.sql) stores currency but no captured FX rate; [monthly summary SQL](../queries/select_month_summary.sql) sums USD expenses only. [#63](https://github.com/gordonpn/snaptally/issues/63) proposes CAD/USD normalization and Montreal assets, not travel currencies. Adding a selector alone cannot deliver correct local-currency accounting.
