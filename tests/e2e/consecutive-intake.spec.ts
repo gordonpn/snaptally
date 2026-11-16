@@ -4,24 +4,31 @@ import { enterExpense, openIntake, readOutbox } from "./helpers";
 // Keep requests observable by Playwright; service workers can bypass network routes.
 test.use({ serviceWorkers: "block" });
 
-async function expectResetAndEnterSecond(page: Page, secondMerchant: string): Promise<void> {
-  await expect(page.getByText("USD $0.00", { exact: true })).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Merchant name" })).toHaveValue("");
+async function expectResetAndEnterSecond(
+  page: Page,
+  secondMerchant: string,
+  unlockDeadline: number,
+): Promise<void> {
+  const remaining = () => Math.max(1, unlockDeadline - Date.now());
+  await expect(page.getByText("USD $0.00", { exact: true })).toBeVisible({ timeout: remaining() });
+  await expect(page.getByRole("combobox", { name: "Merchant name" })).toHaveValue("", {
+    timeout: remaining(),
+  });
   await expect(
     page
       .getByRole("group", { name: "Parent bucket selection", exact: true })
       .getByRole("button", { name: "Guilt-Free", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
+  ).toHaveAttribute("aria-pressed", "true", { timeout: remaining() });
   await expect(
     page
       .getByRole("group", { name: "Subcategory selection", exact: true })
       .getByRole("button", { name: "Dining", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
+  ).toHaveAttribute("aria-pressed", "true", { timeout: remaining() });
   const save = page.getByRole("button", { name: "Save Transaction", exact: true });
-  await expect(save).toBeDisabled();
+  await expect(save).toBeDisabled({ timeout: remaining() });
   for (const digit of ["1", "2", "3"]) {
     const key = page.getByRole("button", { name: digit, exact: true });
-    await expect(key).toBeEnabled({ timeout: 1_000 });
+    await expect(key).toBeEnabled({ timeout: remaining() });
     await key.click();
   }
   await expect(page.getByText("USD $1.23", { exact: true })).toBeVisible();
@@ -87,12 +94,13 @@ test("consecutive entry resets inputs while sync POST is pending", async ({ page
       (request) => request.method() === "POST" && request.url().endsWith("/api/transactions"),
     );
     await page.getByRole("button", { name: "Save Transaction", exact: true }).click();
+    const unlockDeadline = Date.now() + 1_000;
     await postStarted;
     await expect.poll(() => heldPosts).toBe(1);
     await expect.poll(async () => (await readOutbox(page)).length).toBe(1);
 
     const secondMerchant = `Second entry ${crypto.randomUUID()}`;
-    await expectResetAndEnterSecond(page, secondMerchant);
+    await expectResetAndEnterSecond(page, secondMerchant, unlockDeadline);
     await expectOutboxPair(page, firstMerchant, secondMerchant);
   } finally {
     for (const release of releasers) release();
@@ -107,10 +115,11 @@ test("consecutive entry resets inputs while offline", async ({ page, context }) 
   await selectFixedGroceries(page);
   await context.setOffline(true);
   await page.getByRole("button", { name: "Save Transaction", exact: true }).click();
+  const unlockDeadline = Date.now() + 1_000;
   await expect.poll(async () => (await readOutbox(page)).length).toBe(1);
 
   const secondMerchant = `Offline second ${crypto.randomUUID()}`;
-  await expectResetAndEnterSecond(page, secondMerchant);
+  await expectResetAndEnterSecond(page, secondMerchant, unlockDeadline);
   await expectOutboxPair(page, firstMerchant, secondMerchant);
 });
 
@@ -157,8 +166,8 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     } else {
       await expect.poll(async () => (await observations()).elapsed.length).toBeGreaterThan(0);
       const elapsed = (await observations()).elapsed[0];
-      expect(elapsed).toBeGreaterThanOrEqual(0.25);
-      expect(elapsed).toBeLessThanOrEqual(0.8);
+      expect(elapsed).toBeGreaterThanOrEqual(0.3);
+      expect(elapsed).toBeLessThanOrEqual(0.5);
     }
     await expect(feedback).toHaveCSS("opacity", "1");
   });
