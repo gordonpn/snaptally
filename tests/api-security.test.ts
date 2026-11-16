@@ -68,7 +68,7 @@ describe("transaction input security", () => {
     for (const parent_bucket of ["Guilt-Free", "Income"]) {
       const subcategory = parent_bucket === "Income" ? "Salary" : "Dining";
       for (const gross_amount of [-MAX_AMOUNT, -0.01, 0, 0.01, MAX_AMOUNT]) {
-        for (const reimbursement of [undefined, 0, 0.01]) {
+        for (const reimbursement of [undefined, null, 0, 0.01]) {
           const validAmount =
             gross_amount !== 0 && (parent_bucket !== "Income" || gross_amount > 0);
           const validReimbursement = gross_amount > 0 || !reimbursement;
