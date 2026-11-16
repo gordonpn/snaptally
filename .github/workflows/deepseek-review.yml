@@ -14,6 +14,7 @@ jobs:
   authorize:
     name: runner / authorize-deepseek-review
     if: |
+      github.event.sender.type != 'Bot' &&
       github.actor != 'dependabot[bot]' &&
       github.actor != 'github-actions[bot]' &&
       ((github.event_name == 'pull_request' &&
@@ -32,6 +33,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
       - name: Verify command and pull request origin
         id: authorize
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -53,7 +55,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Checkout trusted authorization script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+      - name: Recheck live review eligibility
+        id: recheck
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { default: authorize } = await import('${{ github.workspace }}/.github/scripts/authorize-pr-agent.js');
+            await authorize({ core, context, github });
       - name: DeepSeek Code Review
+        if: steps.recheck.outputs.allowed == 'true'
         uses: hustcer/deepseek-review@15a228bf15e01ef1f4d195eab4febbd7809dd2ed # v1
         with:
           chat-token: ${{ secrets.DEEPSEEK_API_KEY }}

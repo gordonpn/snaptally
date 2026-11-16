@@ -680,3 +680,6 @@ the comment. Each workflow uses a separate read-only authorization job that chec
 live PR's origin, open state, and draft state before any secret-bearing review job or
 review concurrency group can run. It does not check out PR code. Ordinary review
 conversation does not invoke either reviewer, and fork PRs remain excluded.
+
+DeepSeek authorization loads its helper from the trusted base revision, rejects
+bot senders, and repeats the live eligibility check immediately before review.
