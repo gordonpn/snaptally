@@ -2,6 +2,13 @@
 
 This document records non-obvious engineering and implementation decisions made in SnapTally, ordered newest first. Architectural or hard-to-reverse decisions are promoted to formal Architecture Decision Records under `docs/adr/` where adopted.
 
+## 2026-11-15: Personal cash-flow focus, Dec 12 travel readiness cutline, and scope retirement
+
+- Decision: Focus SnapTally over the next 12 months strictly as a personal Cash-Flow and Spending Decision System (retiring Google Sheets from the owner's workflow). Split delivery into Horizon 1 (before December 12, 2026 travel: `#204` test stability, non-card `Checking`/`e-Transfer` and ring-fenced `Property / CAD` `#63`, native `TWD`/`HKD`/`VND` cash intake with background-cached editable `fx_rate` `#215`, timezone validation `#216`, optional `trip` tag and Active Trip allowance `#224`, and a non-blocking Store `% budget used` guardrail strip `#225`) and Horizon 2 (post-trip Home Overview `#42`/`#44` with Rolling, Rollover, YTD, same-day MTD comparisons, deterministic anomaly flags, and simple CSV backup `#226`). Keep SQL taxonomy flexible rather than freezing a 6-bucket schema, drop net-worth balance snapshots and heavy duplex tax/interest accounting, defer LLM/alert/rewards automation (`#36`, `#37`, `#39`, `#60`, `#62`, `#158`), and retire multi-tenancy (`#21`-`#23`) and enterprise telemetry/OpenAPI (`#53`, `#79`, `#123`, `#124`).
+- Rationale: Unlocks immediate point-of-decision and longitudinal value on real transaction data before international departure without stalling behind premature multi-user, net-worth, or taxonomy-freeze abstractions.
+- Rejected alternatives: Executing the full multi-tenant/enterprise/6-bucket backlog as originally ordered, or deferring all multi-currency/trip features past departure.
+- Source: [product-direction.md](product-direction.md)
+
 ## 2026-11-13: Bounded browser-local offline cache for first-page Activity data
 
 - Decision: Persist only the latest successful first page and monthly summary of Activity transactions in browser storage keyed by the token's SHA-256 fingerprint and exact query parameters (month, bucket, search, and page size), restoring cached data on matching offline network failures with a visible notice and disabled pagination.
