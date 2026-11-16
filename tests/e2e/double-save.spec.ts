@@ -13,9 +13,36 @@ test("rapid repeated Save activation queues exactly one complete transaction", a
   await expect(save).toBeEnabled();
 
   // Dispatch both activations in one task, before Alpine updates the disabled attribute.
-  await save.evaluate((button: HTMLButtonElement) => {
+  await save.evaluate(async (button: HTMLButtonElement) => {
+    const alpine: unknown = Reflect.get(window, "Alpine");
+    if (
+      !alpine ||
+      typeof alpine !== "object" ||
+      !("$data" in alpine) ||
+      typeof alpine.$data !== "function"
+    ) {
+      throw new Error("Alpine controller is unavailable");
+    }
+    const state: unknown = alpine.$data(button);
+    if (
+      !state ||
+      typeof state !== "object" ||
+      !("submitTransaction" in state) ||
+      typeof state.submitTransaction !== "function"
+    ) {
+      throw new Error("Submission controller is unavailable");
+    }
+    const original = state.submitTransaction.bind(state);
+    const submissions: Promise<unknown>[] = [];
+    state.submitTransaction = () => {
+      const submission = Promise.resolve(original());
+      submissions.push(submission);
+      return submission;
+    };
     button.click();
     button.click();
+    await Promise.all(submissions);
+    state.submitTransaction = original;
   });
 
   await expect(page.getByRole("status").filter({ hasText: "Saved" })).toContainText("4.50");
@@ -33,6 +60,8 @@ test("rapid repeated Save activation queues exactly one complete transaction", a
       parent_bucket: "Guilt-Free",
       subcategory: "Dining",
       reimbursement: 0,
+      date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      created_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
     }),
   ]);
   await expect(page.getByText("USD $0.00", { exact: true })).toBeVisible();
