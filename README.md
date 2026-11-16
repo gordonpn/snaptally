@@ -115,6 +115,10 @@ starts Wrangler on `127.0.0.1:8798`. Keep that port free. It stops the server an
 removes its temporary assets and database after the run. No Cloudflare login,
 remote database, browser installation, or application build is required. CI runs
 this suite alongside `pnpm test` and `pnpm run typecheck`.
+The local harness supports macOS and Linux process groups; Windows is rejected
+before creating state. SIGINT and SIGTERM stop child processes before removing
+temporary state and exiting. Unauthorized requests still use D1 rate-limit
+bookkeeping before authentication, but cannot read or write transaction data.
 
 ## Documentation
 

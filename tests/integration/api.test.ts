@@ -7,6 +7,11 @@ import { join, resolve } from "node:path";
 import { after, before, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import type { PaginatedTransactionsResponse } from "../../functions/api/transactions.ts";
+import { stop } from "./process.ts";
+
+if (process.platform === "win32") {
+  throw new Error("The local integration harness supports macOS and Linux process groups.");
+}
 
 const baseURL = "http://127.0.0.1:8798";
 const token = randomUUID();
@@ -34,25 +39,6 @@ function launch(args: string[]): ChildProcess {
     });
   }
   return child;
-}
-
-async function stop(child: ChildProcess): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  const exited = new Promise<void>((done) => child.once("exit", () => done()));
-  const kill = (signal: NodeJS.Signals) => {
-    try {
-      if (child.pid) process.kill(-child.pid, signal);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-    }
-  };
-  kill("SIGTERM");
-  const timer = setTimeout(() => kill("SIGKILL"), 5_000);
-  try {
-    await exited;
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 async function request(path: string, init: RequestInit = {}): Promise<Response> {
@@ -169,13 +155,20 @@ before(
   { timeout: 150_000 },
 );
 
-after(async () => {
+async function cleanup(): Promise<void> {
   try {
     await Promise.all([...children].map(stop));
   } finally {
     if (directory) await rm(directory, { recursive: true, force: true });
   }
-});
+}
+
+after(cleanup);
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    void cleanup().finally(() => process.exit(signal === "SIGINT" ? 130 : 143));
+  });
+}
 
 test("HTTP API through Pages Functions and migrated local D1", async (t) => {
   await t.test(
