@@ -13,7 +13,11 @@ export function conventions(sql, keywords) {
     }
   }
   const projections = code.replace(/COUNT\s*\(\s*\*\s*\)/gi, "COUNT(1)");
-  if (/\bSELECT\s+(?:DISTINCT\s+)?(?:\w+\.)?\*|,\s*(?:\w+\.)?\*/i.test(projections)) {
+  if (
+    /\bSELECT\s+(?:(?:DISTINCT|ALL)\s+)?(?:\w+\s*\.\s*)?\*|,\s*(?:\w+\s*\.\s*)?\*/i.test(
+      projections,
+    )
+  ) {
     errors.push("SELECT requires explicit columns (COUNT(*) is allowed)");
   }
   for (const insert of code.matchAll(/\bINSERT\s+(?:OR\s+\w+\s+)?INTO\s+\w+\b\s*([^\s])/gi)) {
@@ -67,7 +71,7 @@ export function lintSql(root = process.cwd()) {
   if (errors.length) throw new Error(errors.join("\n"));
 }
 
-if (import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   lintSql();
   console.log("SQLite schema, query compilation, conventions and index probes passed.");
 }

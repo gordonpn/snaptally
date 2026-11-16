@@ -22,7 +22,8 @@ export function localFixtures(args, root = process.cwd(), run = spawnSync) {
   const parent = resolve(root, ".wrangler");
   const state = resolve(parent, "dev-fixtures");
   for (const path of [parent, state]) {
-    if (existsSync(path) && (!lstatSync(path).isDirectory() || lstatSync(path).isSymbolicLink())) {
+    const entry = lstatSync(path, { throwIfNoEntry: false });
+    if (entry && (!entry.isDirectory() || entry.isSymbolicLink())) {
       throw new Error(`Refusing non-directory or symlink: ${path}`);
     }
   }
@@ -57,6 +58,6 @@ export function localFixtures(args, root = process.cwd(), run = spawnSync) {
   }
 }
 
-if (import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   localFixtures(process.argv.slice(2));
 }

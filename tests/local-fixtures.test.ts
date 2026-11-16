@@ -87,6 +87,9 @@ test("local fixtures persist, seed idempotently and reset only owned state", () 
     symlinkSync(resolve(temp, ".wrangler/state"), resolve(temp, ".wrangler/dev-fixtures"));
     assert.throws(() => localFixtures(["reset"], temp, run), /symlink/);
     rmSync(resolve(temp, ".wrangler/dev-fixtures"));
+    symlinkSync(resolve(temp, "missing"), resolve(temp, ".wrangler/dev-fixtures"));
+    assert.throws(() => localFixtures(["reset"], temp, run), /symlink/);
+    rmSync(resolve(temp, ".wrangler/dev-fixtures"));
     assert.throws(() => localFixtures(["seed"], temp, () => ({ status: 1 })), /Wrangler failed/);
     assert.throws(
       () => localFixtures(["seed"], temp, () => ({ error: new Error("spawn failed") })),
@@ -102,7 +105,9 @@ test("SQL checks compile actual schema and queries and catch convention violatio
   const keywords = ["SELECT", "INSERT", "INTO", "VALUES"];
   assert.deepEqual(conventions("-- select *\nSELECT 'select *', COUNT(*) FROM t", keywords), []);
   assert.match(conventions("select * FROM t", keywords).join("\n"), /uppercase.*explicit/s);
-  assert.match(conventions("SELECT t.* FROM t", keywords).join("\n"), /explicit/);
+  for (const query of ["SELECT t.* FROM t", "SELECT ALL * FROM t", "SELECT t . * FROM t"]) {
+    assert.match(conventions(query, keywords).join("\n"), /explicit/);
+  }
   assert.match(conventions("INSERT INTO t VALUES (1)", keywords).join("\n"), /column list/);
   assert.deepEqual(conventions("INSERT INTO t (id) VALUES (1)", keywords), []);
   const temp = mkdtempSync(resolve(tmpdir(), "snaptally-sql-lint-"));
