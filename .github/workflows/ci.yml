@@ -47,5 +47,8 @@ jobs:
       - name: Run unit tests
         run: pnpm test
 
+      - name: Run Pages and D1 integration tests
+        run: pnpm test:integration
+
       - name: Build static assets
         run: pnpm build
