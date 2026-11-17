@@ -11,6 +11,17 @@ function configuration(): Record<string, string> {
   };
 }
 
+test("overlapping reviews publish separate comments", () => {
+  const workflow = readFileSync(
+    new URL("../.github/workflows/pr-agent.yml", import.meta.url),
+    "utf8",
+  );
+  const settings = readFileSync(new URL("../.pr_agent.toml", import.meta.url), "utf8");
+
+  assert.match(workflow, /PR_REVIEWER\.PERSISTENT_COMMENT: "false"/u);
+  assert.match(settings, /\[pr_reviewer\]\s+persistent_comment = false/u);
+});
+
 for (const workflow of ["pr-agent", "deepseek-review"]) {
   test(`${workflow} fails before review when required configuration is absent`, () => {
     const source = readFileSync(

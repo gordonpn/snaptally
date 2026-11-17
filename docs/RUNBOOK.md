@@ -687,6 +687,8 @@ bot senders, and repeats the live eligibility check immediately before review.
 Both reviewers run for opened, reopened, ready-for-review and synchronize events
 on eligible same-repository human PRs. Each run has a unique concurrency group so
 new commits do not cancel reviews already queued or running. PR-Agent's pinned
+publisher creates a separate comment for each review, preventing an older run
+from replacing a newer result in a shared persistent comment. The
 runner requires `handle_push_trigger` and `/review` push commands for synchronize.
 Configure the repository variable `DEEPSEEK_API_BASE` with the explicit HTTPS API
 base URL and the `DEEPSEEK_API_KEY` secret. Both workflows reject absent or empty

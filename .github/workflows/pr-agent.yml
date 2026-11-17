@@ -66,6 +66,7 @@ jobs:
         uses: The-PR-Agent/pr-agent@e673a02076ce09a4726c3d0c3cc85780e59ca52b # v0.50.0
         env:
           CONFIG.MODEL: "deepseek/deepseek-chat"
+          PR_REVIEWER.PERSISTENT_COMMENT: "false"
           CONFIG.FALLBACK_MODELS: '["deepseek/deepseek-chat"]'
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           OPENAI_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
