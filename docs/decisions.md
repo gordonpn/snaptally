@@ -1,5 +1,12 @@
 # Implementation Decisions Log
 
+## 2026-11-16: Preserve formatter scope during the Biome upgrade
+
+- Decision: Align the configuration schema and hosted Biome version with the installed 2.6.7 dependency; leave Markdown and YAML formatting disabled.
+- Rationale: The upgrade enables additional file formats by default, making existing local lint fail even while hosted review checks pass.
+- Rejected alternatives: Reformatting unrelated documentation and configuration as part of a dependency update.
+- Source: [Biome dependency update](https://github.com/gordonpn/snaptally/pull/234)
+
 This document records non-obvious engineering and implementation decisions made in SnapTally, ordered newest first. Architectural or hard-to-reverse decisions are promoted to formal Architecture Decision Records under `docs/adr/` where adopted.
 
 ## 2026-11-15: Personal cash-flow focus, Dec 12 travel readiness cutline, and scope retirement
