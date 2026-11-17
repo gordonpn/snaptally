@@ -60,10 +60,10 @@ This document records non-obvious engineering and implementation decisions made 
 
 ## 2026-10-19: IndexedDB outbox with dead-letter quarantine and Cloudflare D1 storage
 
-- Decision: Write intake submissions to IndexedDB (`outbox`) first, isolate HTTP 400 validation failures in a `dead_letter_queue` store while pausing sequential background sync on HTTP 401, and persist transactions in Cloudflare D1 serverless SQLite (formal ADR 0001 proposed in open PR [#187](https://github.com/gordonpn/snaptally/pull/187)).
+- Decision: Write intake submissions to IndexedDB (`outbox`) first, isolate HTTP 400 validation failures in a `dead_letter_queue` store while pausing sequential background sync on HTTP 401, and persist transactions in Cloudflare D1 serverless SQLite (formalized in [ADR 0001](adr/0001-use-d1-for-local-first-storage.md)).
 - Rationale: Preserve 0ms perceived checkout intake offline and prevent a single malformed payload from blocking healthy queued items or suffering silent loss.
 - Rejected alternatives: Blocking the entire outbox or silently dropping rejected HTTP 400 items.
-- Source: [#102 feat: implement dead-letter queue for failed transaction persistence](https://github.com/gordonpn/snaptally/pull/102), [#95 Dead-letter queue for failed transaction persistence](https://github.com/gordonpn/snaptally/issues/95), [#187 (open) docs(adr): record adr 0001 for cloudflare d1 local-first storage](https://github.com/gordonpn/snaptally/pull/187), [architecture.md](architecture.md)
+- Source: [#102 feat: implement dead-letter queue for failed transaction persistence](https://github.com/gordonpn/snaptally/pull/102), [#95 Dead-letter queue for failed transaction persistence](https://github.com/gordonpn/snaptally/issues/95), [ADR 0001: Use D1 for local-first storage](adr/0001-use-d1-for-local-first-storage.md), [architecture.md](architecture.md)
 
 ## 2026-10-13: Deterministic transaction normalizer and SQLite/LLM analytics boundary
 
