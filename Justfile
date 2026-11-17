@@ -3,6 +3,14 @@
 default:
     @just --list
 
+# Install the exact developer tools declared in .mise.toml
+toolchain-install:
+    mise install
+
+# Probe executables in the mise environment against the declared pins
+toolchain-verify:
+    mise exec -- bash scripts/verify-toolchain.sh
+
 # Install project dependencies
 install:
     pnpm install

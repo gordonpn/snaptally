@@ -61,9 +61,22 @@ snaptally/
 
 ### Prerequisites
 
-- Node.js (v22.18.0 or higher)
-- pnpm
-- Cloudflare Wrangler CLI
+- [mise](https://mise.jdx.dev/getting-started.html) to install the exact Node.js,
+  pnpm, Biome, and actionlint versions in [.mise.toml](.mise.toml).
+- [just](https://just.systems/man/en/) for the optional task runner recipes.
+
+From the repository root, review and trust the config, then install and verify:
+
+```bash
+mise trust
+mise install
+mise exec -- bash scripts/verify-toolchain.sh
+```
+
+Activate mise in your shell before the commands below, or prefix commands with
+`mise exec --`. With just installed, use `just toolchain-install` and
+`just toolchain-verify`. See [toolchain onboarding](docs/toolchain.md) for shell
+setup and version upgrades. Wrangler is installed with the project dependencies.
 
 ### Environment Variables
 
