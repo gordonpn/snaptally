@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { intakeForm, MERCHANTS_STORAGE_KEY } from "../src/scripts/intake-form.ts";
+import {
+  intakeForm as createIntakeForm,
+  MERCHANTS_STORAGE_KEY,
+} from "../src/scripts/intake-form.ts";
+import { isolateBrowser, trackForm } from "./browser-fixture.ts";
+
+isolateBrowser();
+
+function intakeForm(): ReturnType<typeof createIntakeForm> {
+  return trackForm(createIntakeForm());
+}
 
 it("restores cached merchant suggestions on startup without losing built-in merchants", async () => {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");

@@ -5,9 +5,10 @@ import {
   COLOR_SCHEME_STORAGE_KEY,
   compareAlphabetical,
   computeCardUsage,
+  intakeForm as createIntakeForm,
   DEFAULT_FREQUENT_MERCHANTS,
   getTodayDate,
-  intakeForm,
+  MERCHANTS_STORAGE_KEY,
   parseTimestamp,
   type RecentTransaction,
   sortCards,
@@ -16,6 +17,14 @@ import {
   TOKEN_STORAGE_KEY,
 } from "../src/scripts/intake-form.ts";
 import { clearDeadLetterQueue, clearOutbox, clearRetryTimer } from "../src/scripts/outbox.ts";
+
+import { isolateBrowser, trackForm } from "./browser-fixture.ts";
+
+isolateBrowser();
+
+function intakeForm(): ReturnType<typeof createIntakeForm> {
+  return trackForm(createIntakeForm());
+}
 
 class MockElement {
   private attrs: Map<string, string> = new Map();
@@ -842,6 +851,16 @@ describe("intakeForm Token Persistence (Scenario 3)", () => {
       writable: true,
       configurable: true,
     });
+  });
+
+  it("restores cached merchants on startup and retains each built-in merchant once", () => {
+    mockStorage.setItem(MERCHANTS_STORAGE_KEY, JSON.stringify(["Local Bakery", "Trader Joe's"]));
+    const form = intakeForm();
+    form.init();
+    assert.ok(form.allMerchants.includes("Local Bakery"));
+    for (const merchant of DEFAULT_FREQUENT_MERCHANTS) {
+      assert.strictEqual(form.allMerchants.filter((value) => value === merchant).length, 1);
+    }
   });
 
   it("loads existing token on init if present in localStorage", () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
-import { intakeForm } from "../src/scripts/intake-form.ts";
+import { intakeForm as createIntakeForm } from "../src/scripts/intake-form.ts";
 import {
   clearDeadLetterQueue,
   clearOutbox,
@@ -12,6 +12,13 @@ import {
   saveDeadLetterItem,
   saveOutboxItem,
 } from "../src/scripts/outbox.ts";
+import { isolateBrowser, trackForm } from "./browser-fixture.ts";
+
+isolateBrowser();
+
+function intakeForm(): ReturnType<typeof createIntakeForm> {
+  return trackForm(createIntakeForm());
+}
 
 function createItem(overrides: Partial<OutboxItem> = {}): OutboxItem {
   return {

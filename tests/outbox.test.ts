@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import {
+  intakeForm as createIntakeForm,
   DEFAULT_FREQUENT_MERCHANTS,
-  intakeForm,
   MERCHANTS_STORAGE_KEY,
 } from "../src/scripts/intake-form.ts";
 import {
@@ -28,6 +28,14 @@ import {
   syncOutbox,
 } from "../src/scripts/outbox.ts";
 
+import { isolateBrowser, trackForm } from "./browser-fixture.ts";
+
+isolateBrowser();
+
+function intakeForm(): ReturnType<typeof createIntakeForm> {
+  return trackForm(createIntakeForm());
+}
+
 // Helper mock storage
 class MockLocalStorage {
   private store = new Map<string, string>();
@@ -49,6 +57,14 @@ class MockLocalStorage {
   }
 }
 
+beforeEach(() => {
+  mock.method(Date, "now", () => 1_800_000_000_000);
+});
+afterEach(() => {
+  clearRetryTimer();
+  mock.restoreAll();
+});
+
 describe("Optimistic Outbox Storage", () => {
   beforeEach(async () => {
     await clearOutbox();
@@ -64,7 +80,7 @@ describe("Optimistic Outbox Storage", () => {
       merchant: "Sweetgreen",
       gross_amount: 18.5,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     const item2: OutboxItem = {
@@ -115,7 +131,7 @@ describe("Background Sync Manager", () => {
       gross_amount: 18.5,
       reimbursement: 0,
       currency: "CAD",
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     const item2: OutboxItem = {
@@ -186,7 +202,7 @@ describe("Background Sync Manager", () => {
       merchant: "Chipotle",
       gross_amount: 14.2,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(item);
@@ -223,7 +239,7 @@ describe("Background Sync Manager", () => {
       merchant: "Chipotle",
       gross_amount: 14.2,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(item);
@@ -261,7 +277,7 @@ describe("Background Sync Manager", () => {
       merchant: "Bad Data",
       gross_amount: 10,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(item);
@@ -297,7 +313,7 @@ describe("Background Sync Manager", () => {
       merchant: "Server Fail",
       gross_amount: 25,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(item);
@@ -332,7 +348,7 @@ describe("Background Sync Manager", () => {
       merchant: "Throttled",
       gross_amount: 12,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
       retry_count: 2,
       next_retry_at: Date.now() + 10000, // 10 seconds in the future
     };
@@ -377,7 +393,7 @@ describe("Background Sync Manager", () => {
       merchant: "Failing Server",
       gross_amount: 15,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(item);
@@ -404,6 +420,68 @@ describe("Background Sync Manager", () => {
     }
   });
 
+  for (const registered of [false, true]) {
+    it(`fires a scheduled retry at its exact deadline (${registered ? "registered listener" : "direct sync"})`, async () => {
+      mock.timers.enable({ apis: ["setTimeout"] });
+      let now = Date.now();
+      mock.method(Date, "now", () => now);
+      await saveOutboxItem({
+        id: "tx-exact-deadline",
+        date: "2026-10-02",
+        card: "Visa",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
+        merchant: "Retry Store",
+        gross_amount: 15,
+        reimbursement: 0,
+        created_at: new Date(now).toISOString(),
+      });
+      let calls = 0;
+      mock.method(globalThis, "fetch", async () => {
+        calls++;
+        return calls === 1
+          ? new Response("Internal Server Error", { status: 500 })
+          : new Response(JSON.stringify({ ok: true }), { status: 201 });
+      });
+      let complete!: () => void;
+      const completed = new Promise<void>((resolve) => {
+        complete = resolve;
+      });
+      const forces: (boolean | undefined)[] = [];
+      const cleanup = registered
+        ? setupSyncListeners((force) => {
+            forces.push(force);
+            complete();
+          })
+        : undefined;
+      try {
+        await syncOutbox({
+          token: "test-token",
+          onStatusChange: (syncing) => {
+            if (!syncing && calls === 2) complete();
+          },
+        });
+        mock.timers.tick(999);
+        assert.strictEqual(calls, 1);
+        assert.deepEqual(forces, []);
+        now += 1000;
+        mock.timers.tick(1);
+        await completed;
+        if (registered) {
+          assert.deepEqual(forces, [false]);
+          assert.strictEqual(calls, 1);
+        } else {
+          assert.strictEqual(calls, 2);
+          assert.deepEqual(await getOutbox(), []);
+        }
+      } finally {
+        cleanup?.();
+        clearRetryTimer();
+        mock.timers.reset();
+      }
+    });
+  }
+
   it("reschedules earliest pending retry on finalization when items remain", async () => {
     const item1: OutboxItem = {
       id: "tx-pending-1",
@@ -414,7 +492,7 @@ describe("Background Sync Manager", () => {
       merchant: "Pending Item",
       gross_amount: 15,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
       next_retry_at: Date.now() + 5000,
     };
     const item2: OutboxItem = {
@@ -426,7 +504,7 @@ describe("Background Sync Manager", () => {
       merchant: "Success Item",
       gross_amount: 20,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(item1);
@@ -470,7 +548,7 @@ describe("Background Sync Manager", () => {
       merchant: "Test Lock",
       gross_amount: 15,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(item);
@@ -769,7 +847,7 @@ describe("IndexedDB Native Storage Branch", () => {
         gross_amount: 100,
         reimbursement: 0,
         currency: "CAD",
-        created_at: new Date().toISOString(),
+        created_at: new Date(Date.now()).toISOString(),
       };
 
       await saveOutboxItem(item);
@@ -821,7 +899,7 @@ describe("IndexedDB Native Storage Branch", () => {
         merchant: "Landlord",
         gross_amount: 1500,
         reimbursement: 0,
-        created_at: new Date().toISOString(),
+        created_at: new Date(Date.now()).toISOString(),
       };
 
       await saveOutboxItem(item);
@@ -1046,7 +1124,7 @@ describe("Sync Listeners (Scenario 2)", () => {
         merchant: "Vanguard",
         gross_amount: 500,
         reimbursement: 0,
-        created_at: new Date().toISOString(),
+        created_at: new Date(Date.now()).toISOString(),
       });
       assert.deepStrictEqual(createdStoreNames, ["outbox", "dead_letter_queue"]);
     } finally {
@@ -1068,7 +1146,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       merchant: "Venmo Reimbursement",
       gross_amount: -60.0,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(creditItem);
@@ -1172,7 +1250,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       merchant: "Invalid Refund",
       gross_amount: -60.0,
       reimbursement: 20.0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(invalidCreditItem);
@@ -1218,7 +1296,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       gross_amount: -60.0,
       reimbursement: 0,
       rollback_retry_count: 10,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(exhaustedCreditItem);
@@ -1262,7 +1340,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       gross_amount: -60.0,
       reimbursement: 0,
       retry_count: 10,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(creditWithNetworkRetries);
@@ -1306,7 +1384,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       gross_amount: -60.0,
       reimbursement: 0,
       rollback_retry_count: 5, // Next backoff: 32s (32000ms)
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
     const pendingItem: OutboxItem = {
       id: "tx-pending-earlier",
@@ -1317,7 +1395,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       merchant: "Pending Chipotle",
       gross_amount: 15.0,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
       next_retry_at: Date.now() + 2000, // 2s away
     };
 
@@ -1364,7 +1442,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       merchant: "First Item",
       gross_amount: 10.0,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
     const item2: OutboxItem = {
       id: "tx-offline-2",
@@ -1375,7 +1453,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       merchant: "Untouched Second Item",
       gross_amount: 20.0,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(item1);
@@ -1427,7 +1505,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       merchant: "Chipotle",
       gross_amount: 15.0,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(item);
@@ -1484,7 +1562,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       merchant: "Failing Server",
       gross_amount: 10.0,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
     const item2WithExpiredDeadline: OutboxItem = {
       id: "tx-halt-2-expired",
@@ -1497,7 +1575,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       reimbursement: 0,
       retry_count: 2,
       next_retry_at: Date.now() - 5000,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(item1);
@@ -1549,7 +1627,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       merchant: "In Flight Item",
       gross_amount: 10.0,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
     const retainedItem: OutboxItem = {
       id: "tx-retained-backoff",
@@ -1562,7 +1640,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       reimbursement: 0,
       rollback_retry_count: 1,
       next_retry_at: Date.now() + 30000,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
     const unscheduledItem: OutboxItem = {
       id: "tx-unscheduled-pending",
@@ -1573,7 +1651,7 @@ describe("Sync Listeners (Scenario 2)", () => {
       merchant: "Fresh Item",
       gross_amount: 15.0,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(inFlightItem);
@@ -1620,7 +1698,7 @@ describe("Outbox Legacy Taxonomy Normalization", () => {
       merchant: "Blue Bottle",
       gross_amount: 6.5,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(legacyItem);
@@ -1641,7 +1719,7 @@ describe("Outbox Legacy Taxonomy Normalization", () => {
       merchant: "Tatte Bakery",
       gross_amount: 5.75,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(legacyItem);
@@ -1690,7 +1768,7 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
       merchant: "Sweetgreen",
       gross_amount: 18.5,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(invalidItem);
@@ -1805,7 +1883,7 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
       merchant: "Whole Foods",
       gross_amount: 60.0,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
       server_retry_count: MAX_SYNC_RETRIES - 1, // Will reach 10 on this attempt
     };
 
@@ -1854,7 +1932,7 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
       merchant: "Trader Joe's",
       gross_amount: 45.0,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
       server_retry_count: MAX_SYNC_RETRIES - 1,
     };
 
@@ -1895,7 +1973,7 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
       merchant: "Landlord",
       gross_amount: 1200,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(item);
@@ -1973,13 +2051,13 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
         merchant: "Shake Shack",
         gross_amount: 22.0,
         reimbursement: 0,
-        created_at: new Date().toISOString(),
+        created_at: new Date(Date.now()).toISOString(),
         retry_count: 10,
         next_retry_at: Date.now() + 60000,
       },
       error_reason: "Exceeded maximum retry threshold",
       http_status: 500,
-      failed_at: new Date().toISOString(),
+      failed_at: new Date(Date.now()).toISOString(),
       retry_count: 10,
     };
 
@@ -2022,11 +2100,11 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
         merchant: "Cafe",
         gross_amount: 15.0,
         reimbursement: 0,
-        created_at: new Date().toISOString(),
+        created_at: new Date(Date.now()).toISOString(),
       },
       error_reason: "Exceeded maximum retry threshold",
       http_status: 500,
-      failed_at: new Date().toISOString(),
+      failed_at: new Date(Date.now()).toISOString(),
       retry_count: 10,
     };
 
@@ -2195,7 +2273,7 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
         merchant: "Cafe",
         gross_amount: 5.0,
         reimbursement: 0,
-        created_at: new Date().toISOString(),
+        created_at: new Date(Date.now()).toISOString(),
       },
       error_reason: "Validation failed",
       failed_at: "2026-10-02T12:00:00.000Z",
@@ -2213,7 +2291,7 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
         merchant: "Bakery",
         gross_amount: 7.0,
         reimbursement: 0,
-        created_at: new Date().toISOString(),
+        created_at: new Date(Date.now()).toISOString(),
       },
       error_reason: "Validation failed",
       failed_at: "2026-10-02T12:05:00.000Z",
@@ -2246,7 +2324,7 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
         merchant: "Early Cafe",
         gross_amount: 5.0,
         reimbursement: 0,
-        created_at: new Date().toISOString(),
+        created_at: new Date(Date.now()).toISOString(),
       },
       error_reason: "Validation failed",
       failed_at: "2026-10-02T08:00:00.000Z",
@@ -2264,7 +2342,7 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
         merchant: "Late Diner",
         gross_amount: 25.0,
         reimbursement: 0,
-        created_at: new Date().toISOString(),
+        created_at: new Date(Date.now()).toISOString(),
       },
       error_reason: "Validation failed",
       failed_at: "2026-10-02T20:00:00.000Z",
@@ -2390,11 +2468,11 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
           merchant: "Landlord",
           gross_amount: 1500,
           reimbursement: 0,
-          created_at: new Date().toISOString(),
+          created_at: new Date(Date.now()).toISOString(),
         },
         error_reason: "Invalid tenant account",
         http_status: 400,
-        failed_at: new Date().toISOString(),
+        failed_at: new Date(Date.now()).toISOString(),
         retry_count: 0,
       };
 
@@ -2443,11 +2521,11 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
           merchant: "Target",
           gross_amount: 35.5,
           reimbursement: 0,
-          created_at: new Date().toISOString(),
+          created_at: new Date(Date.now()).toISOString(),
         },
         error_reason: "Malformed body",
         http_status: 400,
-        failed_at: new Date().toISOString(),
+        failed_at: new Date(Date.now()).toISOString(),
         retry_count: 0,
       };
 
@@ -2488,7 +2566,7 @@ describe("Dead-Letter Queue (DLQ) Storage and Quarantine", () => {
       merchant: "Failing Storage",
       gross_amount: 10,
       reimbursement: 0,
-      created_at: new Date().toISOString(),
+      created_at: new Date(Date.now()).toISOString(),
     };
 
     await saveOutboxItem(item);
