@@ -63,3 +63,16 @@ test("fails closed when publication cannot be uniquely identified", () => {
     assert.throws(() => labelReview(review, values));
   }
 });
+
+test("retries preserve the same label and prefer a newly published review", () => {
+  const review = readReview(output(), "owner/repo", 12);
+  const labelled = comment(`Reviewed revision: ${sha}\n\nReview body`);
+  assert.deepEqual(labelReview(review, [labelled]), { id: 42, body: labelled.body });
+  assert.deepEqual(labelReview(review, [labelled, { ...comment(), id: 43 }]), {
+    id: 43,
+    body: labelled.body,
+  });
+  assert.throws(() =>
+    labelReview(review, [comment(`Reviewed revision: ${"b".repeat(40)}\n\nReview body`)]),
+  );
+});

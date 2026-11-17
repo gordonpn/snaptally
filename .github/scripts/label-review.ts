@@ -37,21 +37,32 @@ export function readReview(source: string, repository: string, number: number): 
 export function labelReview(review: Review, values: unknown): Comment {
   if (!Array.isArray(values)) throw new Error("Invalid GitHub comment response");
   const marker = "\n\n<!-- pr-agent:review:full -->";
-  const matches = values.filter(
+  const prefix = `Reviewed revision: ${review.sha}\n\n`;
+  const candidates = values.filter(
     (value: unknown) =>
       object(value) &&
       object(value.user) &&
       value.user.login === "github-actions[bot]" &&
       typeof value.id === "number" &&
       typeof value.body === "string" &&
-      value.body.replace(marker, "").trim() === review.markdown.trim(),
+      (value.body.startsWith(prefix) ? value.body.slice(prefix.length) : value.body)
+        .replace(marker, "")
+        .trim() === review.markdown.trim(),
   );
+  const unpublished = candidates.filter(
+    (value: unknown) =>
+      object(value) && typeof value.body === "string" && !value.body.startsWith(prefix),
+  );
+  const matches = unpublished.length ? unpublished : candidates;
   if (matches.length !== 1) throw new Error("Review publication is absent or ambiguous");
   const match: unknown = matches[0];
   if (!object(match) || typeof match.id !== "number" || typeof match.body !== "string") {
     throw new Error("Invalid matched review comment");
   }
-  return { id: match.id, body: `Reviewed revision: ${review.sha}\n\n${match.body}` };
+  return {
+    id: match.id,
+    body: match.body.startsWith(prefix) ? match.body : `${prefix}${match.body}`,
+  };
 }
 
 async function main(): Promise<void> {
