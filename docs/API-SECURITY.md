@@ -6,8 +6,12 @@ requests with absent or inaccurate `Content-Length`. Oversized payloads return
 characters. Category fields have 64-character limits and must match the intake
 configuration. Currency is USD or CAD (case insensitive), defaulting to USD.
 Gross amounts must be finite, nonzero, and at most 1,000,000 in magnitude.
-Existing negative expense credits remain supported; negative Income is rejected.
-Reimbursement is bounded by gross amount for expenses and must be zero for credits.
+Bounded negative expense credits are the permanent transaction contract. Record a
+refund or linked reward as a separate negative expense on its credit date in the
+original expense category, preserving the purchase row. Negative Income is rejected.
+Reimbursement is nonnegative and bounded by gross amount for positive expenses.
+Credits accept zero, null, or omitted reimbursement; null and omission normalize to zero. Zero
+gross amounts are rejected in every category, including Income.
 
 Explicit legacy queued categories remain accepted: `Income / Reimbursement` and
 `Guilt-Free / Coffee`. No broad unknown-category allowance is added. Existing
