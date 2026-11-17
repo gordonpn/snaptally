@@ -2,7 +2,7 @@ name: PR-Agent
 
 on:
   pull_request:
-    types: [opened, ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review]
   issue_comment:
     types: [created, edited]
 
@@ -33,6 +33,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
       - name: Verify command and pull request origin
         id: authorize
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -50,11 +51,17 @@ jobs:
       pull-requests: write
       issues: write
     concurrency:
-      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+      group: ${{ github.workflow }}-${{ github.run_id }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Validate required reviewer configuration
+        run: ': "${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY is required}" "${GITHUB_TOKEN:?GITHUB_TOKEN is required}" "${DEEPSEEK_API_BASE:?DEEPSEEK_API_BASE is required}"; case "$DEEPSEEK_API_BASE" in https://?*) ;; *) exit 1 ;; esac'
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEEPSEEK_API_BASE: ${{ vars.DEEPSEEK_API_BASE }}
       - name: PR Agent Action
         uses: The-PR-Agent/pr-agent@e673a02076ce09a4726c3d0c3cc85780e59ca52b # v0.50.0
         env:
@@ -62,5 +69,8 @@ jobs:
           CONFIG.FALLBACK_MODELS: '["deepseek/deepseek-chat"]'
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           OPENAI_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          OPENAI_BASE: "https://api.deepseek.com"
+          DEEPSEEK_API_BASE: ${{ vars.DEEPSEEK_API_BASE }}
+          GITHUB_ACTION_CONFIG.HANDLE_PUSH_TRIGGER: "true"
+          GITHUB_ACTION_CONFIG.PUSH_COMMANDS: '["/review"]'
+          GITHUB_ACTION_CONFIG.PUSH_TRIGGER_IGNORE_MERGE_COMMITS: "false"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -673,8 +673,8 @@ reviewing a pin update. The standalone reviewdog binary is pinned to `v0.21.0`;
 review and update that input explicitly when upgrading it. Checkouts disable
 credential persistence so later dependency scripts do not inherit git credentials.
 
-PR-Agent and DeepSeek Review run only for non-draft same-repository PRs (on `opened`
-and `ready_for_review`) or maintainer comments beginning with `/review` (plus
+PR-Agent and DeepSeek Review run for non-draft same-repository PRs on `opened`,
+`reopened`, `synchronize` and `ready_for_review`, or maintainer comments beginning with `/review` (plus
 `/describe`, `/improve`, or `/ask` for PR-Agent) followed by whitespace or the end of
 the comment. Each workflow uses a separate read-only authorization job that checks the
 live PR's origin, open state, and draft state before any secret-bearing review job or
@@ -683,3 +683,14 @@ conversation does not invoke either reviewer, and fork PRs remain excluded.
 
 DeepSeek authorization loads its helper from the trusted base revision, rejects
 bot senders, and repeats the live eligibility check immediately before review.
+
+Both reviewers run for opened, reopened, ready-for-review and synchronize events
+on eligible same-repository human PRs. Each run has a unique concurrency group so
+new commits do not cancel reviews already queued or running. PR-Agent's pinned
+runner requires `handle_push_trigger` and `/review` push commands for synchronize.
+Configure the repository variable `DEEPSEEK_API_BASE` with the explicit HTTPS API
+base URL and the `DEEPSEEK_API_KEY` secret. Both workflows reject absent or empty
+provider keys, GitHub tokens and endpoints before calling the action. Native shell
+parameter checks keep this preflight available while the new workflow is reviewed
+against a trusted base revision that predates any new validation helper.
+Fork and bot events retain the existing eligibility restrictions.
