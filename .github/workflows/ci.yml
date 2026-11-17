@@ -41,6 +41,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check SQL
+        run: node scripts/sql-lint.mjs
+
       - name: Typecheck
         run: pnpm run typecheck
 
