@@ -65,7 +65,7 @@ export function labelReview(review: Review, values: unknown): Comment {
   };
 }
 
-async function main(): Promise<void> {
+export async function labelPublishedReview(): Promise<void> {
   const repository = process.env.GITHUB_REPOSITORY;
   const number = Number(process.env.REVIEW_PR_NUMBER);
   const token = process.env.GITHUB_TOKEN;
@@ -99,4 +99,5 @@ async function main(): Promise<void> {
   if (!response.ok) throw new Error(`Comment labeling failed with HTTP ${response.status}`);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+  await labelPublishedReview();
