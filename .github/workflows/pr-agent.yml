@@ -60,7 +60,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-          ref: b16856ceb39a864868d93f6397f22abe5d329486
+          ref: c9a83c1c9f22186896b9641078f69f1a5ddf9f85
           sparse-checkout: .github/scripts/label-review.ts
           sparse-checkout-cone-mode: false
       - name: Setup Node.js
