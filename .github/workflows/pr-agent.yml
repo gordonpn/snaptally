@@ -56,17 +56,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout audited review labeler
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-          ref: c9a83c1c9f22186896b9641078f69f1a5ddf9f85
-          sparse-checkout: .github/scripts/label-review.ts
-          sparse-checkout-cone-mode: false
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version: 22
       - name: Validate required reviewer configuration
         run: ': "${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY is required}" "${GITHUB_TOKEN:?GITHUB_TOKEN is required}" "${DEEPSEEK_API_BASE:?DEEPSEEK_API_BASE is required}"; case "$DEEPSEEK_API_BASE" in https://?*) ;; *) exit 1 ;; esac'
         env:
@@ -77,11 +66,6 @@ jobs:
         uses: The-PR-Agent/pr-agent@e673a02076ce09a4726c3d0c3cc85780e59ca52b # v0.50.0
         env:
           CONFIG.MODEL: "deepseek/deepseek-chat"
-          PR_REVIEWER.PERSISTENT_COMMENT: "false"
-          PUSH_OUTPUTS.ENABLE: "true"
-          PUSH_OUTPUTS.CHANNELS: '["file"]'
-          PUSH_OUTPUTS.TOOLS: '["review"]'
-          PUSH_OUTPUTS.FILE_PATH: /github/workspace/pr-agent-review-output.jsonl
           CONFIG.FALLBACK_MODELS: '["deepseek/deepseek-chat"]'
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           OPENAI_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
@@ -89,11 +73,4 @@ jobs:
           GITHUB_ACTION_CONFIG.HANDLE_PUSH_TRIGGER: "true"
           GITHUB_ACTION_CONFIG.PUSH_COMMANDS: '["/review"]'
           GITHUB_ACTION_CONFIG.PUSH_TRIGGER_IGNORE_MERGE_COMMITS: "false"
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Label the published review revision
-        if: github.event_name == 'pull_request' || startsWith(github.event.comment.body, '/review')
-        run: node .github/scripts/label-review.ts
-        env:
-          REVIEW_OUTPUT_PATH: pr-agent-review-output.jsonl
-          REVIEW_PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
