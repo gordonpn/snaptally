@@ -359,14 +359,14 @@ jobs:
 
 ### 5.3 Continuous Integration and Code Coverage
 
-Pull requests and commits to `main` trigger automated linting, typechecking, unit tests, code coverage analysis, integration tests, and static builds via `.github/workflows/ci.yml`.
+Pull requests targeting `main` and commits to `main` trigger automated linting, typechecking, unit tests, code coverage analysis, integration tests, and static builds via `.github/workflows/ci.yml`.
 
 #### Codecov Configuration and Secret
 SnapTally uses Codecov to host visual coverage breakdowns and post line-by-line pull request diff analysis:
 
 - Repository secret: `CODECOV_TOKEN` (configured under **Settings** > **Secrets and variables** > **Actions**). Obtain from the repository dashboard on [Codecov](https://app.codecov.io/).
-- Workflow configuration: In `.github/workflows/ci.yml`, `codecov/codecov-action@v7` uploads `coverage/lcov.info` with `fail_ci_if_error: true` and falls back to OIDC when `CODECOV_TOKEN` is unset.
-- Threshold configuration: [codecov.yml](../codecov.yml) enforces an 80% coverage threshold matching `--test-coverage-lines=80`.
+- Workflow configuration: In `.github/workflows/ci.yml`, `codecov/codecov-action@v7` uploads `coverage/lcov.info` with `fail_ci_if_error: false` and falls back to OIDC when `CODECOV_TOKEN` is unset.
+- Threshold configuration: [codecov.yml](../codecov.yml) enforces an 80% coverage threshold, alongside `--test-coverage-lines=90 --test-coverage-functions=90 --test-coverage-branches=85` in `package.json`.
 
 ---
 
