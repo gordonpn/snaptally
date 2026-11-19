@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["src/config/**/*", "tests/budget-profile.test.ts"]
+}

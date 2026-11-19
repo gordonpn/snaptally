@@ -69,8 +69,34 @@ export const CSP_BENCHMARKS = {
   "Guilt-Free": { min_percent: 20, max_percent: 35 },
 } as const satisfies Record<AnalysisBucket, { min_percent: number; max_percent: number | null }>;
 
+export type CategoryCardPreference = AnalysisCategory & {
+  preferred_card: null;
+};
+
+function mapBucketCardPreferences<Bucket extends AnalysisBucket>(
+  parent_bucket: Bucket,
+): {
+  parent_bucket: Bucket;
+  subcategory: (typeof ANALYSIS_BUCKET_SUBCATEGORIES)[Bucket][number];
+  preferred_card: null;
+}[] {
+  const subcategories: readonly (typeof ANALYSIS_BUCKET_SUBCATEGORIES)[Bucket][number][] =
+    ANALYSIS_BUCKET_SUBCATEGORIES[parent_bucket];
+  return subcategories.map((subcategory) => ({
+    parent_bucket,
+    subcategory,
+    preferred_card: null,
+  }));
+}
+
+const CARD_PREFERENCES_BY_BUCKET = {
+  "Fixed Costs": mapBucketCardPreferences("Fixed Costs"),
+  Savings: mapBucketCardPreferences("Savings"),
+  Investments: mapBucketCardPreferences("Investments"),
+  "Guilt-Free": mapBucketCardPreferences("Guilt-Free"),
+} satisfies Record<AnalysisBucket, readonly CategoryCardPreference[]>;
+
 /** Null means no routing hint. Real preferences must come from the owner. */
-export const CATEGORY_CARD_PREFERENCES = Object.entries(ANALYSIS_BUCKET_SUBCATEGORIES).flatMap(
-  ([parent_bucket, subcategories]) =>
-    subcategories.map((subcategory) => ({ parent_bucket, subcategory, preferred_card: null })),
-);
+export const CATEGORY_CARD_PREFERENCES: readonly CategoryCardPreference[] = Object.values(
+  CARD_PREFERENCES_BY_BUCKET,
+).flat();
