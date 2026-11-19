@@ -6,6 +6,8 @@ on:
       - main
   pull_request:
     types: [opened, synchronize, reopened]
+    branches:
+      - main
 
 concurrency:
   group: pages-${{ github.head_ref || github.ref_name }}
@@ -46,22 +48,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: ./.github/scripts/check-cloudflare-credentials.sh
 
-      - name: Setup pnpm
+      - name: Setup environment
         if: steps.check-credentials.outputs.configured == 'true'
-        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-        with:
-          version: 10
-
-      - name: Setup Node.js
-        if: steps.check-credentials.outputs.configured == 'true'
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        if: steps.check-credentials.outputs.configured == 'true'
-        run: pnpm install --frozen-lockfile
+        uses: ./.github/actions/setup
 
       - name: Build static assets
         if: steps.check-credentials.outputs.configured == 'true'
@@ -122,14 +111,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-        with:
-          version: 10
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
       - name: Apply merged preview D1 database migrations
         uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
         with:
