@@ -381,6 +381,7 @@ test("HTTP API through Pages Functions and migrated local D1", async (t) => {
       });
 
       const july = await listing("?month=2026-07");
+      // The activity summary counts every USD non-Income row, including Savings and credits.
       assert.deepEqual(july.month_summary, { month: "2026-07", net_spend: 67.5, total_count: 3 });
 
       const august = await listing("?month=2026-08");
@@ -388,14 +389,6 @@ test("HTTP API through Pages Functions and migrated local D1", async (t) => {
 
       const june = await listing("?month=2026-06");
       assert.deepEqual(june.month_summary, { month: "2026-06", net_spend: 0, total_count: 0 });
-
-      const monthBefore = new Date().toISOString().slice(0, 7);
-      const invalidMonth = await listing("?month=2026-13");
-      const monthAfter = new Date().toISOString().slice(0, 7);
-      assert.ok(
-        invalidMonth.month_summary?.month === monthBefore ||
-          invalidMonth.month_summary?.month === monthAfter,
-      );
 
       const incomeOnly = await listing("?month=2026-07&bucket=Income");
       assert.deepEqual(
@@ -465,7 +458,7 @@ test("HTTP API through Pages Functions and migrated local D1", async (t) => {
       assert.equal(combinedPage2.has_more, false);
       assert.equal(combinedPage2.next_offset, null);
 
-      for (const term of ["%", "_", "\\"]) {
+      for (const term of ["%", "_", "\\", "100%", "Market_", "Check\\Co"]) {
         const escaped = await listing(`?search=${encodeURIComponent(term)}`);
         assert.deepEqual(
           escaped.transactions.map((row) => row.id),
@@ -486,4 +479,29 @@ test("HTTP API through Pages Functions and migrated local D1", async (t) => {
       }
     },
   );
+
+  await t.test("invalid months use current UTC month totals from persisted rows", async () => {
+    const now = new Date();
+    const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    // Seed both possible request months so crossing midnight cannot hide a zero-total regression.
+    for (const month of [now, nextMonth]) {
+      await insert({
+        date: `${month.toISOString().slice(0, 7)}-01`,
+        merchant: "Current Month Fallback",
+        gross_amount: 123.45,
+        reimbursement: 0,
+      });
+    }
+
+    const monthBefore = new Date().toISOString().slice(0, 7);
+    const invalidMonth = await listing("?month=2026-13");
+    const monthAfter = new Date().toISOString().slice(0, 7);
+    const summary = invalidMonth.month_summary;
+    assert.ok(summary);
+    assert.ok(summary.month === monthBefore || summary.month === monthAfter);
+    const explicitMonth = await listing(`?month=${summary.month}`);
+    assert.deepEqual(summary, explicitMonth.month_summary);
+    assert.ok(summary.total_count > 0);
+    assert.ok(summary.net_spend > 0);
+  });
 });
