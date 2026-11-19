@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   ANALYSIS_BUCKET_SUBCATEGORIES,
+  type AnalysisCategory,
   CATEGORY_CARD_PREFERENCES,
+  type CategoryCardPreference,
   CSP_BENCHMARKS,
   isAnalysisCategory,
   isMonthlyBudgetTarget,
@@ -136,5 +138,84 @@ describe("budget profile", () => {
       assert.equal(preference.preferred_card, null);
     }
     assert.deepEqual(ANALYSIS_BUCKET_SUBCATEGORIES.Savings, ["Emergency Fund", "Travel Fund"]);
+  });
+
+  it("preserves discriminated AnalysisCategory types on card preferences at compile time", () => {
+    const typedPreferences: readonly CategoryCardPreference[] = CATEGORY_CARD_PREFERENCES;
+    const acceptCardPreference = (
+      preference: (typeof CATEGORY_CARD_PREFERENCES)[number],
+    ): boolean => isAnalysisCategory(preference);
+
+    for (const preference of typedPreferences) {
+      const category: AnalysisCategory = preference;
+      assert.ok(acceptCardPreference(preference));
+      assert.equal(category.parent_bucket, preference.parent_bucket);
+      switch (preference.parent_bucket) {
+        case "Fixed Costs": {
+          const subcategory: (typeof ANALYSIS_BUCKET_SUBCATEGORIES)["Fixed Costs"][number] =
+            preference.subcategory;
+          assert.ok(ANALYSIS_BUCKET_SUBCATEGORIES["Fixed Costs"].includes(subcategory));
+          break;
+        }
+        case "Savings": {
+          const subcategory: "Emergency Fund" | "Travel Fund" = preference.subcategory;
+          assert.ok(ANALYSIS_BUCKET_SUBCATEGORIES.Savings.includes(subcategory));
+          // @ts-expect-error Investments is routed to Investments, not Savings
+          assert.equal(preference.subcategory === "Investments", false);
+          break;
+        }
+        case "Investments": {
+          const subcategory: "Investments" = preference.subcategory;
+          assert.equal(subcategory, "Investments");
+          break;
+        }
+        case "Guilt-Free": {
+          const subcategory: (typeof ANALYSIS_BUCKET_SUBCATEGORIES)["Guilt-Free"][number] =
+            preference.subcategory;
+          assert.ok(ANALYSIS_BUCKET_SUBCATEGORIES["Guilt-Free"].includes(subcategory));
+          break;
+        }
+        default: {
+          const exhaustive: never = preference;
+          throw new Error(`Unexpected preference: ${JSON.stringify(exhaustive)}`);
+        }
+      }
+    }
+
+    assert.equal(
+      acceptCardPreference(
+        // @ts-expect-error Dining belongs to Guilt-Free, not Fixed Costs
+        { parent_bucket: "Fixed Costs", subcategory: "Dining", preferred_card: null },
+      ),
+      false,
+    );
+    assert.equal(
+      acceptCardPreference(
+        // @ts-expect-error Investments belongs to Investments, not Savings
+        { parent_bucket: "Savings", subcategory: "Investments", preferred_card: null },
+      ),
+      false,
+    );
+    assert.equal(
+      acceptCardPreference(
+        // @ts-expect-error Emergency Fund belongs to Savings, not Investments
+        { parent_bucket: "Investments", subcategory: "Emergency Fund", preferred_card: null },
+      ),
+      false,
+    );
+    assert.equal(
+      acceptCardPreference(
+        // @ts-expect-error Income is excluded from analysis categories
+        { parent_bucket: "Income", subcategory: "Salary", preferred_card: null },
+      ),
+      false,
+    );
+    assert.equal(
+      acceptCardPreference(
+        // @ts-expect-error Unknown buckets are not valid AnalysisBucket members
+        { parent_bucket: "Unknown", subcategory: "Rent", preferred_card: null },
+      ),
+      false,
+    );
   });
 });
