@@ -50,7 +50,7 @@ jobs:
       contents: read
       pull-requests: write
     concurrency:
-      group: ${{ github.workflow }}-${{ github.run_id }}
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10

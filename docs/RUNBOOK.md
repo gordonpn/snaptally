@@ -676,9 +676,9 @@ credential persistence so later dependency scripts do not inherit git credential
 PR-Agent and DeepSeek Review run for non-draft same-repository human PRs on
 `opened`, `reopened`, `synchronize`, and `ready_for_review`, or maintainer comments
 beginning with `/review` (plus `/describe`, `/improve`, or `/ask` for PR-Agent).
-Both workflows use a read-only `authorize` job checked out from the trusted base
-revision before any secret-bearing job runs, isolate concurrency per run so new
-commits do not cancel active reviews, and validate `DEEPSEEK_API_KEY`,
-`GITHUB_TOKEN`, and `DEEPSEEK_API_BASE` (HTTPS URL) before invocation. PR-Agent
-requires `handle_push_trigger` and `/review` push commands to review synchronized
-commits.
+Both workflows use a read-only `authorize` job checked out from `base.sha` on
+`pull_request` (or the default branch on `issue_comment`) before any
+secret-bearing job runs, serialize reviews per PR with cancellation disabled, and
+validate `DEEPSEEK_API_KEY`, `GITHUB_TOKEN`, and `DEEPSEEK_API_BASE` (HTTPS URL)
+before invocation. PR-Agent requires `handle_push_trigger` and `/review` push
+commands to review synchronized commits.
