@@ -31,13 +31,38 @@ existing default user retains its migration-created timestamp.
 just db-reset-local
 ```
 
-Stop the local server before resetting. Reset removes only
-`.wrangler/dev-fixtures`, reapplies migrations and restores fixtures. The helper
-requires its ownership marker before touching a nonempty directory and rejects
-symlink state directories. It refuses unfamiliar state instead of deleting it.
-Normal Wrangler state (`.wrangler/state`), E2E state, and remote D1 are separate.
-Do not store valuable data in the disposable fixture directory. Do not run the
-helper concurrently with another seed/reset or manually change its marker.
+### Stop-server policy, locking, and recovery
+
+Stop any active fixture-backed local Pages server (`Ctrl-C` / `SIGTERM`) before
+running `just db-seed-local` or `just db-reset-local`. `scripts/local-fixtures.mjs`
+refuses both `seed` and `reset` if an active `wrangler pages dev` or `workerd`
+process targeting `.wrangler/dev-fixtures` is detected.
+
+The helper acquires an exclusive lock at `.wrangler/dev-fixtures.lock` before
+inspecting or modifying fixture state, rejecting overlapping `seed` or `reset`
+invocations before any state changes occur. Stale lock files left by dead
+processes are cleared automatically on the next run. This lock only coordinates
+`scripts/local-fixtures.mjs` commands; it does not lock out unrelated SQLite
+users (`sqlite3`, manual `wrangler d1 execute`, or a running Pages server), so
+always stop the local server first.
+
+Reset replaces only `.wrangler/dev-fixtures`, reapplies migrations, and restores
+fixtures. The helper requires its ownership marker before touching a nonempty
+directory and rejects symlink state or lock paths. It refuses unfamiliar state
+instead of deleting it. Normal Wrangler state (`.wrangler/state`), E2E state,
+and remote D1 are separate. Do not store valuable data in the disposable fixture
+directory or manually change its marker.
+
+Migrations, `seeds/dev_seed.sql`, and `seeds/monthly_budgets_demo.sql` run
+inside a staging directory under `.wrangler/` and are swapped into
+`.wrangler/dev-fixtures` only after every step succeeds. If the second seed
+fails or is interrupted, the helper exits non-zero without reporting success,
+discards the staging directory, and leaves `.wrangler/dev-fixtures` unchanged
+(or absent on an initial seed). To recover from a failed run, interrupted swap,
+or manually half-seeded database, stop any fixture-backed server and re-run
+`just db-seed-local` (idempotent repair) or `just db-reset-local` (clean
+rebuild).
+
 Use `--persist-to .wrangler/dev-fixtures` for manual local queries too; the
 existing `db-list-local` recipe targets Wrangler's normal state instead.
 
