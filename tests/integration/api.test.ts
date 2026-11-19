@@ -315,4 +315,193 @@ test("HTTP API through Pages Functions and migrated local D1", async (t) => {
       assert.equal((await listing("?offset=999999")).transactions.length, 0);
     },
   );
+
+  await t.test(
+    "filters by search and bucket, validates filter bounds, and computes month_summary exclusions",
+    async () => {
+      const dining = await insert({
+        date: "2026-07-01",
+        card: "Filter Visa",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Dining",
+        merchant: "Bistro Filter",
+        gross_amount: 45,
+        reimbursement: 15,
+        currency: "USD",
+      });
+      const credit = await insert({
+        date: "2026-07-15",
+        card: "Filter Visa",
+        parent_bucket: "Guilt-Free",
+        subcategory: "Shopping",
+        merchant: "Refund Store",
+        gross_amount: -12.5,
+        reimbursement: 0,
+        currency: "USD",
+      });
+      const income = await insert({
+        date: "2026-07-20",
+        card: "Checking",
+        parent_bucket: "Income",
+        subcategory: "Salary",
+        merchant: "Acme Payroll",
+        gross_amount: 4000,
+        reimbursement: 0,
+        currency: "USD",
+      });
+      const cad = await insert({
+        date: "2026-07-22",
+        card: "Filter CAD",
+        parent_bucket: "Fixed Costs",
+        subcategory: "Transit",
+        merchant: "Montreal Transit",
+        gross_amount: 75,
+        reimbursement: 0,
+        currency: "CAD",
+      });
+      const groceries = await insert({
+        date: "2026-07-31",
+        card: "Filter Amex",
+        parent_bucket: "Fixed Costs",
+        subcategory: "Groceries",
+        merchant: "100% Market_Check\\Co",
+        gross_amount: 50,
+        reimbursement: 0,
+        currency: "USD",
+      });
+      const savings = await insert({
+        date: "2026-08-01",
+        card: "Filter Visa",
+        parent_bucket: "Savings",
+        subcategory: "Emergency Fund",
+        merchant: "Vault Transfer",
+        gross_amount: 200,
+        reimbursement: 0,
+        currency: "USD",
+      });
+
+      const july = await listing("?month=2026-07");
+      // The activity summary counts every USD non-Income row, including Savings and credits.
+      assert.deepEqual(july.month_summary, { month: "2026-07", net_spend: 67.5, total_count: 3 });
+
+      const august = await listing("?month=2026-08");
+      assert.deepEqual(august.month_summary, { month: "2026-08", net_spend: 200, total_count: 1 });
+
+      const june = await listing("?month=2026-06");
+      assert.deepEqual(june.month_summary, { month: "2026-06", net_spend: 0, total_count: 0 });
+
+      const incomeOnly = await listing("?month=2026-07&bucket=Income");
+      assert.deepEqual(
+        incomeOnly.transactions.map((row) => row.id),
+        [income],
+      );
+      assert.equal(incomeOnly.total_count, 1);
+      assert.equal(incomeOnly.has_more, false);
+      assert.equal(incomeOnly.next_offset, null);
+      assert.deepEqual(incomeOnly.month_summary, {
+        month: "2026-07",
+        net_spend: 67.5,
+        total_count: 3,
+      });
+
+      const fixedCosts = await listing("?bucket=Fixed%20Costs");
+      assert.deepEqual(
+        fixedCosts.transactions.map((row) => row.id),
+        [groceries, cad],
+      );
+      assert.equal(fixedCosts.total_count, 2);
+
+      const savingsOnly = await listing("?bucket=Savings");
+      assert.deepEqual(
+        savingsOnly.transactions.map((row) => row.id),
+        [savings],
+      );
+      assert.equal(savingsOnly.total_count, 1);
+
+      const emptyBucket = await listing("?bucket=Unknown");
+      assert.deepEqual(emptyBucket.transactions, []);
+      assert.equal(emptyBucket.total_count, 0);
+      assert.equal(emptyBucket.has_more, false);
+      assert.equal(emptyBucket.next_offset, null);
+
+      const byMerchant = await listing("?search=bistro");
+      assert.deepEqual(
+        byMerchant.transactions.map((row) => row.id),
+        [dining],
+      );
+      assert.equal(byMerchant.total_count, 1);
+
+      const byCard = await listing("?search=Filter%20Visa");
+      assert.deepEqual(
+        byCard.transactions.map((row) => row.id),
+        [savings, credit, dining],
+      );
+      assert.equal(byCard.total_count, 3);
+
+      const combinedPage1 = await listing("?search=Filter%20Visa&bucket=Guilt-Free&limit=1");
+      assert.deepEqual(
+        combinedPage1.transactions.map((row) => row.id),
+        [credit],
+      );
+      assert.equal(combinedPage1.total_count, 2);
+      assert.equal(combinedPage1.has_more, true);
+      assert.equal(combinedPage1.next_offset, 1);
+
+      const combinedPage2 = await listing(
+        "?search=Filter%20Visa&bucket=Guilt-Free&limit=1&offset=1",
+      );
+      assert.deepEqual(
+        combinedPage2.transactions.map((row) => row.id),
+        [dining],
+      );
+      assert.equal(combinedPage2.total_count, 2);
+      assert.equal(combinedPage2.has_more, false);
+      assert.equal(combinedPage2.next_offset, null);
+
+      for (const term of ["%", "_", "\\", "100%", "Market_", "Check\\Co"]) {
+        const escaped = await listing(`?search=${encodeURIComponent(term)}`);
+        assert.deepEqual(
+          escaped.transactions.map((row) => row.id),
+          [groceries],
+          term,
+        );
+        assert.equal(escaped.total_count, 1, term);
+      }
+
+      for (const query of [
+        `search=${"x".repeat(101)}`,
+        `search=${encodeURIComponent("%".repeat(25))}`,
+        `bucket=${"x".repeat(65)}`,
+      ]) {
+        const response = await request(`/api/transactions?${query}`);
+        assert.equal(response.status, 400, query);
+        assert.equal(typeof ((await response.json()) as { error: string }).error, "string");
+      }
+    },
+  );
+
+  await t.test("invalid months use current UTC month totals from persisted rows", async () => {
+    const now = new Date();
+    const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    // Seed both possible request months so crossing midnight cannot hide a zero-total regression.
+    for (const month of [now, nextMonth]) {
+      await insert({
+        date: `${month.toISOString().slice(0, 7)}-01`,
+        merchant: "Current Month Fallback",
+        gross_amount: 123.45,
+        reimbursement: 0,
+      });
+    }
+
+    const monthBefore = new Date().toISOString().slice(0, 7);
+    const invalidMonth = await listing("?month=2026-13");
+    const monthAfter = new Date().toISOString().slice(0, 7);
+    const summary = invalidMonth.month_summary;
+    assert.ok(summary);
+    assert.ok(summary.month === monthBefore || summary.month === monthAfter);
+    const explicitMonth = await listing(`?month=${summary.month}`);
+    assert.deepEqual(summary, explicitMonth.month_summary);
+    assert.ok(summary.total_count > 0);
+    assert.ok(summary.net_spend > 0);
+  });
 });
