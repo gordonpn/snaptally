@@ -2,27 +2,72 @@ name: DeepSeek Review
 
 on:
   pull_request:
-    types: [ready_for_review]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+    types: [opened, reopened, synchronize, ready_for_review]
+  issue_comment:
+    types: [created, edited]
 
 permissions:
   contents: read
-  pull-requests: write
+  pull-requests: read
 
 jobs:
+  authorize:
+    name: runner / authorize-deepseek-review
+    if: |
+      github.event.sender.type != 'Bot' &&
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'github-actions[bot]' &&
+      ((github.event_name == 'pull_request' &&
+        !github.event.pull_request.draft &&
+        github.event.pull_request.head.repo.full_name == github.repository) ||
+       (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
+        startsWith(github.event.comment.body, '/review')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      allowed: ${{ steps.authorize.outputs.allowed }}
+    steps:
+      - name: Checkout authorization script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+      - name: Verify command and pull request origin
+        id: authorize
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { default: authorize } = await import('${{ github.workspace }}/.github/scripts/authorize-pr-agent.js');
+            await authorize({ core, context, github });
+
   review:
     name: runner / deepseek-review
+    needs: authorize
+    if: needs.authorize.outputs.allowed == 'true'
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
     steps:
+      - name: Validate required reviewer configuration
+        run: ': "${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY is required}" "${GITHUB_TOKEN:?GITHUB_TOKEN is required}" "${DEEPSEEK_API_BASE:?DEEPSEEK_API_BASE is required}"; case "$DEEPSEEK_API_BASE" in https://?*) ;; *) exit 1 ;; esac'
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEEPSEEK_API_BASE: ${{ vars.DEEPSEEK_API_BASE }}
       - name: DeepSeek Code Review
         uses: hustcer/deepseek-review@15a228bf15e01ef1f4d195eab4febbd7809dd2ed # v1
         with:
           chat-token: ${{ secrets.DEEPSEEK_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          base-url: ${{ vars.DEEPSEEK_API_BASE }}
+          watch-mention: '/review'
           sys-prompt: |
             # Role
             Act as a skeptical correctness reviewer. Assume the implementation may be subtly wrong even if tests pass.

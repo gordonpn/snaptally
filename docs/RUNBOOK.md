@@ -680,9 +680,12 @@ reviewing a pin update. The standalone reviewdog binary is pinned to `v0.21.0`;
 review and update that input explicitly when upgrading it. Checkouts disable
 credential persistence so later dependency scripts do not inherit git credentials.
 
-PR-Agent runs only for ready-for-review same-repository PRs or maintainer comments
-beginning with `/review`, `/describe`, `/improve` or `/ask` followed by whitespace
-or the end of the comment. A separate read-only authorization job checks the live
-PR's origin, open state and draft state before the job with LLM secrets can run.
-It does not check out PR code. Ordinary review conversation does not invoke the
-agent, and fork PRs cannot pass authorization.
+PR-Agent and DeepSeek Review run for non-draft same-repository human PRs on
+`opened`, `reopened`, `synchronize`, and `ready_for_review`, or maintainer comments
+beginning with `/review` (plus `/describe`, `/improve`, or `/ask` for PR-Agent).
+Both workflows use a read-only `authorize` job checked out from `base.sha` on
+`pull_request` (or the default branch on `issue_comment`) before any
+secret-bearing job runs, serialize reviews per PR with cancellation disabled, and
+validate `DEEPSEEK_API_KEY`, `GITHUB_TOKEN`, and `DEEPSEEK_API_BASE` (HTTPS URL)
+before invocation. PR-Agent requires `handle_push_trigger` and `/review` push
+commands to review synchronized commits.
