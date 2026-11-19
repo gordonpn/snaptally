@@ -359,13 +359,13 @@ jobs:
 
 ### 5.3 Continuous Integration and Code Coverage
 
-Pull requests and commits to `main` trigger automated unit tests and code coverage analysis via `.github/workflows/coverage.yml`.
+Pull requests and commits to `main` trigger automated linting, typechecking, unit tests, code coverage analysis, integration tests, and static builds via `.github/workflows/ci.yml`.
 
 #### Codecov Configuration and Secret
 SnapTally uses Codecov to host visual coverage breakdowns and post line-by-line pull request diff analysis:
 
 - Repository secret: `CODECOV_TOKEN` (configured under **Settings** > **Secrets and variables** > **Actions**). Obtain from the repository dashboard on [Codecov](https://app.codecov.io/).
-- Workflow configuration: In `.github/workflows/coverage.yml`, `codecov/codecov-action@v5` uploads `coverage/lcov.info` with `fail_ci_if_error: false`.
+- Workflow configuration: In `.github/workflows/ci.yml`, `codecov/codecov-action@v7` uploads `coverage/lcov.info` with `fail_ci_if_error: true` and falls back to OIDC when `CODECOV_TOKEN` is unset.
 - Threshold configuration: [codecov.yml](../codecov.yml) enforces an 80% coverage threshold matching `--test-coverage-lines=80`.
 
 ---
@@ -676,9 +676,8 @@ For each update PR:
 All workflow actions are pinned to full upstream commit SHAs with release-tag
 comments. Verify the upstream repository and peeled commit (`git ls-remote
 https://github.com/OWNER/REPO.git refs/tags/VERSION 'refs/tags/VERSION^{}'`) when
-reviewing a pin update. The standalone reviewdog binary is pinned to `v0.21.0`;
-review and update that input explicitly when upgrading it. Checkouts disable
-credential persistence so later dependency scripts do not inherit git credentials.
+reviewing a pin update. Checkouts disable credential persistence so later
+dependency scripts do not inherit git credentials.
 
 PR-Agent runs only for ready-for-review same-repository PRs or maintainer comments
 beginning with `/review`, `/describe`, `/improve` or `/ask` followed by whitespace
