@@ -20,18 +20,18 @@
     "test:integration": "node --test tests/integration/*.test.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.7",
-    "@cloudflare/workers-types": "^5.20261110.1",
-    "@playwright/test": "^1.65.0",
+    "@biomejs/biome": "2.6.8",
+    "@cloudflare/workers-types": "^5.20261120.1",
+    "@playwright/test": "^1.65.1",
     "@tabler/icons-astro": "^3.51.0",
     "@tailwindcss/vite": "^4.3.5",
     "@types/alpinejs": "^3.17.0",
     "@types/node": "^26.6.6",
-    "astro": "^7.4.10",
-    "daisyui": "^5.7.50",
+    "astro": "^7.4.13",
+    "daisyui": "^5.8.1",
     "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",
-    "wrangler": "^4.160.1"
+    "wrangler": "^4.165.0"
   },
   "dependencies": {
     "alpinejs": "^3.17.5"
