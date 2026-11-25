@@ -57,6 +57,26 @@ describe("toolchain declaration parity", () => {
     );
   });
 
+  it("rejects matching short action references in policy and workflow", () => {
+    const sources = readToolchainSources(root);
+    const fullSha = "ae857e78c1b42b3d0a49637181b09d3d56d402b4";
+    const shortSha = fullSha.slice(0, 8);
+
+    assert.throws(() =>
+      checkToolchain({
+        ...sources,
+        ".github/workflows/reviewdog.yml": sources[".github/workflows/reviewdog.yml"].replace(
+          fullSha,
+          shortSha,
+        ),
+        "scripts/toolchain-policy.json": sources["scripts/toolchain-policy.json"].replace(
+          fullSha,
+          shortSha,
+        ),
+      }),
+    );
+  });
+
   it("rejects an intentional mismatch through the CLI", () => {
     const sources = readToolchainSources(root);
     const directory = mkdtempSync(resolve(tmpdir(), "snaptally-toolchain-"));

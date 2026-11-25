@@ -97,6 +97,7 @@ export function checkToolchain(sources: Sources): void {
   const policy = record(JSON.parse(sources["scripts/toolchain-policy.json"]));
   assert.equal(scalar(mise, "actionlint"), policy.localActionlint, "Local actionlint policy drift");
   assert.ok(typeof policy.reviewdogAction === "string");
+  assert.match(policy.reviewdogAction, /^reviewdog\/action-actionlint@[a-f0-9]{40}$/);
   assert.ok(
     sources[".github/workflows/reviewdog.yml"]
       .split("\n")
@@ -105,12 +106,6 @@ export function checkToolchain(sources: Sources): void {
   );
   assert.ok(typeof policy.bundledActionlint === "string");
   assert.match(policy.bundledActionlint, /^\d+\.\d+\.\d+$/);
-  assert.ok(
-    sources[".github/workflows/reviewdog.yml"].includes(
-      '-ignore \'^unexpected key "queue" for "concurrency" section\\.\'',
-    ),
-    "Preserve the documented local/CI actionlint diagnostic exception",
-  );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
