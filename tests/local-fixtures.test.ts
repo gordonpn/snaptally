@@ -251,13 +251,31 @@ test("fixture reset and seed refuse when an active fixture-backed Pages server i
       /active fixture-backed local Pages server detected \(PID 42424\)/,
     );
 
-    // Unrelated normal local Pages server (.wrangler/state) must not block fixture reset.
+    // Unrelated normal or sibling Pages servers (.wrangler/state, dev-fixtures-e2e) must not block fixture reset.
     localFixtures(["reset"], temp, run, () => [
       {
         pid: 51515,
         args: `node wrangler pages dev ./dist --persist-to ${resolve(temp, ".wrangler/state")}`,
       },
+      {
+        pid: 51517,
+        args: `node wrangler pages dev ./dist --persist-to ${statePath}-e2e`,
+      },
     ]);
+    assert.throws(
+      () =>
+        localFixtures(["reset"], temp, run, () => [
+          { pid: 51518, args: `node wrangler pages dev ./dist --persist-to=${statePath}` },
+        ]),
+      /active fixture-backed local Pages server detected \(PID 51518\)/,
+    );
+    assert.throws(
+      () =>
+        localFixtures(["reset"], temp, run, () => [
+          { pid: 51519, args: `node wrangler pages dev ./dist --persist-to ${statePath}/v3/d1` },
+        ]),
+      /active fixture-backed local Pages server detected \(PID 51519\)/,
+    );
     const previousDirectory = process.cwd();
     try {
       process.chdir(temp);

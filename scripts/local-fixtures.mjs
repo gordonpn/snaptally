@@ -36,6 +36,14 @@ function defaultListProcesses() {
     .map((match) => ({ pid: Number.parseInt(match[1], 10), args: match[2] }));
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function matchesStatePath(args, target) {
+  return new RegExp(`(?:^|[\\s"'=])${escapeRegExp(target)}(?:$|[\\s"'/])`).test(args);
+}
+
 function findActiveFixtureServers(parent, state, listProcesses) {
   const realParent = existsSync(parent) ? realpathSync(parent) : null;
   const realState = realParent ? resolve(realParent, "dev-fixtures") : null;
@@ -51,7 +59,10 @@ function findActiveFixtureServers(parent, state, listProcesses) {
     if (!serverProcess.test(proc.args)) {
       return false;
     }
-    return proc.args.includes(state) || (realState !== null && proc.args.includes(realState));
+    return (
+      matchesStatePath(proc.args, state) ||
+      (realState !== null && matchesStatePath(proc.args, realState))
+    );
   });
 }
 
