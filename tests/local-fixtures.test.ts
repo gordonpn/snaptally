@@ -141,7 +141,7 @@ test("overlapping fixture commands reject cleanly before mutating state", async 
     assert.equal(existsSync(resolve(temp, ".wrangler/dev-fixtures.lock")), false);
 
     // Reproduce concurrent OS processes racing on the exclusive lock file.
-    const liveHolder = spawn(process.execPath, ["-e", "process.stdin.resume()"], {
+    const liveHolder = spawn("cat", [], {
       stdio: ["pipe", "ignore", "ignore"],
     });
     try {
@@ -262,8 +262,7 @@ test("fixture reset and seed refuse when an active fixture-backed Pages server i
     const fakeServer = spawn(
       process.execPath,
       [
-        "-e",
-        "process.stdin.resume()",
+        resolve(root, "tests/fixtures/fixture-server.mjs"),
         "wrangler",
         "pages",
         "dev",

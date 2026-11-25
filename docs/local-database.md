@@ -43,7 +43,10 @@ inspecting or modifying fixture state, rejecting overlapping `seed` or `reset`
 invocations before fixture state changes occur. Interrupted commands leave the
 lock in place rather than racing to remove another command's replacement lock.
 After confirming that all fixture commands and fixture-backed servers have
-stopped, remove `.wrangler/dev-fixtures.lock` manually before retrying. This lock only coordinates
+stopped, remove `.wrangler/dev-fixtures.lock` manually before retrying. Inspect
+the lock's recorded `pid`, `command`, and `acquiredAt` fields to identify its
+owner before recovery; unreadable metadata is not permission to remove a live
+lock. This lock only coordinates
 `scripts/local-fixtures.mjs` commands; it does not lock out unrelated SQLite
 users (`sqlite3`, manual `wrangler d1 execute`, or a running Pages server), so
 always stop the local server first.

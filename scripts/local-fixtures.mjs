@@ -129,12 +129,7 @@ function cleanupTransientDirs(parent, state, command) {
     if (!stat || stat.isSymbolicLink() || !stat.isDirectory() || !hasValidOwnership(candidate)) {
       continue;
     }
-    if (
-      name.startsWith(backupPrefix) &&
-      command === "seed" &&
-      !existsSync(state) &&
-      hasValidOwnership(candidate)
-    ) {
+    if (name.startsWith(backupPrefix) && command === "seed" && !existsSync(state)) {
       renameSync(candidate, state);
       continue;
     }
