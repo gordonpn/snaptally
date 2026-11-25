@@ -1,46 +1,58 @@
 # Project Execution Queue
 
-- **Last Refined:** 2026-11-15
-- **Repository:** [gordonpn/snaptally](https://github.com/gordonpn/snaptally)
-- **Verified `main` Commit SHA:** `b5c140d`
-- **Product Strategy:** [docs/product-direction.md](docs/product-direction.md)
-- **GitHub Backlog:** https://github.com/gordonpn/snaptally/issues
+- **Refreshed:** 2026-11-24
+- **Verified base:** `origin/main` at `7d89495`
+- **Canonical backlog:** [GitHub Issues](https://github.com/gordonpn/snaptally/issues)
+- **Direction:** [Product direction](docs/product-direction.md); offline capture remains the priority before December 12.
 
-## NOW - Recommended Next Task
+## NOW
 
-### [#204: test(intake): make browser storage fixtures and coverage deterministic](https://github.com/gordonpn/snaptally/issues/204)
+### [#221: Consecutive intake with an active service worker](https://github.com/gordonpn/snaptally/issues/221)
 
-- **Priority:** P1 | **Effort:** S | **Readiness:** PR [#210](https://github.com/gordonpn/snaptally/pull/210) in review
-- **Why this task is next:** Prevents intermittent 1-branch `codecov/project` failures from blocking every Horizon 1 PR ahead of the December 12 departure.
-- **Definition of Done:** Isolated browser-global/storage fixtures with settled async teardown across intake and outbox suites; deterministic tests covering `syncOutbox`/`scheduleDueRetry` deadline and cached-merchant startup branches; three consecutive fresh-process runs of `pnpm run test:coverage` yielding identical line and branch coverage on `src/scripts/outbox.ts` and `src/scripts/intake-form.ts`; and `just typecheck`, `just test-coverage`, and `just lint` passing.
+- **Audit estimate:** P2 / M. **Readiness:** Ready; no open PR covered it at this refresh.
+- **Why:** Completes combined offline/consecutive-entry coverage without waiting for unresolved financial policies.
+- **First action:** Delay the first POST at the disposable backend boundary while the production worker remains active; avoid page routing that the worker can bypass.
+- **Done:** Both mobile engines verify a second distinct durable payload before the first response, then offline/reconnect recovery with exact-once persistence. Record browser-specific worker automation limits.
+- **Unblocks:** Confidence in the queue while adding travel payloads.
 
-## NEXT - Horizon 1 (Before December 12 Departure)
+## NEXT
 
-1. **[#63: Non-card Checking/e-Transfer payment rail and ring-fenced Property / CAD category](https://github.com/gordonpn/snaptally/issues/63)**
-   - **Priority:** P1 | **Effort:** S | **Why now:** Covers Dec 1 and Jan 1 Canadian mortgage/rent cycles without distorting personal daily spend gauges.
-2. **[#215: Native TWD, HKD, and VND cash accounting with cached editable fx_rate](https://github.com/gordonpn/snaptally/issues/215)**
-   - **Priority:** P1 | **Effort:** M | **Why now:** Supports 0ms offline street-cash logging abroad (0-decimal keypad for VND/TWD, raised numeric cap, persisted `fx_rate`), while no-FX cards continue logging USD directly.
-3. **[#216: Travel timezone boundaries and local calendar date validation](https://github.com/gordonpn/snaptally/issues/216)**
-   - **Priority:** P1 | **Effort:** S | **Why now:** Validates `Asia/Taipei`, `Asia/Hong_Kong`, and `Asia/Ho_Chi_Minh` date boundaries across open forms, offline queue, and Activity.
-4. **[#224: Optional trip tag, Active Trip toggle, and Trip Allowance tracking](https://github.com/gordonpn/snaptally/issues/224)**
-   - **Priority:** P1 | **Effort:** S | **Why now:** Lets trip dining/bars/transit keep normal categories while tracking against a dedicated Trip Allowance instead of distorting regular monthly `Guilt-Free`.
-5. **[#225: Non-blocking Store % budget used guardrail strip on intake view](https://github.com/gordonpn/snaptally/issues/225)**
-   - **Priority:** P1 | **Effort:** S | **Why now:** Closes the point-of-decision read gap at stores and abroad (Rolling 30-day or Active Trip primary gauge, 1-tap toggle to Rollover).
+1. [#63: Checking/e-Transfer and Property/CAD](https://github.com/gordonpn/snaptally/issues/63), P1 / S. Highest-value product work before December/January banking cycles. First pin the representation of rental inflows versus mortgage outflows and the Property category contract. Independent of worker tests once the contract is explicit; retired unit-level accounting stays excluded.
+2. [#191: Token-removal cache cleanup](https://github.com/gordonpn/snaptally/issues/191), P3 / S. Ready for reconciliation of existing local work, not a fresh overwrite. Preserve queued money records through an explicit retain/discard flow and verify stale-response guards. Avoid concurrent intake/outbox edits with travel work.
+3. [#215: Native foreign cash and FX](https://github.com/gordonpn/snaptally/issues/215), P1 / M. Policy refinement needed: quote direction, rounding, missing/stale rates, and manual override precedence. Preserve confirmed native-cash and non-blocking offline requirements.
+4. [#216: Travel date boundaries](https://github.com/gordonpn/snaptally/issues/216), P1 / S. Define open-form midnight, timezone-change and displayed-time semantics first. Automated timezone tests can follow independently of FX; physical device/PWA rehearsal remains separate evidence.
+5. [#254: Architecture documentation drift](https://github.com/gordonpn/snaptally/issues/254), P2 / S. Ready and independent: align direct Pages handlers, planned endpoints and retired scope with source and confirmed direction, without changing runtime behavior.
 
-*(Active maintenance PRs already in flight: [#207/#205](https://github.com/gordonpn/snaptally/pull/207), [#208/#195](https://github.com/gordonpn/snaptally/pull/208), [#209/#40](https://github.com/gordonpn/snaptally/pull/209), [#211/#41](https://github.com/gordonpn/snaptally/pull/211), [#213/#193](https://github.com/gordonpn/snaptally/pull/213), [#217/#146](https://github.com/gordonpn/snaptally/pull/217), [#220/#189](https://github.com/gordonpn/snaptally/pull/220).)*
+Priority and effort follow existing issue metadata where present; #221's estimate is this audit's recommendation.
 
-## BLOCKERS
+## Work delivered for review
 
-- **Pre-trip CI stability (#204 / PR #210):** Landing deterministic coverage fixtures unblocks clean merges across Horizon 1 PRs.
-- **Upstream transitive semver bounds (#193 / PR #213):** Patched `sharp` and `undici` versions constrained under `astro`/`wrangler`.
-- **Contract decision (#151):** Needs confirmation on keeping bounded negative expense credits permanent.
+The November 24 batch uses independent branches from the same default-branch base:
 
-## RETIRED & CLOSED (2026-11-15)
+- [#237 fixture safety](https://github.com/gordonpn/snaptally/issues/237): [PR #250](https://github.com/gordonpn/snaptally/pull/250).
+- [#238 Activity DOM coverage](https://github.com/gordonpn/snaptally/issues/238): [PR #251](https://github.com/gordonpn/snaptally/pull/251).
+- [#246 haptics investigation](https://github.com/gordonpn/snaptally/issues/246): [PR #249](https://github.com/gordonpn/snaptally/pull/249); recommends no runtime change.
+- [#231](https://github.com/gordonpn/snaptally/issues/231) and [#222](https://github.com/gordonpn/snaptally/issues/222): [PR #252](https://github.com/gordonpn/snaptally/pull/252); do not create competing implementations.
+- [#245 merchant keyboard dismissal](https://github.com/gordonpn/snaptally/issues/245): [PR #253](https://github.com/gordonpn/snaptally/pull/253), preserving keyboard combobox focus while releasing pointer-selected input focus.
 
-- **Closed in direction convergence (not planned):** `#21`, `#22`, `#23` (multi-tenancy), `#53` (synthetic canaries), `#79` (OpenAPI 3.1), `#123` (Workers telemetry), `#124` (OTel/Prometheus).
-- **Closed in prior backlog audit:** `#78`, `#101`, `#141` (`completed`), `#155` (`duplicate` of `#191`), `#137` (`not planned`).
+Check the [live PR list](https://github.com/gordonpn/snaptally/pulls) for hosted results and merge status. Local verification or a requested automated review is not hosted success. Only the maintainer merges PRs.
 
-## LATER - Horizon 2 & Deferred
+## BLOCKERS AND DEPENDENCIES
 
-- **Horizon 2 (Home Overview & Direction, post-Dec 12):** `#42` (non-resetting longitudinal aggregation: Rolling, Rollover, YTD, same-day MTD, deterministic anomalies), `#44` (Home Overview dashboard, net-worth snapshots dropped), `#226` (simple CSV export).
-- **Deferred (Post-Horizon 2):** `#36`, `#37`, `#39` (alert streams/digests), `#43` (sinking funds engine), `#60` (rulebook), `#62` (receipt splitting), `#158` (submit confirmation modal), plus remaining tooling/hardening tasks (`#76`, `#77`, `#81`, `#125`, `#136`, `#161`, `#169`, `#191`, `#192`, `#194`, `#195`, `#203`) tracked on [GitHub Issues](https://github.com/gordonpn/snaptally/issues).
+- [#224 trip allowance](https://github.com/gordonpn/snaptally/issues/224) needs absent/zero-target behavior; full converted totals also depend on the FX contract. Basic trip tagging can be designed independently.
+- [#225 store guardrail](https://github.com/gordonpn/snaptally/issues/225) needs trustworthy rolling/rollover math, pending-spend reconciliation, trip ring-fencing and the trip-summary contract. Cached server totals do not include newly queued expenses.
+- [#169 PWA viewport artifact](https://github.com/gordonpn/snaptally/issues/169) needs a reproducible target-device observation; static inspection is not defect reproduction.
+- [#192 preview protection](https://github.com/gordonpn/snaptally/issues/192) requires an explicitly authorized Cloudflare configuration change and live access verification.
+
+## Pending Closure Review
+
+These remain open; this audit does not close them:
+
+- [#193 dependency vulnerabilities](https://github.com/gordonpn/snaptally/issues/193): fresh lockfile audit reports zero vulnerabilities and GitHub reports zero open Dependabot alerts. Review remaining original acceptance evidence.
+- [#205](https://github.com/gordonpn/snaptally/issues/205) and [#136](https://github.com/gordonpn/snaptally/issues/136): concurrency configuration is already present; verify requested overlapping-event behavior rather than submit duplicate changes.
+- [#239 reviewers](https://github.com/gordonpn/snaptally/issues/239): implementation merged and hosted invocation recorded; reconcile all criteria before closure.
+- [#81 development fixtures](https://github.com/gordonpn/snaptally/issues/81): substantial scope is in main; compare its remaining checklist with existing implementation and fixture-safety follow-up.
+
+## LATER
+
+Use the [GitHub backlog](https://github.com/gordonpn/snaptally/issues) for deferred Home Overview, aggregation, CSV export, alerts and other work. This queue is a snapshot, not a second backlog; retired enterprise/multi-user scope stays retired.
