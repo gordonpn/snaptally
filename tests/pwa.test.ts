@@ -467,7 +467,7 @@ describe("Intake text input assistance", () => {
     const option = markup.match(/<li\b[\s\S]*?role="option"[\s\S]*?<\/li>/)?.[0];
     assert.ok(option);
     assert.match(option, /min-h-\[44px\]/);
-    assert.match(option, /@click="chooseMerchantSuggestion\(s\)"/);
+    assert.match(option, /@click="chooseMerchantSuggestion\(s\); \$refs\.merchantInput\.blur\(\)"/);
     assert.match(markup, /max-h-48 overflow-y-auto/);
   });
 
