@@ -31,27 +31,30 @@ async function expectResetAndEnterSecond(
   secondMerchant: string,
   unlockDeadline: number,
 ): Promise<void> {
-  const remaining = () => Math.max(1, unlockDeadline - Date.now());
-  await expect(page.getByText("USD $0.00", { exact: true })).toBeVisible({ timeout: remaining() });
-  await expect(page.getByRole("combobox", { name: "Merchant name" })).toHaveValue("", {
-    timeout: remaining(),
-  });
+  await expect(page.getByText("USD $0.00", { exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Merchant name" })).toHaveValue("");
   await expect(
     page
       .getByRole("group", { name: "Parent bucket selection", exact: true })
       .getByRole("button", { name: "Guilt-Free", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true", { timeout: remaining() });
+  ).toHaveAttribute("aria-pressed", "true");
   await expect(
     page
       .getByRole("group", { name: "Subcategory selection", exact: true })
       .getByRole("button", { name: "Dining", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true", { timeout: remaining() });
+  ).toHaveAttribute("aria-pressed", "true");
 
   const save = page.getByRole("button", { name: "Save Transaction", exact: true });
-  await expect(save).toBeDisabled({ timeout: remaining() });
-  for (const digit of ["1", "2", "3"]) {
-    const key = page.getByRole("button", { name: digit, exact: true });
-    await expect(key).toBeEnabled({ timeout: remaining() });
+  await expect(save).toBeDisabled();
+  const keypadKeys = ["1", "2", "3"].map((digit) =>
+    page.getByRole("button", { name: digit, exact: true }),
+  );
+  for (const key of keypadKeys) {
+    await expect(key).toBeEnabled();
+  }
+  expect(Date.now()).toBeLessThanOrEqual(unlockDeadline);
+
+  for (const key of keypadKeys) {
     await key.click();
   }
   await expect(page.getByText("USD $1.23", { exact: true })).toBeVisible();
@@ -113,9 +116,11 @@ async function fetchTransactionsByIds(
 }
 
 function expectExactOnceWirePosts(proxy: DelayedProxy, expectedIds: readonly string[]): void {
-  const succeededIds = proxy
-    .getPostRequests()
-    .filter((entry) => entry.forwarded && entry.status === 201)
+  // Intake records carry client-generated UUIDs so every forwarded POST maps one-to-one with expectedIds.
+  const forwarded = proxy.getPostRequests().filter((entry) => entry.forwarded);
+  expect(forwarded).toHaveLength(expectedIds.length);
+  const succeededIds = forwarded
+    .filter((entry) => entry.status === 201)
     .map((entry) => {
       if (typeof entry.payload === "object" && entry.payload !== null && "id" in entry.payload) {
         return entry.payload.id;
@@ -234,6 +239,7 @@ test.describe("consecutive intake with active service worker", () => {
 
     await page.reload();
     await expect.poll(async () => (await readOutbox(page)).length).toBe(2);
+    expect(proxy.getPostRequests().filter((entry) => entry.forwarded)).toHaveLength(0);
 
     await context.setOffline(false);
     await expect.poll(async () => (await readOutbox(page)).length).toBe(0);

@@ -50,25 +50,88 @@ function parseJsonOrUndefined(body: Buffer): unknown {
 function buildUpstreamHeaders(
   headers: IncomingHttpHeaders,
   targetHost: string,
+  bodyLength: number,
 ): IncomingHttpHeaders {
   const nextHeaders: IncomingHttpHeaders = { ...headers, host: targetHost };
   delete nextHeaders.connection;
+  delete nextHeaders["transfer-encoding"];
+  if (bodyLength > 0) {
+    nextHeaders["content-length"] = String(bodyLength);
+  } else {
+    delete nextHeaders["content-length"];
+  }
   return nextHeaders;
+}
+
+interface UpstreamTarget {
+  hostname: "127.0.0.1" | "localhost";
+  port: number;
+  host: string;
+}
+
+const ALLOWED_STATIC_PATHS = new Set([
+  "/",
+  "/index.html",
+  "/activity",
+  "/activity/",
+  "/activity/index.html",
+  "/sw.js",
+  "/manifest.json",
+  "/favicon.svg",
+  "/theme-init.js",
+]);
+
+function resolveSafeRequestTarget(
+  rawUrl: string | undefined,
+  targetUrl: URL,
+): { pathname: string; path: string } | null {
+  const candidate = rawUrl ?? "/";
+  if (!candidate.startsWith("/") || candidate.startsWith("//")) {
+    return null;
+  }
+  if (candidate.includes("..") || candidate.includes("\\")) {
+    return null;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate, targetUrl);
+  } catch {
+    return null;
+  }
+  if (parsed.origin !== targetUrl.origin) {
+    return null;
+  }
+  const { pathname } = parsed;
+  const isAllowedPath =
+    ALLOWED_STATIC_PATHS.has(pathname) ||
+    pathname.startsWith("/_astro/") ||
+    pathname.startsWith("/icons/") ||
+    pathname.startsWith("/api/");
+  if (!isAllowedPath) {
+    return null;
+  }
+  return {
+    pathname,
+    path: `${pathname}${parsed.search}`,
+  };
 }
 
 function forwardToUpstream(
   req: IncomingMessage,
   res: ServerResponse,
-  targetUrl: URL,
+  upstream: UpstreamTarget,
+  requestPath: string,
   body: Buffer,
   onStatus?: (status: number) => void,
 ): void {
-  const path = req.url ?? "/";
   const upstreamReq = httpRequest(
-    new URL(path, targetUrl),
     {
+      protocol: "http:",
+      hostname: upstream.hostname,
+      port: upstream.port,
+      path: requestPath,
       method: req.method,
-      headers: buildUpstreamHeaders(req.headers, targetUrl.host),
+      headers: buildUpstreamHeaders(req.headers, upstream.host, body.length),
     },
     (upstreamRes) => {
       const status = upstreamRes.statusCode ?? 502;
@@ -110,6 +173,21 @@ function forwardToUpstream(
  */
 export async function startDelayedProxy(targetBaseUrl: string): Promise<DelayedProxy> {
   const targetUrl = new URL(targetBaseUrl);
+  if (
+    targetUrl.protocol !== "http:" ||
+    (targetUrl.hostname !== "127.0.0.1" && targetUrl.hostname !== "localhost")
+  ) {
+    throw new Error(`Delayed proxy only supports local HTTP targets, got: ${targetBaseUrl}`);
+  }
+  const upstreamPort = Number(targetUrl.port || "80");
+  if (!Number.isInteger(upstreamPort) || upstreamPort < 1 || upstreamPort > 65535) {
+    throw new Error(`Delayed proxy received invalid port in target URL: ${targetBaseUrl}`);
+  }
+  const upstream: UpstreamTarget = {
+    hostname: targetUrl.hostname === "localhost" ? "localhost" : "127.0.0.1",
+    port: upstreamPort,
+    host: targetUrl.host,
+  };
   const postRequests: RecordedPost[] = [];
   const armedHoldResolvers: Array<(held: HeldTransactionPost) => void> = [];
   const pendingReleases = new Set<() => void>();
@@ -123,17 +201,23 @@ export async function startDelayedProxy(targetBaseUrl: string): Promise<DelayedP
       return;
     }
 
-    const requestUrl = new URL(req.url ?? "/", targetUrl);
-    const isTransactionPost = req.method === "POST" && requestUrl.pathname === "/api/transactions";
+    const safeTarget = resolveSafeRequestTarget(req.url, targetUrl);
+    if (!safeTarget) {
+      res.writeHead(400, { "content-type": "text/plain" });
+      res.end("Rejected disallowed proxy path");
+      return;
+    }
+
+    const isTransactionPost = req.method === "POST" && safeTarget.pathname === "/api/transactions";
 
     if (!isTransactionPost) {
-      forwardToUpstream(req, res, targetUrl, body);
+      forwardToUpstream(req, res, upstream, safeTarget.path, body);
       return;
     }
 
     const payload = parseJsonOrUndefined(body);
     const record: RecordedPost = {
-      url: requestUrl.pathname,
+      url: safeTarget.pathname,
       payload,
       forwarded: false,
     };
@@ -142,7 +226,7 @@ export async function startDelayedProxy(targetBaseUrl: string): Promise<DelayedP
     const resolver = armedHoldResolvers.shift();
     if (!resolver) {
       record.forwarded = true;
-      forwardToUpstream(req, res, targetUrl, body, (status) => {
+      forwardToUpstream(req, res, upstream, safeTarget.path, body, (status) => {
         record.status = status;
       });
       return;
@@ -196,7 +280,7 @@ export async function startDelayedProxy(targetBaseUrl: string): Promise<DelayedP
     }
 
     record.forwarded = true;
-    forwardToUpstream(req, res, targetUrl, body, (status) => {
+    forwardToUpstream(req, res, upstream, safeTarget.path, body, (status) => {
       record.status = status;
     });
   });
