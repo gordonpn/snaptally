@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { checkToolchain, readToolchainSources } from "../scripts/check-toolchain.ts";
 
 const root = resolve(import.meta.dirname, "..");
+const stubScript = resolve(root, "tests/fixtures/toolchain-stub.sh");
+
+function readMiseVersion(miseToml: string, tool: string): string {
+  const match = miseToml.match(new RegExp(`^\\s*${tool}\\s*=\\s*"([^"]+)"`, "m"));
+  assert.ok(match?.[1], `Missing ${tool} version in .mise.toml`);
+  return match[1];
+}
 
 describe("toolchain declaration parity", () => {
   it("accepts repository declarations through the CLI", () => {
@@ -34,6 +41,30 @@ describe("toolchain declaration parity", () => {
       ".github/workflows/reviewdog.yml",
       "ae857e78c1b42b3d0a49637181b09d3d56d402b4",
       "0000000000000000000000000000000000000000",
+    ],
+    [
+      "setup-node 41-char SHA",
+      ".github/actions/setup/action.yml",
+      "949feb2413d6458794dcd2491c4babbbce0c15c1",
+      "949feb2413d6458794dcd2491c4babbbce0c15c10",
+    ],
+    [
+      "action-setup 41-char SHA",
+      ".github/actions/setup/action.yml",
+      "73e46992e05b19abd31f2f3c20e0e7370d762115",
+      "73e46992e05b19abd31f2f3c20e0e7370d762115a",
+    ],
+    [
+      "setup-node short SHA",
+      ".github/actions/setup/action.yml",
+      "949feb2413d6458794dcd2491c4babbbce0c15c1",
+      "949feb24",
+    ],
+    [
+      "action-setup short SHA",
+      ".github/actions/setup/action.yml",
+      "73e46992e05b19abd31f2f3c20e0e7370d762115",
+      "73e46992",
     ],
   ] as const) {
     it(`rejects ${name} drift`, () => {
@@ -101,6 +132,124 @@ describe("toolchain declaration parity", () => {
       assert.doesNotMatch(result.stdout, /match the documented parity policy/);
     } finally {
       rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores version and node-version inputs in unrelated setup steps", () => {
+    const sources = readToolchainSources(root);
+    const setup = `${sources[".github/actions/setup/action.yml"]}\n    - name: Unrelated step\n      uses: example/other@0123456789abcdef0123456789abcdef01234567\n      with:\n        version: 99\n        node-version: 18\n`;
+
+    assert.doesNotThrow(() =>
+      checkToolchain({
+        ...sources,
+        ".github/actions/setup/action.yml": setup,
+      }),
+    );
+  });
+
+  it("handles direct step uses lines and keys before uses within a step", () => {
+    const sources = readToolchainSources(root);
+    const setup = sources[".github/actions/setup/action.yml"]
+      .replace("    - name: Setup pnpm\n      uses:", "    - uses:")
+      .replace(
+        "    - name: Setup Node.js\n",
+        "    - name: Setup Node.js\n      id: node\n\n      # pinned setup-node\n",
+      );
+
+    assert.doesNotThrow(() =>
+      checkToolchain({
+        ...sources,
+        ".github/actions/setup/action.yml": setup,
+      }),
+    );
+  });
+
+  it("rejects missing scoped version even when an unrelated step declares it", () => {
+    const sources = readToolchainSources(root);
+    const setup = `${sources[".github/actions/setup/action.yml"].replace("        version: 10\n", "")}\n    - name: Unrelated step\n      uses: example/other@0123456789abcdef0123456789abcdef01234567\n      with:\n        version: 10\n`;
+
+    assert.throws(
+      () =>
+        checkToolchain({
+          ...sources,
+          ".github/actions/setup/action.yml": setup,
+        }),
+      /Expected one literal version version/,
+    );
+  });
+
+  it("rejects uses lines outside a YAML step block", () => {
+    const sources = readToolchainSources(root);
+    const setup = sources[".github/actions/setup/action.yml"].replace(
+      "    - name: Setup pnpm\n      uses:",
+      "uses:",
+    );
+
+    assert.throws(
+      () =>
+        checkToolchain({
+          ...sources,
+          ".github/actions/setup/action.yml": setup,
+        }),
+      /Expected pnpm\/action-setup uses: to belong to a YAML step/,
+    );
+  });
+
+  it("accepts explicit repository root when check-toolchain runs from a subdirectory", () => {
+    const result = spawnSync(
+      process.execPath,
+      [resolve(root, "scripts/check-toolchain.ts"), root],
+      {
+        cwd: resolve(root, "scripts"),
+        encoding: "utf8",
+        env: { ...process.env, NODE_V8_COVERAGE: "" },
+      },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /match the documented parity policy/);
+  });
+
+  it("resolves repository root when verify-toolchain.sh runs from a subdirectory", () => {
+    const sources = readToolchainSources(root);
+    const mise = sources[".mise.toml"];
+    const binDir = mkdtempSync(resolve(tmpdir(), "snaptally-toolchain-bin-"));
+    try {
+      for (const tool of ["mise", "node", "pnpm", "biome", "actionlint"]) {
+        symlinkSync(stubScript, resolve(binDir, tool));
+      }
+
+      const env = {
+        ...process.env,
+        NODE_V8_COVERAGE: "",
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+        REAL_NODE: process.execPath,
+        EXPECTED_MISE_FILE: resolve(root, ".mise.toml"),
+        STUB_NODE: readMiseVersion(mise, "node"),
+        STUB_PNPM: readMiseVersion(mise, "pnpm"),
+        STUB_BIOME: readMiseVersion(mise, "biome"),
+        STUB_ACTIONLINT: readMiseVersion(mise, "actionlint"),
+      };
+
+      const pass = spawnSync("bash", [resolve(root, "scripts/verify-toolchain.sh")], {
+        cwd: resolve(root, "scripts"),
+        encoding: "utf8",
+        env,
+      });
+
+      assert.equal(pass.status, 0, pass.stderr);
+      assert.match(pass.stdout, /match the documented parity policy/);
+
+      const fail = spawnSync("bash", [resolve(root, "scripts/verify-toolchain.sh")], {
+        cwd: resolve(root, "scripts"),
+        encoding: "utf8",
+        env: { ...env, STUB_EXPECTED_NODE: env.STUB_NODE, STUB_NODE: "20.0.0" },
+      });
+
+      assert.notEqual(fail.status, 0);
+      assert.match(fail.stderr, /node: expected /);
+    } finally {
+      rmSync(binDir, { recursive: true, force: true });
     }
   });
 });
