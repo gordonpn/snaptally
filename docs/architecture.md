@@ -134,7 +134,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_date_created_at ON transactions(date
 CREATE INDEX IF NOT EXISTS idx_transactions_merchant ON transactions(merchant);
 ```
 
-Additional migrations in `migrations/` define `monthly_budgets` (`0006_monthly_budgets_schema.sql`) for USD category targets and `api_rate_limits` (`0007_api_rate_limits.sql`) for fixed-window request counters.
+Additional migrations in `migrations/` add `currency` to `transactions` (`0005_add_currency_to_transactions.sql`) and define `monthly_budgets` (`0006_monthly_budgets_schema.sql`) for USD category targets and `api_rate_limits` (`0007_api_rate_limits.sql`) for fixed-window request counters.
 
 ### Net Spend Calculation
 

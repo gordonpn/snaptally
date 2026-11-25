@@ -202,17 +202,10 @@ Traditional budgeting applications look only at post-tax checking accounts, crea
 
 ---
 
-## 9. Cross-Border Real Estate and CAD Debt Servicing
+## 9. Cross-Border Property and CAD Ring-Fencing
 
-SnapTally separates US domestic living cash flow from Canadian assets and debt servicing:
+SnapTally separates US domestic living cash flow from Canadian property and CAD flows:
 
-### 9.1 Family Loan Liability
-- Principal: Fixed CAD principal balance.
-- Interest Rate: Fixed APR.
-- Monthly Interest-Only Payment: Calculated monthly interest payment (`principal * APR / 12`) remitted from US checking; principal is not amortized.
-- Servicing Channel: Wise remittance from US checking.
-
-### 9.2 Rental Property Cash Flow
-- Gross Rental Revenue: Multi-unit tenant rental revenue in CAD.
-- Operating Deductions: Municipal and school taxes, building insurance, CRA non-resident withholding, and maintenance reserves.
-- Currency Conversion: In original budget spreadsheets, CAD values were converted using `=GOOGLEFINANCE("CURRENCY:CADUSD")` (evaluating to ~0.702 at export time). In SnapTally's planned cross-border architecture, exchange rates will be periodically refreshed in the background and cached locally for offline 0ms intake, with the active exchange rate persisted per transaction via an `fx_rate` column.
+- **Planned Direction (`#63`)**: Introduce non-card `Checking` and `e-Transfer` payment rails alongside a ring-fenced `Property / CAD` category so Canadian mortgage, rent, taxes, and maintenance stay excluded from US lifestyle pacing.
+- **Retired Legacy Models**: The earlier spreadsheet-era family-loan interest-only ledger, multi-unit duplex operating-deduction breakdown, and `=GOOGLEFINANCE("CURRENCY:CADUSD")` conversion model were retired rather than scheduled for schema implementation.
+- **Multi-Currency Intake**: Foreign-currency transaction entry and FX conversion tracking remain scoped under `#215` and `#216`.
