@@ -1,0 +1,5 @@
+{
+  "localActionlint": "1.7.7",
+  "reviewdogAction": "reviewdog/action-actionlint@ae857e78c1b42b3d0a49637181b09d3d56d402b4",
+  "bundledActionlint": "1.17.1"
+}

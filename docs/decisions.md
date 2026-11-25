@@ -1,5 +1,12 @@
 # Implementation Decisions Log
 
+## 2026-11-24: Enforce declared toolchain parity without changing tool provenance
+
+- Decision: Keep CI Node/pnpm on documented major tracks, align Biome exactly across mise/package/lock/schema, and check the pinned reviewdog action against inspected bundled-version metadata while preserving the separate official local actionlint binary.
+- Rationale: Dependency upgrades already caused Biome drift, while reviewdog's installer uses a different actionlint fork. Treating these executables as identical would hide that operational boundary.
+- Rejected alternatives: Changing actionlint provenance, adding parser dependencies, or fetching upstream action sources during each local/CI check.
+- Source: [Toolchain parity](https://github.com/gordonpn/snaptally/issues/231), [CI pin policy](https://github.com/gordonpn/snaptally/issues/222), [toolchain verification](toolchain.md).
+
 ## 2026-11-16: Preserve formatter scope during the Biome upgrade
 
 - Decision: Align the configuration schema and hosted Biome version with the installed 2.6.7 dependency; leave Markdown and YAML formatting disabled.

@@ -144,7 +144,9 @@ category; standalone non-salary inflows belong under `Income -> Other`.
 The CLI rejects unknown flags and conflicting local/remote targets.
 Missing input files or directories fail explicitly.
 Unterminated CSV quotes stop the import before database writes.
-`just typecheck` checks both the API and the backfill scripts and tests.
+`just typecheck` checks the API, backfill scripts, configuration and toolchain
+checks. `just toolchain-parity` verifies workstation/CI version declarations;
+see the [toolchain policy](docs/toolchain.md#keeping-versions-aligned).
  
 - [Architecture & Design](docs/architecture.md): Detailed system design, data flows, database schemas, and free-tier operational limits.
 - [Budgeting Methodology & Category Taxonomy](docs/budgeting.md): Conscious Spending Plan parent buckets, subcategories, sinking funds, travel categorization, and expense credit rules.

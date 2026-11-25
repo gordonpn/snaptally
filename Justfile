@@ -11,6 +11,10 @@ toolchain-install:
 toolchain-verify:
     mise exec -- bash scripts/verify-toolchain.sh
 
+# Check committed tool declarations without installing workstation executables
+toolchain-parity:
+    node scripts/check-toolchain.ts
+
 # Install project dependencies
 install:
     pnpm install
