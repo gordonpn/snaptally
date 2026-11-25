@@ -6,6 +6,10 @@ default category and most-used card, and immediately accepts the next entry.
 Saved cards, merchant suggestions, currency, appearance and API settings remain
 available.
 
+Tapping a merchant suggestion selects it and releases the merchant field's focus
+so the on-screen keyboard can close. Tap the field again to edit. Arrow-key and
+Enter selection keep focus in the combobox for keyboard navigation.
+
 Network synchronization continues separately. The pending badge and spinner show
 its progress without disabling the keypad. Open Sync Status to inspect pending
 items, retry failed items or review a server rejection. An authentication warning

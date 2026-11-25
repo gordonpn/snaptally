@@ -178,6 +178,7 @@ import Layout from "../layouts/Layout.astro";
         <div class="relative" @click.outside="closeMerchantSuggestions()">
           <input
             id="merchant-input"
+            x-ref="merchantInput"
             type="text"
             autocomplete="off"
             autocorrect="off"
@@ -213,7 +214,7 @@ import Layout from "../layouts/Layout.astro";
                 :class="highlightedMerchantIndex === index ? 'neu-inset-sm font-semibold text-primary bg-primary/10' : 'hover:bg-base-content/5'"
                 @mouseenter="highlightedMerchantIndex = index; highlightedMerchant = s"
                 @mousedown.prevent
-                @click="chooseMerchantSuggestion(s)"
+                @click="chooseMerchantSuggestion(s); $refs.merchantInput.blur()"
               >
                 <span x-text="s"></span>
               </li>
