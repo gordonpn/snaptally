@@ -97,6 +97,8 @@ async function ensureDistBuild(): Promise<void> {
     });
   }
 
+  let buildFailed = false;
+  let cleanupFailure: Error | undefined;
   try {
     const code = await new Promise<number | null>((done, reject) => {
       const timeout = setTimeout(() => {
@@ -112,14 +114,26 @@ async function ensureDistBuild(): Promise<void> {
       });
     });
     assert.equal(code, 0, `pnpm build failed:\n${buildOutput}`);
+  } catch (error) {
+    buildFailed = true;
+    throw error;
   } finally {
     unregisterSignals();
-    if (build.exitCode === null && build.signalCode === null) {
+    try {
       await stop(build);
+      if (build.pid !== undefined) {
+        await waitForProcessGroupExit(build.pid);
+      }
+    } catch (cleanupError) {
+      if (!buildFailed) {
+        cleanupFailure = new Error(
+          `pnpm build cleanup failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}\n${buildOutput}`,
+        );
+      }
     }
-    if (build.pid !== undefined) {
-      await waitForProcessGroupExit(build.pid);
-    }
+  }
+  if (cleanupFailure) {
+    throw cleanupFailure;
   }
 }
 
@@ -134,7 +148,7 @@ async function waitForServerReady(
     if (spawnError) throw spawnError;
     assert.equal(server.exitCode, null, getOutput());
 
-    const match = /Ready on (http:\/\/127\.0\.0\.1:\d+)/.exec(getOutput());
+    const match = /Ready on (http:\/\/(?:127\.0\.0\.1|localhost):\d+)/.exec(getOutput());
     if (match) {
       try {
         const response = await fetch(match[1], { signal: AbortSignal.timeout(5_000) });
