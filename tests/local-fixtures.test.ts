@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -13,7 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import { localFixtures } from "../scripts/local-fixtures.mjs";
 import { conventions, lintSql } from "../scripts/sql-lint.mjs";
 import { BUCKET_SUBCATEGORIES, type ParentBucket } from "../src/config/intake.ts";
@@ -257,6 +258,15 @@ test("fixture reset and seed refuse when an active fixture-backed Pages server i
         args: `node wrangler pages dev ./dist --persist-to ${resolve(temp, ".wrangler/state")}`,
       },
     ]);
+    const previousDirectory = process.cwd();
+    try {
+      process.chdir(temp);
+      localFixtures(["reset"], temp, run, () => [
+        { pid: 51516, args: "node wrangler pages dev ./dist --persist-to .wrangler/dev-fixtures" },
+      ]);
+    } finally {
+      process.chdir(previousDirectory);
+    }
 
     // Verify real OS process detection via ps.
     const fakeServer = spawn(
@@ -311,6 +321,16 @@ test("failed second seed reports no success and supports clean recovery", () => 
     // Subsequent seed recovers cleanly.
     localFixtures(["seed"], temp, run);
     let db = new DatabaseSync(resolve(temp, ".wrangler/dev-fixtures/test.sqlite"));
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM transactions").get()?.n, 8);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM monthly_budgets").get()?.n, 4);
+    db.close();
+
+    // Reset must restore a sole interrupted backup before attempting another replacement.
+    const interruptedBackup = resolve(temp, ".wrangler/.dev-fixtures-backup-reset");
+    renameSync(resolve(temp, ".wrangler/dev-fixtures"), interruptedBackup);
+    assert.throws(() => localFixtures(["reset"], temp, failSecondSeed), /Wrangler failed/);
+    assert.equal(existsSync(interruptedBackup), false);
+    db = new DatabaseSync(resolve(temp, ".wrangler/dev-fixtures/test.sqlite"));
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM transactions").get()?.n, 8);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM monthly_budgets").get()?.n, 4);
     db.close();
@@ -378,6 +398,81 @@ test("failed second seed reports no success and supports clean recovery", () => 
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM monthly_budgets").get()?.n, 4);
     db.close();
   } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test("fixture replacement rolls back when staged state disappears before commit", () => {
+  const temp = mkdtempSync(resolve(tmpdir(), "snaptally-fixture-rollback-"));
+  const { run } = createSqliteRunner();
+  try {
+    symlinkSync(resolve(root, "seeds"), resolve(temp, "seeds"));
+    localFixtures(["seed"], temp, run);
+    const removeCompletedStaging = (binary: string, args: string[]) => {
+      const result = run(binary, args);
+      if ((args[args.indexOf("--file") + 1] ?? "").endsWith("monthly_budgets_demo.sql")) {
+        rmSync(args[args.indexOf("--persist-to") + 1], { recursive: true });
+      }
+      return result;
+    };
+
+    assert.throws(() => localFixtures(["reset"], temp, removeCompletedStaging), /ENOENT/);
+
+    const db = new DatabaseSync(resolve(temp, ".wrangler/dev-fixtures/test.sqlite"));
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM transactions").get()?.n, 8);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM monthly_budgets").get()?.n, 4);
+    db.close();
+    assert.deepEqual(readdirSync(resolve(temp, ".wrangler")), ["dev-fixtures"]);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test("fixture lock cleanup preserves unreadable or replacement metadata", () => {
+  const temp = mkdtempSync(resolve(tmpdir(), "snaptally-fixture-metadata-"));
+  const { run } = createSqliteRunner();
+  const lock = resolve(temp, ".wrangler/dev-fixtures.lock");
+  try {
+    symlinkSync(resolve(root, "seeds"), resolve(temp, "seeds"));
+    for (const metadata of ["{interrupted", JSON.stringify({ token: "another-owner" })]) {
+      const corruptLock = (binary: string, args: string[]) => {
+        const result = run(binary, args);
+        writeFileSync(lock, metadata);
+        return result;
+      };
+
+      localFixtures(["seed"], temp, corruptLock);
+
+      assert.equal(readFileSync(lock, "utf8"), metadata);
+      assert.throws(() => localFixtures(["reset"], temp, run), /already in progress/);
+      rmSync(lock);
+    }
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test("fixture seeding warns when process listing is unavailable and releases its lock", () => {
+  const temp = mkdtempSync(resolve(tmpdir(), "snaptally-fixture-no-ps-"));
+  const { run } = createSqliteRunner();
+  const previousPath = process.env.PATH;
+  const warning = mock.method(console, "warn", () => {});
+  try {
+    symlinkSync(resolve(root, "seeds"), resolve(temp, "seeds"));
+    process.env.PATH = "";
+
+    localFixtures(["seed"], temp, run);
+
+    assert.equal(existsSync(resolve(temp, ".wrangler/dev-fixtures/test.sqlite")), true);
+    assert.equal(existsSync(resolve(temp, ".wrangler/dev-fixtures.lock")), false);
+    assert.deepEqual(
+      warning.mock.calls.map((call) => call.arguments),
+      [["Fixture process scan unavailable; stop all fixture-backed servers before continuing."]],
+    );
+  } finally {
+    warning.mock.restore();
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
     rmSync(temp, { recursive: true, force: true });
   }
 });

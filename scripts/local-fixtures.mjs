@@ -24,6 +24,9 @@ const backupPrefix = ".dev-fixtures-backup-";
 function defaultListProcesses() {
   const result = spawnSync("ps", ["-eo", "pid=,args="], { encoding: "utf8" });
   if (result.error || result.status !== 0 || typeof result.stdout !== "string") {
+    console.warn(
+      "Fixture process scan unavailable; stop all fixture-backed servers before continuing.",
+    );
     return [];
   }
   return result.stdout
@@ -33,11 +36,9 @@ function defaultListProcesses() {
     .map((match) => ({ pid: Number.parseInt(match[1], 10), args: match[2] }));
 }
 
-function findActiveFixtureServers(parent, state, root, listProcesses) {
+function findActiveFixtureServers(parent, state, listProcesses) {
   const realParent = existsSync(parent) ? realpathSync(parent) : null;
   const realState = realParent ? resolve(realParent, "dev-fixtures") : null;
-  const sameWorkingDir = resolve(root) === resolve(process.cwd());
-  const relativeFixtureFlag = /(?:^|[\s=])(?:\.\/)?\.wrangler[\\/]dev-fixtures(?:[\\/\s]|$)/;
   const serverProcess = /\bwrangler\b[\s\S]*\bpages\s+dev\b|\bworkerd\b/;
 
   return listProcesses().filter((proc) => {
@@ -50,11 +51,7 @@ function findActiveFixtureServers(parent, state, root, listProcesses) {
     if (!serverProcess.test(proc.args)) {
       return false;
     }
-    return (
-      proc.args.includes(state) ||
-      (realState !== null && proc.args.includes(realState)) ||
-      (sameWorkingDir && relativeFixtureFlag.test(proc.args))
-    );
+    return proc.args.includes(state) || (realState !== null && proc.args.includes(realState));
   });
 }
 
@@ -121,7 +118,7 @@ function acquireFixtureLock(lockPath, command, token) {
   return release;
 }
 
-function cleanupTransientDirs(parent, state, command) {
+function cleanupTransientDirs(parent, state) {
   for (const name of readdirSync(parent)) {
     if (!name.startsWith(stagingPrefix) && !name.startsWith(backupPrefix)) continue;
     const candidate = resolve(parent, name);
@@ -129,7 +126,7 @@ function cleanupTransientDirs(parent, state, command) {
     if (!stat || stat.isSymbolicLink() || !stat.isDirectory() || !hasValidOwnership(candidate)) {
       continue;
     }
-    if (name.startsWith(backupPrefix) && command === "seed" && !existsSync(state)) {
+    if (name.startsWith(backupPrefix) && !existsSync(state)) {
       renameSync(candidate, state);
       continue;
     }
@@ -174,7 +171,7 @@ export function localFixtures(
   const token = randomUUID();
   const releaseLock = acquireFixtureLock(lockPath, command, token);
   try {
-    const activeServers = findActiveFixtureServers(parent, state, root, listProcesses);
+    const activeServers = findActiveFixtureServers(parent, state, listProcesses);
     if (activeServers.length > 0) {
       const pids = activeServers.map((proc) => proc.pid).join(", ");
       throw new Error(
@@ -183,7 +180,7 @@ export function localFixtures(
     }
 
     assertOwnedState(state);
-    cleanupTransientDirs(parent, state, command);
+    cleanupTransientDirs(parent, state);
 
     const staging = resolve(parent, `${stagingPrefix}${token}`);
     try {

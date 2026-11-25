@@ -9,7 +9,7 @@ before any filesystem changes or Wrangler invocation.
 just db-seed-local
 # Equivalent: node scripts/local-fixtures.mjs seed
 pnpm build
-pnpm wrangler pages dev ./dist --persist-to .wrangler/dev-fixtures
+pnpm wrangler pages dev ./dist --persist-to "$PWD/.wrangler/dev-fixtures"
 ```
 
 Use the project's normal local bearer-token configuration to call
@@ -36,7 +36,10 @@ just db-reset-local
 Stop any active fixture-backed local Pages server (`Ctrl-C` / `SIGTERM`) before
 running `just db-seed-local` or `just db-reset-local`. `scripts/local-fixtures.mjs`
 refuses both `seed` and `reset` if an active `wrangler pages dev` or `workerd`
-process targeting `.wrangler/dev-fixtures` is detected.
+process with this checkout's absolute `.wrangler/dev-fixtures` path is detected.
+Use the absolute persistence path shown above. Relative process arguments cannot
+identify a checkout reliably, so the guard ignores them rather than blocking
+unrelated checkouts; the explicit stop-server requirement still applies.
 
 The helper acquires an exclusive lock at `.wrangler/dev-fixtures.lock` before
 inspecting or modifying fixture state, rejecting overlapping `seed` or `reset`
