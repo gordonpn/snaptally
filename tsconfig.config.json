@@ -3,5 +3,10 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["src/config/**/*", "tests/budget-profile.test.ts"]
+  "include": [
+    "src/config/**/*",
+    "tests/budget-profile.test.ts",
+    "scripts/check-toolchain.ts",
+    "tests/toolchain-parity.test.ts"
+  ]
 }

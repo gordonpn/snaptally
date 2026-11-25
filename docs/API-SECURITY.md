@@ -83,6 +83,10 @@ References:
 - https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/
 
 The reviewdog actionlint invocation temporarily ignores only the diagnostic for
-the documented `concurrency.queue` key; actionlint 1.7.12 still lacks that field.
+the documented `concurrency.queue` key. Local official actionlint 1.7.7 differs
+from the pinned reviewdog action's bundled `kjanat/actionlint` 1.17.1; see the
+[toolchain policy](toolchain.md#keeping-versions-aligned) for the inspected source
+and update procedure. This exception is retained until both supported tools can
+validate the field without it.
 Other workflow syntax checks remain enabled. Remove the compatibility exception
 when actionlint adds support.
