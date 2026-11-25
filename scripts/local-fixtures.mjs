@@ -21,15 +21,6 @@ const identity = "SnapTally disposable local fixtures v1\n";
 const stagingPrefix = ".dev-fixtures-staging-";
 const backupPrefix = ".dev-fixtures-backup-";
 
-function isPidAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error?.code === "EPERM";
-  }
-}
-
 function defaultListProcesses() {
   const result = spawnSync("ps", ["-eo", "pid=,args="], { encoding: "utf8" });
   if (result.error || result.status !== 0 || typeof result.stdout !== "string") {
@@ -102,40 +93,14 @@ function acquireFixtureLock(lockPath, command, token) {
     acquiredAt: new Date().toISOString(),
   });
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      writeFileSync(lockPath, payload, { encoding: "utf8", flag: "wx", mode: 0o600 });
-      break;
-    } catch (error) {
-      if (error?.code !== "EEXIST") throw error;
-
-      let existing;
-      try {
-        existing = JSON.parse(readFileSync(lockPath, "utf8"));
-      } catch (readError) {
-        if (readError?.code === "ENOENT" && attempt === 0) continue;
-        throw new Error(
-          `Refusing fixture ${command}: existing lock at ${lockPath} is unreadable or being acquired.`,
-        );
-      }
-
-      if (
-        typeof existing?.pid !== "number" ||
-        !Number.isInteger(existing.pid) ||
-        existing.pid <= 0
-      ) {
-        throw new Error(`Refusing fixture ${command}: invalid lock metadata at ${lockPath}.`);
-      }
-      if (isPidAlive(existing.pid)) {
-        throw new Error(
-          `Fixture ${existing.command ?? "command"} already in progress (PID ${existing.pid}); wait for it to finish before running ${command}.`,
-        );
-      }
-      if (attempt === 1) {
-        throw new Error(`Fixture command already in progress; retry ${command} after it finishes.`);
-      }
-      rmSync(lockPath, { force: true });
-    }
+  try {
+    writeFileSync(lockPath, payload, { encoding: "utf8", flag: "wx", mode: 0o600 });
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    // Automatic stale-lock deletion races with another process acquiring a replacement lock.
+    throw new Error(
+      `Fixture command already in progress or interrupted: ${lockPath}. Stop all fixture commands and servers before removing the lock manually.`,
+    );
   }
 
   let released = false;
@@ -161,7 +126,9 @@ function cleanupTransientDirs(parent, state, command) {
     if (!name.startsWith(stagingPrefix) && !name.startsWith(backupPrefix)) continue;
     const candidate = resolve(parent, name);
     const stat = lstatSync(candidate, { throwIfNoEntry: false });
-    if (!stat || stat.isSymbolicLink() || !stat.isDirectory()) continue;
+    if (!stat || stat.isSymbolicLink() || !stat.isDirectory() || !hasValidOwnership(candidate)) {
+      continue;
+    }
     if (
       name.startsWith(backupPrefix) &&
       command === "seed" &&

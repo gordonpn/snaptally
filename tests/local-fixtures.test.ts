@@ -219,9 +219,9 @@ test("overlapping fixture commands reject cleanly before mutating state", async 
     // Validate lock-path safety and corrupt/invalid lock handling.
     const lockPath = resolve(temp, ".wrangler/dev-fixtures.lock");
     writeFileSync(lockPath, "{not-json");
-    assert.throws(() => localFixtures(["seed"], temp, run), /unreadable/);
+    assert.throws(() => localFixtures(["seed"], temp, run), /already in progress/);
     writeFileSync(lockPath, JSON.stringify({ pid: -1, command: "seed" }));
-    assert.throws(() => localFixtures(["seed"], temp, run), /invalid lock metadata/);
+    assert.throws(() => localFixtures(["seed"], temp, run), /already in progress/);
     rmSync(lockPath);
     symlinkSync(resolve(temp, ".wrangler/state/keep"), lockPath);
     assert.throws(() => localFixtures(["seed"], temp, run), /symlink/);
@@ -338,8 +338,18 @@ test("failed second seed reports no success and supports clean recovery", () => 
         acquiredAt: new Date().toISOString(),
       }),
     );
-    mkdirSync(resolve(temp, ".wrangler/.dev-fixtures-staging-crashed"), { recursive: true });
+    const crashed = resolve(temp, ".wrangler/.dev-fixtures-staging-crashed");
+    mkdirSync(crashed, { recursive: true });
+    writeFileSync(
+      resolve(crashed, ".snaptally-fixtures"),
+      "SnapTally disposable local fixtures v1\n",
+    );
+    const unowned = resolve(temp, ".wrangler/.dev-fixtures-staging-unowned");
+    mkdirSync(unowned);
+    writeFileSync(resolve(unowned, "keep"), "unrelated data");
 
+    assert.throws(() => localFixtures(["seed"], temp, run), /already in progress/);
+    rmSync(resolve(temp, ".wrangler/dev-fixtures.lock"));
     localFixtures(["seed"], temp, run);
     db = new DatabaseSync(resolve(temp, ".wrangler/dev-fixtures/test.sqlite"));
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM transactions").get()?.n, 8);
@@ -347,6 +357,7 @@ test("failed second seed reports no success and supports clean recovery", () => 
     db.close();
     assert.equal(existsSync(resolve(temp, ".wrangler/.dev-fixtures-staging-crashed")), false);
     assert.equal(existsSync(resolve(temp, ".wrangler/dev-fixtures.lock")), false);
+    assert.equal(readFileSync(resolve(unowned, "keep"), "utf8"), "unrelated data");
 
     // 4. Interrupted swap recovery: backup dir exists when dev-fixtures is absent.
     const backupDir = resolve(temp, ".wrangler/.dev-fixtures-backup-interrupted");

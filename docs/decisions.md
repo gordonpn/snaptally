@@ -1,5 +1,12 @@
 # Implementation Decisions Log
 
+## 2026-11-24: Stage disposable fixtures behind an exclusive command lock
+
+- Decision: Reject overlapping fixture commands with an exclusive local lock, seed into owned staging state, and replace visible fixture state only after all seed steps succeed. Require fixture-backed servers to stop first; interrupted locks require manual recovery after processes stop.
+- Rationale: A failed later seed or concurrent reset must not destroy a usable local fixture database. Automatic stale-lock deletion can race another command acquiring the replacement lock, and process scanning cannot coordinate arbitrary SQLite clients.
+- Rejected alternatives: Separate writes into visible fixture state, destructive reset before seed completion, and automatic dead-PID lock reclamation.
+- Source: [Fixture command safety](https://github.com/gordonpn/snaptally/issues/237), [local database recovery](local-database.md)
+
 ## 2026-11-16: Preserve formatter scope during the Biome upgrade
 
 - Decision: Align the configuration schema and hosted Biome version with the installed 2.6.7 dependency; leave Markdown and YAML formatting disabled.

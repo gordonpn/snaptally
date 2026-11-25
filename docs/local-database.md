@@ -40,8 +40,10 @@ process targeting `.wrangler/dev-fixtures` is detected.
 
 The helper acquires an exclusive lock at `.wrangler/dev-fixtures.lock` before
 inspecting or modifying fixture state, rejecting overlapping `seed` or `reset`
-invocations before any state changes occur. Stale lock files left by dead
-processes are cleared automatically on the next run. This lock only coordinates
+invocations before fixture state changes occur. Interrupted commands leave the
+lock in place rather than racing to remove another command's replacement lock.
+After confirming that all fixture commands and fixture-backed servers have
+stopped, remove `.wrangler/dev-fixtures.lock` manually before retrying. This lock only coordinates
 `scripts/local-fixtures.mjs` commands; it does not lock out unrelated SQLite
 users (`sqlite3`, manual `wrangler d1 execute`, or a running Pages server), so
 always stop the local server first.
@@ -56,12 +58,16 @@ directory or manually change its marker.
 Migrations, `seeds/dev_seed.sql`, and `seeds/monthly_budgets_demo.sql` run
 inside a staging directory under `.wrangler/` and are swapped into
 `.wrangler/dev-fixtures` only after every step succeeds. If the second seed
-fails or is interrupted, the helper exits non-zero without reporting success,
+fails, the helper exits non-zero without reporting success,
 discards the staging directory, and leaves `.wrangler/dev-fixtures` unchanged
 (or absent on an initial seed). To recover from a failed run, interrupted swap,
 or manually half-seeded database, stop any fixture-backed server and re-run
 `just db-seed-local` (idempotent repair) or `just db-reset-local` (clean
-rebuild).
+rebuild). A forcibly terminated process can leave an owned staging or backup
+directory; after manual lock recovery, the next command cleans owned temporary
+state and restores an interrupted backup before reseeding. Unowned temporary
+directories are preserved. Process scanning is a best-effort guard, not a
+substitute for stopping every fixture-backed server and other SQLite user.
 
 Use `--persist-to .wrangler/dev-fixtures` for manual local queries too; the
 existing `db-list-local` recipe targets Wrangler's normal state instead.
