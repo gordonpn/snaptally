@@ -147,7 +147,7 @@ Transactions track both `gross_amount` and `reimbursement`. `net_spend` is calcu
 
 ## Analysis & Budgeting Engine Layer (Planned)
 
-To support in-app budget tracking alongside rapid intake in Horizon 2, SnapTally specifies an edge-native analytics engine (none of these endpoints are implemented yet):
+SnapTally specifies an edge-native analytics engine for planned in-app budget tracking alongside rapid intake. Horizon 2 prioritizes longitudinal aggregation and Home Overview; rewards optimization and LLM audits are deferred until after Horizon 2, as recorded in [product direction](product-direction.md). None of the endpoints below are implemented yet:
 
 ### Monthly Conscious Spending Plan Breakdown (Planned)
 
@@ -165,7 +165,7 @@ To support in-app budget tracking alongside rapid intake in Horizon 2, SnapTally
 
 Planned analytics queries will run directly against D1 using indexed aggregation queries (`SUM(net_spend) ... GROUP BY parent_bucket, subcategory`) against the expanded `transactions` schema and `monthly_budgets` table, avoiding the overhead of transferring raw transaction logs to the client for processing.
 
-### Modular Analytics and Intelligence Pipeline (Planned)
+### Modular Analytics and Intelligence Pipeline (Deferred Until After Horizon 2)
 
 SnapTally specifies a decoupled analytics architecture separating deterministic SQL compute from structured LLM synthesis:
 

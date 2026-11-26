@@ -204,7 +204,7 @@ Traditional budgeting applications look only at post-tax checking accounts, crea
 
 ## 9. Cross-Border Property and CAD Ring-Fencing
 
-SnapTally separates US domestic living cash flow from Canadian property and CAD flows:
+SnapTally plans to separate US domestic living cash flow from Canadian property and CAD flows; dedicated payment rails and ring-fencing are not yet implemented:
 
 - **Planned Direction (`#63`)**: Introduce non-card `Checking` and `e-Transfer` payment rails alongside a ring-fenced `Property / CAD` category so Canadian mortgage, rent, taxes, and maintenance stay excluded from US lifestyle pacing.
 - **Retired Legacy Models**: The earlier spreadsheet-era family-loan interest-only ledger, multi-unit duplex operating-deduction breakdown, and `=GOOGLEFINANCE("CURRENCY:CADUSD")` conversion model were retired rather than scheduled for schema implementation.
