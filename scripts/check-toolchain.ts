@@ -77,17 +77,21 @@ function actionStepBlock(setup: string, action: string): string {
 function actionInputs(step: string): string {
   const lines = step.split("\n");
   const keyIndent = leadingSpaces(lines[0] ?? "") + 2;
-  const withIndices = lines.flatMap((line, index) =>
-    leadingSpaces(line) === keyIndent && /^\s*with:\s*(?:#.*)?$/.test(line) ? [index] : [],
-  );
+  const withIndices = lines.flatMap((line, index) => {
+    const isStepWith = index === 0 && /^\s*-\s+with:\s*(?:#.*)?$/.test(line);
+    const isKeyWith = leadingSpaces(line) === keyIndent && /^\s*with:\s*(?:#.*)?$/.test(line);
+    return isStepWith || isKeyWith ? [index] : [];
+  });
   assert.equal(withIndices.length, 1, "Expected one with: block in setup step");
   const start = withIndices[0];
   assert.ok(start !== undefined);
+  const startLine = lines[start] ?? "";
+  const blockIndent = /^\s*-\s+/.test(startLine) ? startLine.indexOf("with:") : keyIndent;
   let end = lines.length;
   for (let i = start + 1; i < lines.length; i += 1) {
     const line = lines[i] ?? "";
     if (/^\s*(?:#.*)?$/.test(line)) continue;
-    if (leadingSpaces(line) <= keyIndent) {
+    if (leadingSpaces(line) <= blockIndent) {
       end = i;
       break;
     }

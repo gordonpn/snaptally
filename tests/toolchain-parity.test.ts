@@ -174,7 +174,7 @@ describe("toolchain declaration parity", () => {
     });
   }
 
-  it("handles direct step uses lines and keys before uses within a step", () => {
+  it("handles direct step uses lines, step-leading with blocks, and keys before uses within a step", () => {
     const sources = readToolchainSources(root);
     const setup = sources[".github/actions/setup/action.yml"]
       .replace("    - name: Setup pnpm\n      uses:", "    - uses:")
@@ -187,6 +187,18 @@ describe("toolchain declaration parity", () => {
       checkToolchain({
         ...sources,
         ".github/actions/setup/action.yml": setup,
+      }),
+    );
+
+    const withFirstSetup = sources[".github/actions/setup/action.yml"].replace(
+      "    - name: Setup pnpm\n      uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1\n      with:\n        version: 10\n",
+      "    - with:\n        version: 10\n      uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1\n",
+    );
+    assert.notEqual(withFirstSetup, sources[".github/actions/setup/action.yml"]);
+    assert.doesNotThrow(() =>
+      checkToolchain({
+        ...sources,
+        ".github/actions/setup/action.yml": withFirstSetup,
       }),
     );
   });
