@@ -49,8 +49,7 @@ function actionStepBlock(setup: string, action: string): string {
     stepIndent = leadingSpaces(usesLine);
   } else {
     const usesIndent = leadingSpaces(usesLine);
-    for (let i = useIndex - 1; i >= 0; i -= 1) {
-      const candidate = lines[i] ?? "";
+    for (const [i, candidate] of [...lines.slice(0, useIndex).entries()].reverse()) {
       if (/^\s*(?:#.*)?$/.test(candidate)) continue;
       if (leadingSpaces(candidate) >= usesIndent) continue;
       assert.match(candidate, /^\s*-\s/, `Expected ${action} uses: to belong to a YAML step`);
@@ -62,11 +61,10 @@ function actionStepBlock(setup: string, action: string): string {
   }
 
   let end = lines.length;
-  for (let i = useIndex + 1; i < lines.length; i += 1) {
-    const candidate = lines[i] ?? "";
+  for (const [offset, candidate] of lines.slice(useIndex + 1).entries()) {
     if (/^\s*(?:#.*)?$/.test(candidate)) continue;
     if (leadingSpaces(candidate) <= stepIndent) {
-      end = i;
+      end = useIndex + 1 + offset;
       break;
     }
   }
@@ -76,27 +74,31 @@ function actionStepBlock(setup: string, action: string): string {
 // Only action inputs declare tool versions; similarly named environment variables do not.
 function actionInputs(step: string): string {
   const lines = step.split("\n");
-  const keyIndent = leadingSpaces(lines[0] ?? "") + 2;
-  const withIndices = lines.flatMap((line, index) => {
+  let keyIndent = 0;
+  let start = -1;
+  let blockIndent = 0;
+  let count = 0;
+  for (const [index, line] of lines.entries()) {
+    if (index === 0) {
+      keyIndent = leadingSpaces(line) + 2;
+    }
     const isStepWith = index === 0 && /^\s*-\s+with:\s*(?:#.*)?$/.test(line);
     const isKeyWith = leadingSpaces(line) === keyIndent && /^\s*with:\s*(?:#.*)?$/.test(line);
-    return isStepWith || isKeyWith ? [index] : [];
-  });
-  assert.equal(withIndices.length, 1, "Expected one with: block in setup step");
-  const start = withIndices[0];
-  assert.ok(start !== undefined);
-  const startLine = lines[start] ?? "";
-  const blockIndent = /^\s*-\s+/.test(startLine) ? startLine.indexOf("with:") : keyIndent;
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i += 1) {
-    const line = lines[i] ?? "";
-    if (/^\s*(?:#.*)?$/.test(line)) continue;
-    if (leadingSpaces(line) <= blockIndent) {
-      end = i;
-      break;
+    if (isStepWith || isKeyWith) {
+      count += 1;
+      start = index;
+      blockIndent = isStepWith ? line.indexOf("with:") : keyIndent;
     }
   }
-  return lines.slice(start + 1, end).join("\n");
+  assert.equal(count, 1, "Expected one with: block in setup step");
+  const inputs: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (!/^\s*(?:#.*)?$/.test(line) && leadingSpaces(line) <= blockIndent) {
+      break;
+    }
+    inputs.push(line);
+  }
+  return inputs.join("\n");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
