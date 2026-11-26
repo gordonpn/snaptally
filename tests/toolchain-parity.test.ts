@@ -147,6 +147,33 @@ describe("toolchain declaration parity", () => {
     );
   });
 
+  for (const [key, value] of [
+    ["version", "10"],
+    ["node-version", "22"],
+  ]) {
+    it(`ignores ${key} environment variables in the setup step`, () => {
+      const sources = readToolchainSources(root);
+      const setup = sources[".github/actions/setup/action.yml"].replace(
+        `        ${key}: ${value}\n`,
+        `        ${key}: ${value}\n      env:\n        ${key}: 99\n`,
+      );
+      assert.doesNotThrow(() =>
+        checkToolchain({ ...sources, ".github/actions/setup/action.yml": setup }),
+      );
+    });
+
+    it(`rejects ${key} supplied only by the setup step environment`, () => {
+      const sources = readToolchainSources(root);
+      const setup = sources[".github/actions/setup/action.yml"].replace(
+        `        ${key}: ${value}\n`,
+        `      env:\n        ${key}: ${value}\n`,
+      );
+      assert.throws(() =>
+        checkToolchain({ ...sources, ".github/actions/setup/action.yml": setup }),
+      );
+    });
+  }
+
   it("handles direct step uses lines and keys before uses within a step", () => {
     const sources = readToolchainSources(root);
     const setup = sources[".github/actions/setup/action.yml"]

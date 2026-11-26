@@ -73,6 +73,28 @@ function actionStepBlock(setup: string, action: string): string {
   return lines.slice(start, end).join("\n");
 }
 
+// Only action inputs declare tool versions; similarly named environment variables do not.
+function actionInputs(step: string): string {
+  const lines = step.split("\n");
+  const keyIndent = leadingSpaces(lines[0] ?? "") + 2;
+  const withIndices = lines.flatMap((line, index) =>
+    leadingSpaces(line) === keyIndent && /^\s*with:\s*(?:#.*)?$/.test(line) ? [index] : [],
+  );
+  assert.equal(withIndices.length, 1, "Expected one with: block in setup step");
+  const start = withIndices[0];
+  assert.ok(start !== undefined);
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const line = lines[i] ?? "";
+    if (/^\s*(?:#.*)?$/.test(line)) continue;
+    if (leadingSpaces(line) <= keyIndent) {
+      end = i;
+      break;
+    }
+  }
+  return lines.slice(start + 1, end).join("\n");
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -111,7 +133,7 @@ export function checkToolchain(sources: Sources): void {
     const local = scalar(mise, tool);
     assert.match(local, /^\d+\.\d+\.\d+$/);
     const step = actionStepBlock(setup, action);
-    const ci = scalar(step, ciKey);
+    const ci = scalar(actionInputs(step), ciKey);
     assert.equal(ci, local.split(".")[0], `${tool}: CI must follow the local major track`);
   }
   assert.doesNotMatch(
