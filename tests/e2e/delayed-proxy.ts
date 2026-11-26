@@ -9,6 +9,7 @@ import {
 
 export interface HeldTransactionPost {
   payload: unknown;
+  isPending: () => boolean;
   release: () => void;
   fail: (status?: number) => void;
 }
@@ -265,7 +266,7 @@ export async function startDelayedProxy(targetBaseUrl: string): Promise<DelayedP
       settleWaiter = resolve;
     });
 
-    resolver({ payload, release, fail });
+    resolver({ payload, isPending: () => !settled && !res.destroyed, release, fail });
     await waitForRelease;
 
     if (clientClosed || res.destroyed) {

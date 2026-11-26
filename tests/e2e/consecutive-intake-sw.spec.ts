@@ -172,6 +172,8 @@ test.describe("consecutive intake with active service worker", () => {
     if (!firstItem || !secondItem) throw new Error("Expected both queued items in outbox");
     expect(firstItem.id).not.toBe(secondItem.id);
 
+    expect(held.payload).toEqual(expect.objectContaining({ id: firstItem.id }));
+    expect(held.isPending()).toBe(true);
     held.release();
 
     await expect.poll(async () => (await readOutbox(page)).length).toBe(0);
