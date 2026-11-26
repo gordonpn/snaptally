@@ -500,6 +500,10 @@ describe("GET /api/analysis/monthly", () => {
       assert.equal(elapsedBody.guilt_free_pacing.daily_allowance_remaining, null);
 
       // Leap year February and year rollover future month
+      assert.deepEqual(getDaysRemainingInMonth("0000-02", new Date("2026-11-26T00:00:00Z")), {
+        daysInMonth: 29,
+        daysRemaining: 0,
+      });
       assert.deepEqual(getDaysRemainingInMonth("2024-02", new Date("2024-02-28T00:00:00Z")), {
         daysInMonth: 29,
         daysRemaining: 2,

@@ -124,7 +124,9 @@ export function getDaysRemainingInMonth(
   now: Date = new Date(),
 ): { daysInMonth: number; daysRemaining: number } {
   const [year, month] = yearMonth.split("-").map(Number);
-  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const monthEnd = new Date(0);
+  monthEnd.setUTCFullYear(year, month, 0);
+  const daysInMonth = monthEnd.getUTCDate();
   const currentYear = now.getUTCFullYear();
   const currentMonth = now.getUTCMonth() + 1;
   const currentDay = now.getUTCDate();
