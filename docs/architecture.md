@@ -67,7 +67,7 @@ flowchart TD
 - **Secondary Date Backfill**: Defaults to current local date (`YYYY-MM-DD`) with zero interaction needed at checkout. A secondary trigger reveals a native date picker for historical expenses, resetting back to today's date upon saving.
 - **Activity Log Navigation**: The intake header history icon links directly to `/activity`, navigating to a dedicated fullscreen transaction feed with date groupings, monthly spend summary, search, and category filters while retiring legacy modal dialogs.
 - **Settings and Configuration**: The settings modal manages pre-shared API bearer tokens (`snaptally_api_token`) along with configurable UI theme styles (`neumorphic` vs `flat` via `snaptally_theme_style`) and color schemes (`system`, `light`, `dark` via `snaptally_color_scheme`) persisted in `localStorage`.
-- **Pending Outbox Indicator**: A badge in the header shows the count of pending offline transactions with an active sync spinner, allowing users to manually trigger a sync flush on tap.
+- **Pending Outbox Indicator**: A badge in the header shows the count of pending offline transactions with an active sync spinner, opening Sync Status on tap; its Sync Now action manually flushes the queue.
 - **PWA Manifest**: Configured with `display: standalone` and iOS touch icons to run without browser chrome, URL bars, or bottom navigation strips.
 - **Service Worker & Offline Shell**: Static service worker (`public/sw.js`) precaches the core application shell (`/`, `/activity`, `/manifest.json`, `/favicon.svg`, `/theme-init.js`, and icon/bundle assets), serving navigation network-first with cache fallback and static shell assets cache-first while bypassing API endpoints (`/api/*`).
 
@@ -102,7 +102,7 @@ Cloudflare Pages Functions provide the serverless backend using direct file-base
 - **Authentication**: Ingress is guarded by a timing-safe bearer token check (`functions/api/auth.ts`). The client stores a pre-shared token in local storage and sends it via the `Authorization: Bearer <TOKEN>` header.
 - **Shipped Endpoints**:
   - `POST /api/transactions` (`functions/api/transactions.ts`): Ingestion endpoint validating and persisting transaction records (`gross_amount`, `reimbursement`, `currency` in `USD` or `CAD`, canonical `parent_bucket` and `subcategory`) with bounded canonical merchant resolution (`queries/insert_transaction.sql`, `queries/select_distinct_merchants.sql`).
-  - `GET /api/transactions` (`functions/api/transactions.ts`): Returns `{ transactions, total_count, has_more, next_offset, month_summary }` ordered by date and creation time descending (`queries/select_paginated_transactions.sql`, `queries/count_transactions.sql`, `queries/select_month_summary.sql`), supporting `limit` (default 20, max 100), `offset` (default 0), `search`, `bucket`, and `month` (`YYYY-MM`).
+  - `GET /api/transactions` (`functions/api/transactions.ts`): Returns `{ transactions, total_count, has_more, next_offset, month_summary }` ordered by date and creation time descending (`queries/select_paginated_transactions.sql`, `queries/count_transactions.sql`, `queries/select_month_summary.sql`), supporting `limit` (default 20, max 100), `offset` (default 0), `search`, and `bucket` for the transaction feed. The `month` parameter (`YYYY-MM`, defaulting to the current UTC month when absent or invalid) selects only `month_summary`, which aggregates USD non-Income transactions independently of the feed filters.
   - `GET /api/merchants` (`functions/api/merchants.ts`): Returns `{ merchants: string[] }` ordered by occurrence count descending and recency (`queries/select_frequent_merchants.sql`), with configurable `limit` (default 50, max 200) for autocomplete and frequent merchant quick chips.
 - **Planned Endpoints (Not Yet Implemented)**:
   - `GET /api/export`: Planned authenticated CSV export endpoint for local backups (`#226`).
@@ -115,9 +115,12 @@ Cloudflare D1 acts as the primary relational system of record.
 
 ### Transaction Schema
 
+The following shows the transaction table after migrations `0000` through `0007` (with its primary feed indexes), rather than the initial migration alone:
+
 ```sql
 CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'usr_default' REFERENCES users(id) ON DELETE CASCADE,
     date TEXT NOT NULL,
     card TEXT NOT NULL,
     parent_bucket TEXT NOT NULL,
@@ -133,6 +136,8 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE INDEX IF NOT EXISTS idx_transactions_date_created_at ON transactions(date DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_merchant ON transactions(merchant);
 ```
+
+Migration `0002_multi_tenant_schema.sql` retains the legacy `users`, `user_tokens`, and defaulted `transactions.user_id` schema; current handlers authenticate a single shared bearer token and do not implement per-user isolation. Multi-user product scope remains retired.
 
 Additional migrations in `migrations/` add `currency` to `transactions` (`0005_add_currency_to_transactions.sql`) and define `monthly_budgets` (`0006_monthly_budgets_schema.sql`) for USD category targets and `api_rate_limits` (`0007_api_rate_limits.sql`) for fixed-window request counters.
 
