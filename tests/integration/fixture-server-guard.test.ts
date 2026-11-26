@@ -147,6 +147,11 @@ async function waitForServerReady(
     const spawnError = getSpawnError();
     if (spawnError) throw spawnError;
     assert.equal(server.exitCode, null, getOutput());
+    assert.equal(
+      server.signalCode,
+      null,
+      `Wrangler Pages dev terminated with signal ${server.signalCode}:\n${getOutput()}`,
+    );
 
     const match = /Ready on (http:\/\/(?:127\.0\.0\.1|localhost):\d+)/.exec(getOutput());
     if (match) {
