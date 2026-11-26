@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -60,6 +60,17 @@ async function waitForProcessGroupExit(pid: number, timeoutMs = 5_000): Promise<
       }
       throw error;
     }
+
+    // Container PID 1 may leave terminated descendants unreaped. Zombies cannot
+    // access fixture state, but still make kill(-pid, 0) report a live group.
+    const members = spawnSync("ps", ["-eo", "pgid=,stat="], { encoding: "utf8" });
+    if (members.error) throw members.error;
+    assert.equal(members.status, 0, members.stderr);
+    const liveMembers = members.stdout.split(/\r?\n/).some((line) => {
+      const match = /^\s*(\d+)\s+(\S+)/.exec(line);
+      return match !== null && Number(match[1]) === pid && !match[2].startsWith("Z");
+    });
+    if (!liveMembers) return;
 
     if (!sentKill && Date.now() >= escalateAt) {
       sentKill = true;
@@ -182,6 +193,8 @@ test("localFixtures reset refuses while a real wrangler pages dev server is acti
     localFixtures(["seed"], tempRoot);
 
     const stateDir = resolve(tempRoot, ".wrangler/dev-fixtures");
+    const sentinelPath = resolve(stateDir, ".stale-before-reset");
+    await writeFile(sentinelPath, "stale\n");
     let output = "";
     let spawnError: Error | undefined;
 
@@ -217,6 +230,7 @@ test("localFixtures reset refuses while a real wrangler pages dev server is acti
         () => localFixtures(["reset"], tempRoot),
         /active fixture-backed local Pages server detected/,
       );
+      assert.equal(existsSync(sentinelPath), true, "blocked reset must preserve fixture state");
     } finally {
       unregisterServerSignals?.();
       if (server) {
@@ -227,8 +241,6 @@ test("localFixtures reset refuses while a real wrangler pages dev server is acti
       }
     }
 
-    const sentinelPath = resolve(stateDir, ".stale-before-reset");
-    await writeFile(sentinelPath, "stale\n");
     assert.equal(existsSync(sentinelPath), true);
 
     localFixtures(["reset"], tempRoot);
