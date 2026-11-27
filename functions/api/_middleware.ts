@@ -5,10 +5,12 @@ interface Env {
   API_BEARER_TOKEN?: string;
 }
 
-/** Applies shared authentication and abuse quotas to both supported API routes. */
+/** Applies shared authentication and abuse quotas to all supported API routes. */
 export const onRequest: PagesFunction<Env> = async ({ request, env, next }) => {
   const path = new URL(request.url).pathname;
-  if (!/^\/api\/(transactions|merchants)\/?$/.test(path)) return next();
+  if (!/^\/api\/(transactions|merchants|analysis\/(monthly|categories))\/?$/.test(path)) {
+    return next();
+  }
   const response = await guardApiRequest(request, env.DB, env.API_BEARER_TOKEN);
   return response ?? next();
 };

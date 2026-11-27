@@ -480,11 +480,37 @@ describe("API rate limiting and audit context", () => {
     try {
       assert.equal((await onRequest(context(request()))).status, 200);
       assert.equal((await onRequest(context(request("Basic bad")))).status, 401);
+      for (const path of ["/api/analysis/monthly", "/api/analysis/categories"]) {
+        assert.equal(
+          (
+            await onRequest(
+              context(
+                new Request(`https://example.com${path}`, {
+                  headers: { Authorization: `Bearer ${token}`, "CF-Connecting-IP": "192.0.2.1" },
+                }),
+              ),
+            )
+          ).status,
+          200,
+        );
+        assert.equal(
+          (
+            await onRequest(
+              context(
+                new Request(`https://example.com${path}`, {
+                  headers: { Authorization: "Basic bad", "CF-Connecting-IP": "192.0.2.1" },
+                }),
+              ),
+            )
+          ).status,
+          401,
+        );
+      }
       assert.equal(
         (await onRequest(context(new Request("https://example.com/api/unknown")))).status,
         200,
       );
-      assert.equal(nextCalled, 2);
+      assert.equal(nextCalled, 4);
     } finally {
       sqlite.close();
     }

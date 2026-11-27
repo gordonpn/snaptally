@@ -17,6 +17,15 @@ The table follows the current single-user budgeting scope in issue #104. It does
 not provide tenant isolation. Before enabling budgets for multiple users, add a
 user association and include it in the uniqueness and query contracts.
 
+## Analysis response pacing
+
+`GET /api/analysis/monthly` reports the USD daily allowance as
+`guilt_free_pacing.daily_burn_rate`: remaining Guilt-Free target divided by the
+inclusive UTC days remaining, rounded to cents. Elapsed months return `null`
+rather than dividing by zero. This is an allowance, not historical daily spend;
+an overspent target yields a negative value. Analysis remains single-user and
+does not provide tenant isolation.
+
 ## Local example targets
 
 `seeds/monthly_budgets_demo.sql` is an optional local fixture with deterministic
