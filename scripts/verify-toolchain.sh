@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+
 # Read pins from the repository file, not a user's global mise configuration.
 verify() {
   local tool="$1" actual="$2" expected
-  expected="$(mise config get --file .mise.toml "tools.$tool")"
+  expected="$(mise config get --file "$repo_root/.mise.toml" "tools.$tool")"
   if [[ "$actual" != "$expected" ]]; then
     printf '%s: expected %s, got %s\n' "$tool" "$expected" "$actual" >&2
     return 1
@@ -16,4 +18,4 @@ verify node "$(node --version | sed 's/^v//')"
 verify pnpm "$(pnpm --version)"
 verify biome "$(biome --version | sed 's/^Version: //')"
 verify actionlint "$(actionlint --version | head -n 1)"
-node "$(dirname "$0")/check-toolchain.ts"
+node "$repo_root/scripts/check-toolchain.ts" "$repo_root"

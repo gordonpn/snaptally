@@ -24,6 +24,83 @@ function scalar(text: string, key: string): string {
   return value;
 }
 
+function leadingSpaces(line: string): number {
+  return line.length - line.trimStart().length;
+}
+
+function actionStepBlock(setup: string, action: string): string {
+  const lines = setup.split(/\r?\n/);
+  const escapedAction = action.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const usesPattern = new RegExp(
+    `^\\s*(?:-\\s+)?uses:\\s*${escapedAction}@[a-f0-9]{40}(?![a-f0-9])(?:\\s+#.*|\\s*)$`,
+  );
+  const matchIndices = lines.flatMap((line, index) => (usesPattern.test(line) ? [index] : []));
+  assert.equal(matchIndices.length, 1, `Expected one pinned ${action} step`);
+  const [useIndex] = matchIndices;
+  assert.ok(useIndex !== undefined);
+
+  const usesLine = lines[useIndex];
+  assert.ok(usesLine !== undefined);
+  let start = -1;
+  let stepIndent = 0;
+
+  if (/^\s*-\s+uses:/.test(usesLine)) {
+    start = useIndex;
+    stepIndent = leadingSpaces(usesLine);
+  } else {
+    const usesIndent = leadingSpaces(usesLine);
+    for (const [i, candidate] of [...lines.slice(0, useIndex).entries()].reverse()) {
+      if (/^\s*(?:#.*)?$/.test(candidate)) continue;
+      if (leadingSpaces(candidate) >= usesIndent) continue;
+      assert.match(candidate, /^\s*-\s/, `Expected ${action} uses: to belong to a YAML step`);
+      start = i;
+      stepIndent = leadingSpaces(candidate);
+      break;
+    }
+    assert.ok(start >= 0, `Expected ${action} uses: to belong to a YAML step`);
+  }
+
+  let end = lines.length;
+  for (const [offset, candidate] of lines.slice(useIndex + 1).entries()) {
+    if (/^\s*(?:#.*)?$/.test(candidate)) continue;
+    if (leadingSpaces(candidate) <= stepIndent) {
+      end = useIndex + 1 + offset;
+      break;
+    }
+  }
+  return lines.slice(start, end).join("\n");
+}
+
+// Only action inputs declare tool versions; similarly named environment variables do not.
+function actionInputs(step: string): string {
+  const lines = step.split("\n");
+  let keyIndent = 0;
+  let start = -1;
+  let blockIndent = 0;
+  let count = 0;
+  for (const [index, line] of lines.entries()) {
+    if (index === 0) {
+      keyIndent = leadingSpaces(line) + 2;
+    }
+    const isStepWith = index === 0 && /^\s*-\s+with:\s*(?:#.*)?$/.test(line);
+    const isKeyWith = leadingSpaces(line) === keyIndent && /^\s*with:\s*(?:#.*)?$/.test(line);
+    if (isStepWith || isKeyWith) {
+      count += 1;
+      start = index;
+      blockIndent = isStepWith ? line.indexOf("with:") : keyIndent;
+    }
+  }
+  assert.equal(count, 1, "Expected one with: block in setup step");
+  const inputs: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (!/^\s*(?:#.*)?$/.test(line) && leadingSpaces(line) <= blockIndent) {
+      break;
+    }
+    inputs.push(line);
+  }
+  return inputs.join("\n");
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -55,17 +132,16 @@ export function checkToolchain(sources: Sources): void {
   const mise = sources[".mise.toml"];
   const setup = sources[".github/actions/setup/action.yml"];
   const pkg = record(JSON.parse(sources["package.json"]));
-  for (const [tool, ciKey] of [
-    ["node", "node-version"],
-    ["pnpm", "version"],
+  for (const [tool, action, ciKey] of [
+    ["node", "actions/setup-node", "node-version"],
+    ["pnpm", "pnpm/action-setup", "version"],
   ] as const) {
     const local = scalar(mise, tool);
     assert.match(local, /^\d+\.\d+\.\d+$/);
-    const ci = scalar(setup, ciKey);
+    const step = actionStepBlock(setup, action);
+    const ci = scalar(actionInputs(step), ciKey);
     assert.equal(ci, local.split(".")[0], `${tool}: CI must follow the local major track`);
   }
-  assert.match(setup, /uses: actions\/setup-node@[a-f0-9]{40}/);
-  assert.match(setup, /uses: pnpm\/action-setup@[a-f0-9]{40}/);
   assert.doesNotMatch(
     sources.workflows,
     /uses:\s*(?:actions\/setup-node|pnpm\/action-setup)@/,
@@ -109,6 +185,6 @@ export function checkToolchain(sources: Sources): void {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  checkToolchain(readToolchainSources(process.cwd()));
+  checkToolchain(readToolchainSources(resolve(process.argv[2] ?? process.cwd())));
   console.log("Toolchain declarations match the documented parity policy.");
 }
