@@ -379,7 +379,7 @@ describe("GET /api/analysis/monthly", () => {
         remaining_allowance: 950,
         days_in_month: 30,
         days_remaining: 10,
-        daily_allowance_remaining: 95,
+        daily_burn_rate: 95,
       });
 
       assert.deepEqual(body.excluded_income, {
@@ -428,7 +428,7 @@ describe("GET /api/analysis/monthly", () => {
         remaining_allowance: 0,
         days_in_month: 31,
         days_remaining: 31,
-        daily_allowance_remaining: 0,
+        daily_burn_rate: 0,
       });
       for (const bucket of body.buckets) {
         assert.equal(bucket.net_spend, 0);
@@ -474,7 +474,7 @@ describe("GET /api/analysis/monthly", () => {
         remaining_allowance: 600,
         days_in_month: 30,
         days_remaining: 10,
-        daily_allowance_remaining: 60,
+        daily_burn_rate: 60,
       });
 
       // Last day of month: 1 day remaining
@@ -486,9 +486,9 @@ describe("GET /api/analysis/monthly", () => {
       );
       const lastDayBody = (await lastDayRes.json()) as MonthlyAnalysisResponse;
       assert.equal(lastDayBody.guilt_free_pacing.days_remaining, 1);
-      assert.equal(lastDayBody.guilt_free_pacing.daily_allowance_remaining, 600);
+      assert.equal(lastDayBody.guilt_free_pacing.daily_burn_rate, 600);
 
-      // Elapsed past month: days_remaining = 0, daily_allowance_remaining = null (no division by 0)
+      // Elapsed past month: no remaining days means no daily rate.
       const elapsedRes = await handleGetMonthly(
         authRequest("https://example.com/api/analysis/monthly?month=2026-09"),
         db,
@@ -497,7 +497,7 @@ describe("GET /api/analysis/monthly", () => {
       );
       const elapsedBody = (await elapsedRes.json()) as MonthlyAnalysisResponse;
       assert.equal(elapsedBody.guilt_free_pacing.days_remaining, 0);
-      assert.equal(elapsedBody.guilt_free_pacing.daily_allowance_remaining, null);
+      assert.equal(elapsedBody.guilt_free_pacing.daily_burn_rate, null);
 
       // Leap year February and year rollover future month
       assert.deepEqual(getDaysRemainingInMonth("0000-02", new Date("2026-11-26T00:00:00Z")), {

@@ -41,7 +41,7 @@ export interface GuiltFreePacing {
   remaining_allowance: number;
   days_in_month: number;
   days_remaining: number;
-  daily_allowance_remaining: number | null;
+  daily_burn_rate: number | null;
 }
 
 export interface MonthlyAnalysisResponse {
@@ -260,8 +260,7 @@ export function buildMonthlyAnalysis(input: {
       remaining_allowance: remainingAllowance,
       days_in_month: daysInMonth,
       days_remaining: daysRemaining,
-      daily_allowance_remaining:
-        daysRemaining > 0 ? roundCents(remainingAllowance / daysRemaining) : null,
+      daily_burn_rate: daysRemaining > 0 ? roundCents(remainingAllowance / daysRemaining) : null,
     },
     excluded_income: {
       net_spend: roundCents(excludedIncomeSpend),
