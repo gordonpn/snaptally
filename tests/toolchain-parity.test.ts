@@ -157,6 +157,7 @@ describe("toolchain declaration parity", () => {
         `        ${key}: ${value}\n`,
         `        ${key}: ${value}\n      env:\n        ${key}: 99\n`,
       );
+      assert.notEqual(setup, sources[".github/actions/setup/action.yml"]);
       assert.doesNotThrow(() =>
         checkToolchain({ ...sources, ".github/actions/setup/action.yml": setup }),
       );
@@ -168,6 +169,7 @@ describe("toolchain declaration parity", () => {
         `        ${key}: ${value}\n`,
         `      env:\n        ${key}: ${value}\n`,
       );
+      assert.notEqual(setup, sources[".github/actions/setup/action.yml"]);
       assert.throws(() =>
         checkToolchain({ ...sources, ".github/actions/setup/action.yml": setup }),
       );
