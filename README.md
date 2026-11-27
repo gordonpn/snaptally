@@ -12,13 +12,13 @@ Logging transactions at checkout using full spreadsheet applications or heavy pe
 - USD and CAD transaction entry, retained while queued offline and synchronized in the selected currency.
 - Planned monthly Conscious Spending Plan budget analysis, burn-rate pacing, and sinking fund balance tracking.
 - Zero server maintenance and durable persistence on Cloudflare edge infrastructure.
-- Periodic reconciliation or export back to macro budget spreadsheets (such as Google Sheets).
+- Planned authenticated CSV export for local backups.
 
 ## Tech Stack
 
 - **Frontend**: Astro (static output mode), DaisyUI, Tailwind CSS v4, Neumorphic design system, Alpine.js (for reactive category filtering and state), Tabler Icons (`@tabler/icons-astro`), Web App Manifest (standalone PWA), Service Worker (offline shell caching).
 - **Client Offline Storage**: Native IndexedDB (`snaptally_db`) with local storage fallback for queueing transactions offline without external runtime libraries.
-- **Compute / Routing**: Cloudflare Pages Functions running Hono (TypeScript).
+- **Compute / Routing**: Cloudflare Pages Functions with direct file-based TypeScript route handlers.
 - **Database**: Cloudflare D1 (serverless SQLite at the edge).
 - **Authentication**: Pre-shared API bearer token stored in client local storage.
 - **Tooling**: Cloudflare Wrangler CLI, Astro CLI, Biome.
@@ -31,24 +31,37 @@ snaptally/
 ├── docs/
 │   ├── architecture.md       # Detailed system design, data flows, and trade-offs
 │   ├── budgeting.md          # Conscious Spending Plan framework, taxonomy, and rules
+│   ├── product-direction.md  # Confirmed single-user product direction and roadmap
 │   └── RUNBOOK.md            # Production provisioning, deployment, and operational runbook
 ├── functions/
 │   └── api/
-│       └── [[route]].ts      # Hono API router and D1 queries
-├── migrations/
-│   └── 0000_init.sql         # D1 database schema
+│       ├── _middleware.ts    # Shared auth and D1 rate-limiting guard
+│       ├── auth.ts           # Timing-safe Bearer token validation
+│       ├── client-ip.ts      # Trusted client network hashing for rate limits
+│       ├── logger.ts         # Structured redacting JSON logger
+│       ├── merchants.ts      # GET /api/merchants Pages Function handler
+│       ├── query.ts          # Query parameter parsing (limit, offset)
+│       ├── rate-limit.ts     # Per-IP fixed-window D1 rate limiter
+│       └── transactions.ts   # POST /api/transactions and GET /api/transactions handlers
+├── migrations/               # D1 SQLite schema migrations (0000_init.sql - 0007_api_rate_limits.sql)
 ├── public/                   # Static pass-through assets (manifest, sw.js, icons)
 ├── queries/
 │   └── select_distinct_merchants.sql # Reusable D1 SQL queries
 ├── src/
+│   ├── config/
+│   │   ├── budget-profile.ts # Four-bucket analysis profile constants
+│   │   └── intake.ts         # Canonical bucket/subcategory taxonomy and default merchants
 │   ├── layouts/
 │   │   └── Layout.astro      # Root HTML shell and Alpine.js bootstrap
 │   ├── pages/
+│   │   ├── activity.astro    # Fullscreen Activity Log page
 │   │   └── index.astro       # Intake UI page with Neumorphic keypad, chips, and Tabler icons
 │   ├── scripts/
+│   │   ├── activity.ts       # Activity view filtering, pagination, and cache
 │   │   ├── app.ts            # Alpine.js registration and bootstrap
 │   │   ├── intake-form.ts    # Keypad state machine and API integration
 │   │   ├── outbox.ts         # Native IndexedDB outbox and background sync runner
+│   │   ├── preview-mock.ts   # Preview-mode mock API handler
 │   │   └── sw-register.ts    # Service worker registration helper
 │   └── styles/
 │       └── global.css        # Tailwind CSS, DaisyUI, and Neumorphic design tokens and utilities
@@ -149,6 +162,7 @@ checks. `just toolchain-parity` verifies workstation/CI version declarations;
 see the [toolchain policy](docs/toolchain.md#keeping-versions-aligned).
  
 - [Architecture & Design](docs/architecture.md): Detailed system design, data flows, database schemas, and free-tier operational limits.
+- [Product Direction](docs/product-direction.md): Confirmed single-user product direction, Horizon roadmap, and retired scope.
 - [Budgeting Methodology & Category Taxonomy](docs/budgeting.md): Conscious Spending Plan parent buckets, subcategories, sinking funds, travel categorization, and expense credit rules.
 - [Monthly Budget Targets](docs/monthly-budgets.md): Category target schema, opt-in local examples, and USD reporting and taxonomy contracts for analysis.
 - [Operational Runbook](docs/RUNBOOK.md): Step-by-step procedures for production Cloudflare D1 provisioning, Pages configuration, deployments, and diagnostics.

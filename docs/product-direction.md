@@ -1,7 +1,7 @@
 # SnapTally Product Direction
 
-- **Last Updated:** 2026-11-15
-- **Baseline:** `main` (`b5c140d`)
+- **Last Updated:** 2026-11-25
+- **Baseline:** `main` (`ac21f58`)
 - **Active Direction:** Direction B -- Pre-Trip Field-Ready Cockpit (Horizon 1, before December 12, 2026) followed by Home Overview and Direction (Horizon 2, post-trip)
 
 ## 1. Product Vision
@@ -27,7 +27,7 @@ SnapTally is a single-user personal **Cash-Flow and Spending Decision System**. 
 
 ### Horizon 1: Travel and Complete Capture Readiness (Before December 12, 2026)
 
-1. **CI reliability (`#204`):** Stabilize browser storage fixture isolation and `outbox.ts` coverage determinism (PR `#210` in review).
+1. **CI reliability (`#204`, completed via merged PR `#210`):** Stabilize browser storage fixture isolation and `outbox.ts` coverage determinism.
 2. **Non-card rails and Canadian boundary (`#63`, related `#161`):** Support `Checking` / `e-Transfer` non-card entry and a ring-fenced `Property / CAD` category excluded from personal store gauges (covers Dec 1 and Jan 1 mortgage/rent cycles).
 3. **Offline-safe foreign cash (`#215`, `#216`):** Support `TWD`, `HKD`, and `VND` cash intake with background-refreshed + manually editable `fx_rate` persisted per transaction, 0-decimal keypad entry for `VND`/`TWD`, raised numeric caps, and validated Asia timezone date boundaries. (No-FX-fee credit cards abroad continue logging directly in `USD`.)
 4. **Trip tagging (`#224`) and Store Guardrail (`#225`):** Add optional `trip` tag with an Active Trip Settings preset + USD Trip Allowance, surfaced in a non-blocking Store `% budget used` strip on `/`.
